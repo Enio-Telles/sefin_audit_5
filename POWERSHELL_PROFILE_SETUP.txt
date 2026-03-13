@@ -1,0 +1,15 @@
+# ==========================================
+# PowerShell Profile - Auto-setup para sefin_audit_5
+# ==========================================
+# Adicione as linhas abaixo ao seu PowerShell Profile:
+# 
+# Para editar o profile, execute:
+# notepad $PROFILE
+#
+# Então adicione estas linhas:
+# ==========================================
+
+# Auto-setup Git e GitHub CLI portáteis se estiver no diretório do projeto
+if (Test-Path ".\setup-env.ps1") {
+    . .\setup-env.ps1
+}

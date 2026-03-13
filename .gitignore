@@ -1,3 +1,9 @@
+# ==========================================
+# FERRAMENTAS PORTÁVEIS (NÃO VERSIONADAS)
+# ==========================================
+Git-Portable/
+gh-portable/
+
 # Dependencies
 **/node_modules
 .pnpm-store/

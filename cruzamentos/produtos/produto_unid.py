@@ -176,7 +176,7 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
             pl.col("ncm").unique().alias("lista_ncm"),
             pl.col("cest").unique().alias("lista_cest"),
             pl.col("gtin").unique().alias("lista_gtin"),
-            pl.col("unid").unique().alias("lista_unid"),
+            pl.col("unid").unique().alias("lista_unid_raw"),
             pl.col("fonte").unique().alias("lista_fontes"),
             
             # 2. COLUNAS DE CONSENSO (Descarta nulos na eleição para priorizar informação útil)
@@ -189,8 +189,13 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
             
             # 3. ALERTAS E MÉTRICAS
             pl.col("tem_variacao_caracteristicas").any().alias("requer_revisao_manual"),
-            pl.col("cod_var_str").unique().alias("codigos_com_variacoes"),
+            pl.col("cod_var_str").unique().alias("lista_cod_var"),
             pl.len().alias("qtd_transacoes_total")
+        ])
+        .with_columns([
+            pl.col("descricao").alias("lista_descricao"), # Compatibilidade com UI
+            pl.col("lista_cod_var").list.join(" | ").alias("descricoes_conflitantes"), # Compatibilidade com UI
+            pl.col("lista_unid_raw").list.join(", ").alias("lista_unid") # Compatibilidade com UI (exibição em badge)
         ])
     )
 
@@ -198,7 +203,37 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
 
 # ---------------------------------------------------------------------------
 # 4. ORQUESTRADOR PRINCIPAL
+# ----------# ---------------------------------------------------------------------------
+# 4. ORQUESTRADOR E INTEGRAÇÃO
 # ---------------------------------------------------------------------------
+
+def unificar_produtos_unidades(cnpj: str) -> Dict[str, str]:
+    """
+    Ponto de entrada principal para a unificação de produtos.
+    Orquestra a leitura de fontes, aplicação de mapas manuais e geração de tabelas analíticas.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    # Localiza o config.py (assumindo que está na raiz do projeto)
+    _PROJETO_DIR = Path(__file__).resolve().parent.parent.parent
+    _config_path = _PROJETO_DIR / "config.py"
+    
+    spec = importlib.util.spec_from_file_location("sefin_config", str(_config_path))
+    config = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config)
+
+    dir_parquet, dir_analises, _ = config.obter_diretorios_cnpj(cnpj)
+
+    # Mapeamento de arquivos de entrada (Parquet extraídos)
+    caminhos_entrada = {
+        "nfe": os.path.join(dir_parquet, f"NFE_ITENS_{cnpj}.parquet"),
+        "nfce": os.path.join(dir_parquet, f"NFCE_ITENS_{cnpj}.parquet"),
+        "c170": os.path.join(dir_parquet, f"EFD_C170_{cnpj}.parquet"),
+        "c0200": os.path.join(dir_parquet, f"EFD_0200_{cnpj}.parquet")
+    }
+
+    return processar_produtos_cnpj(cnpj, caminhos_entrada, str(dir_analises))
 
 def processar_produtos_cnpj(
     cnpj: str, 
@@ -207,6 +242,8 @@ def processar_produtos_cnpj(
 ) -> Dict[str, str]:
     """Processa arquivos Parquet das fontes e gera as tabelas analíticas."""
     os.makedirs(diretorio_saida, exist_ok=True)
+    
+    path_mapa_manual = os.path.join(diretorio_saida, f"mapa_manual_unificacao_{cnpj}.parquet")
     
     with pl.StringCache():
         lazy_frames = []
@@ -249,35 +286,79 @@ def processar_produtos_cnpj(
             return {}
 
         # -------------------------------------------------------------------
-        # EXECUÇÃO E GRAVAÇÃO EM DISCO
+        # APLICAÇÃO DE REVISÃO MANUAL
         # -------------------------------------------------------------------
-        logging.info("Concatenando fontes...")
         lf_base_detalhes = pl.concat(lazy_frames, how="diagonal_relaxed")
         
+        if os.path.exists(path_mapa_manual):
+            logging.info("Aplicando Mapa de Revisão Manual...")
+            lf_manual = pl.scan_parquet(path_mapa_manual)
+            
+            # Join para substituir dados originais pelos revisados
+            # O mapa tem: fonte, codigo_original, descricao_original, tipo_item_original, codigo_novo, descricao_nova, etc.
+            lf_base_detalhes = lf_base_detalhes.join(
+                lf_manual,
+                left_on=["fonte", "codigo", "descricao_ori", "tipo_item"],
+                right_on=["fonte", "codigo_original", "descricao_original", "tipo_item_original"],
+                how="left"
+            ).with_columns([
+                pl.coalesce(["codigo_novo", "codigo"]).alias("codigo"),
+                pl.coalesce(["descricao_nova", "descricao"]).alias("descricao"),
+                pl.coalesce(["ncm_novo", "ncm"]).alias("ncm"),
+                pl.coalesce(["cest_novo", "cest"]).alias("cest"),
+                pl.coalesce(["gtin_novo", "gtin"]).alias("gtin"),
+                pl.coalesce(["tipo_item_novo", "tipo_item"]).alias("tipo_item")
+            ]).drop([
+                "codigo_novo", "descricao_nova", "ncm_novo", "cest_novo", "gtin_novo", "tipo_item_novo"
+            ])
+
+        # -------------------------------------------------------------------
+        # EXECUÇÃO E GRAVAÇÃO EM DISCO
+        # -------------------------------------------------------------------
+        logging.info("Consolidando base de detalhes...")
         path_detalhes = os.path.join(diretorio_saida, f"base_detalhes_produtos_{cnpj}.parquet")
         lf_base_detalhes.sink_parquet(path_detalhes)
-        logging.info(f"Base de detalhes salva: {path_detalhes}")
-
-        # Recarrega a base para calcular as novas tabelas pedidas
+        
+        # Recarrega para calculos analíticos
         lf_detalhes_reloaded = pl.scan_parquet(path_detalhes)
         lf_variacoes, lf_agrupado_descricao = construir_tabelas_analiticas(lf_detalhes_reloaded)
         
-        # Salva Tabela 1
+        # Inserção da chave_produto baseada no índice (exigência do usuário)
+        df_agrupado = lf_agrupado_descricao.collect(streaming=True)
+        df_agrupado = df_agrupado.with_columns(
+            pl.format("ID_{:04d}", pl.int_range(1, df_agrupado.height + 1)).alias("chave_produto")
+        ).select(["chave_produto", "*"])
+
+        # Salva Tabela 2 (Visão)
+        path_agrupado = os.path.join(diretorio_saida, f"produtos_agregados_{cnpj}.parquet")
+        df_agrupado.write_parquet(path_agrupado)
+        logging.info(f"Tabela de Agrupamento salva: {path_agrupado}")
+
+        # Salva Tabela 1 (Variações)
         path_variacoes = os.path.join(diretorio_saida, f"variacoes_produtos_{cnpj}.parquet")
         lf_variacoes.collect(streaming=True).write_parquet(path_variacoes)
-        logging.info(f"Tabela de Variações salva: {path_variacoes}")
-
-        # Salva Tabela 2
-        path_agrupado = os.path.join(diretorio_saida, f"produtos_agrupados_descricao_{cnpj}.parquet")
-        lf_agrupado_descricao.collect(streaming=True).write_parquet(path_agrupado)
-        logging.info(f"Tabela de Agrupamento por Descrição salva: {path_agrupado}")
+        
+        # Geração de Mapas de Auditoria (Para compatibilidade com a UI)
+        if os.path.exists(path_mapa_manual):
+            # Mapa de Agregados (Unificados)
+            path_mapa_agregados = os.path.join(diretorio_saida, f"mapa_auditoria_agregados_{cnpj}.parquet")
+            pl.read_parquet(path_mapa_manual).write_parquet(path_mapa_agregados)
+            
+            # Mapa de Desagregados (Mesmo arquivo, pois a UI gerencia o filtro visual)
+            path_mapa_desagregados = os.path.join(diretorio_saida, f"mapa_auditoria_desagregados_{cnpj}.parquet")
+            pl.read_parquet(path_mapa_manual).write_parquet(path_mapa_desagregados)
 
         return {
+            "success": True,
+            "cnpj": cnpj,
             "base_detalhes": path_detalhes,
-            "variacoes_produtos": path_variacoes,
-            "produtos_agrupados": path_agrupado
+            "produtos_agregados": path_agrupado,
+            "variacoes_produtos": path_variacoes
         }
 
 if __name__ == "__main__":
-    print("Módulo Produto_Unid instanciado com as novas tabelas solicitadas.")
-    pass
+    import sys
+    if len(sys.argv) > 1:
+        unificar_produtos_unidades(sys.argv[1])
+    else:
+        print("Módulo Produto_Unid pronto. Uso: python produto_unid.py <CNPJ>")

@@ -48,7 +48,7 @@ async def get_produtos_revisao_manual(cnpj: str = Query(...)):
 
 @router.get("/produtos/detalhes-codigo")
 async def get_detalhes_produto(cnpj: str = Query(...), codigo: str = Query(...)):
-    """Retorna as linhas originais (fontes) associadas a um código master."""
+    """Retorna as linhas originais (fontes) associadas a um código master ou chave_produto."""
     cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
@@ -61,13 +61,26 @@ async def get_detalhes_produto(cnpj: str = Query(...), codigo: str = Query(...))
         
         _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
         detalhes_path = dir_analises / f"base_detalhes_produtos_{cnpj_limpo}.parquet"
+        agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
         
         if not detalhes_path.exists():
             return {"success": True, "data": []}
             
         lf = pl.scan_parquet(str(detalhes_path))
         
-        # Tenta decompor a identidade (codigo_tipoitem)
+        # Se for uma chave_produto gerada (ID_0001), precisamos descobrir qual a descrição/código ela representa
+        if str(codigo).startswith("ID_"):
+            if agregados_path.exists():
+                df_agregado = pl.read_parquet(str(agregados_path))
+                row = df_agregado.filter(pl.col("chave_produto") == codigo)
+                if not row.is_empty():
+                    # No novo formato, o agrupamento é por Descrição.
+                    descr = row["descricao"][0]
+                    # Retorna todos os itens com essa descrição na base de detalhes
+                    df = lf.filter(pl.col("descricao") == descr).collect()
+                    return {"success": True, "codigo": codigo, "itens": df.to_dicts()}
+
+        # Lógica original (decomposição por código real)
         if "_" in codigo:
             parts = codigo.rsplit("_", 1)
             codigo_real = parts[0]

@@ -99,7 +99,7 @@ SELECT
     h005.vl_inv_total AS valor_total_inventario_h005,
     
     -- Dados do Produto (0200)
-    h010.codigo_produto,
+    h010.codigo_produto_original AS codigo_produto,
     r0200.descricao_produto,
     r0200.cod_ncm,
     r0200.cest,
