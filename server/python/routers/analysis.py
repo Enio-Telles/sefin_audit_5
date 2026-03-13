@@ -162,26 +162,37 @@ async def audit_pipeline(req: AuditPipelineRequest):
         try:
             # 1. Unificação Master (único pipeline de produtos — produto_unid.py)
             df_unid = unificar_produtos_unidades(cnpj_limpo)
-            p_master = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
-            if p_master.exists():
-                arquivos_produtos.append({
-                    "name": p_master.name, 
-                    "analise": "Unificação Master",
-                    "path": str(p_master.resolve())
-                })
             
-            # 2. Mapas de Auditoria
-            for map_name, label in [
+            # Lista de arquivos esperados na pasta de análises para a seção de produtos
+            targets = [
+                (f"produtos_agregados_{cnpj_limpo}.parquet", "Tabela Visão"),
+                (f"base_detalhes_produtos_{cnpj_limpo}.parquet", "Base Detalhes"),
+                (f"variacoes_produtos_{cnpj_limpo}.parquet", "Variações Encontradas"),
                 (f"mapa_auditoria_agregados_{cnpj_limpo}.parquet", "Mapa de Agregados"),
                 (f"mapa_auditoria_desagregados_{cnpj_limpo}.parquet", "Mapa de Desagregados"),
-            ]:
-                p_map = dir_analises / map_name
-                if p_map.exists():
-                    arquivos_produtos.append({
-                        "name": p_map.name,
-                        "analise": label,
-                        "path": str(p_map.resolve())
-                    })
+            ]
+
+            for file_name, label in targets:
+                p = dir_analises / file_name
+                if p.exists():
+                    try:
+                        info = pl.scan_parquet(str(p)).collect_schema()
+                        # Para pegar o número de linhas sem carregar tudo:
+                        row_count = pl.scan_parquet(str(p)).select(pl.len()).collect().item()
+                        
+                        arquivos_produtos.append({
+                            "name": file_name,
+                            "path": str(p.resolve()),
+                            "rows": row_count,
+                            "columns": len(info.names()),
+                            "analise": label
+                        })
+                    except:
+                        arquivos_produtos.append({
+                            "name": file_name,
+                            "path": str(p.resolve()),
+                            "analise": label
+                        })
 
         except Exception as e: 
             erros.append(f"Processamento de Produtos: {str(e)}")

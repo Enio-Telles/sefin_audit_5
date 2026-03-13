@@ -100,22 +100,6 @@ def aplicar_mapeamento_e_schema(
 
     return lf.select(exprs).drop_nulls(subset=["codigo", "descricao"])
 
-def cruzar_c170_0200(lf_c170: pl.LazyFrame, lf_0200: pl.LazyFrame) -> pl.LazyFrame:
-    """Enriquece o C170 com dados do 0200 prevenindo explosão de joins."""
-    lf_0200_unique = lf_0200.select(
-        ["codigo", "ncm", "cest", "gtin", "tipo_item"]
-    ).unique(subset=["codigo"], keep="first")
-
-    lf_enriched = lf_c170.join(
-        lf_0200_unique, on="codigo", how="left", suffix="_0200"
-    )
-
-    return lf_enriched.with_columns([
-        pl.coalesce(["ncm", "ncm_0200"]).alias("ncm"),
-        pl.coalesce(["cest", "cest_0200"]).alias("cest"),
-        pl.coalesce(["gtin", "gtin_0200"]).alias("gtin"),
-        pl.coalesce(["tipo_item", "tipo_item_0200"]).alias("tipo_item")
-    ]).drop(["ncm_0200", "cest_0200", "gtin_0200", "tipo_item_0200"])
 
 # ---------------------------------------------------------------------------
 # 3. CONSTRUÇÃO DAS TABELAS ANALÍTICAS (MÉTODO REESCRITO)
@@ -136,8 +120,9 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
         lf_base_detalhes
         .group_by(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"])
         .agg([
-            pl.col("unid").unique().alias("lista_unid"),
-            pl.col("fonte").unique().alias("lista_fontes"),
+            # Converte para string antes de materializar listas para evitar list[cat]
+            pl.col("unid").cast(pl.Utf8).drop_nulls().unique().alias("lista_unid"),
+            pl.col("fonte").cast(pl.Utf8).drop_nulls().unique().alias("lista_fontes"),
             pl.len().alias("qtd_transacoes")
         ])
     )
@@ -147,10 +132,16 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
     # =========================================================================
     
     # Passo A: Calcular quantas variações existem para CADA CÓDIGO.
+    # Converter colunas categóricas para string antes do group_by para evitar list[cat] dtype issues
     lf_codigo_stats = (
         lf_base_detalhes
         .select(["codigo", "descricao", "descr_compl", "ncm", "cest", "gtin", "tipo_item"])
         .unique() 
+        .with_columns([
+            pl.col("ncm").cast(pl.Utf8),
+            pl.col("cest").cast(pl.Utf8),
+            pl.col("tipo_item").cast(pl.Utf8)
+        ])
         .group_by("codigo")
         .agg(pl.len().alias("qtd_variacoes"))
         .with_columns([
@@ -160,7 +151,16 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
     )
 
     # Passo B: Enriquecer a base transacional com as métricas do código
-    lf_base_enriched = lf_base_detalhes.join(
+    # Converter colunas categóricas para string antes do join para evitar list[cat] dtype issues
+    lf_base_detalhes_str = lf_base_detalhes.with_columns([
+        pl.col("ncm").cast(pl.Utf8),
+        pl.col("cest").cast(pl.Utf8),
+        pl.col("tipo_item").cast(pl.Utf8),
+        pl.col("unid").cast(pl.Utf8),
+        pl.col("fonte").cast(pl.Utf8)
+    ])
+    
+    lf_base_enriched = lf_base_detalhes_str.join(
         lf_codigo_stats, on="codigo", how="left"
     )
 
@@ -169,33 +169,33 @@ def construir_tabelas_analiticas(lf_base_detalhes: pl.LazyFrame) -> Tuple[pl.Laz
         lf_base_enriched
         .group_by("descricao")
         .agg([
-            # 1. LISTAS (Mantém nulos para evidenciar a variação/ausência)
-            pl.col("codigo").unique().alias("lista_codigo"),
-            pl.col("descr_compl").unique().alias("lista_descr_compl"),
-            pl.col("tipo_item").unique().alias("lista_tipo_item"),
-            pl.col("ncm").unique().alias("lista_ncm"),
-            pl.col("cest").unique().alias("lista_cest"),
-            pl.col("gtin").unique().alias("lista_gtin"),
-            pl.col("unid").unique().alias("lista_unid_raw"),
-            pl.col("fonte").unique().alias("lista_fontes"),
+            # 1. LISTAS (converter para string para evitar list[cat] em escrita/join)
+            pl.col("codigo").cast(pl.Utf8).unique().alias("lista_codigo"),
+            pl.col("descr_compl").cast(pl.Utf8).unique().alias("lista_descr_compl"),
+            pl.col("tipo_item").cast(pl.Utf8).unique().alias("lista_tipo_item"),
+            pl.col("ncm").cast(pl.Utf8).unique().alias("lista_ncm"),
+            pl.col("cest").cast(pl.Utf8).unique().alias("lista_cest"),
+            pl.col("gtin").cast(pl.Utf8).unique().alias("lista_gtin"),
+            pl.col("unid").cast(pl.Utf8).unique().alias("lista_unid_raw"),
+            pl.col("fonte").cast(pl.Utf8).unique().alias("lista_fontes"),
             
-            # 2. COLUNAS DE CONSENSO (Descarta nulos na eleição para priorizar informação útil)
-            pl.col("codigo").drop_nulls().mode().first().alias("codigo_consenso"),
-            pl.col("tipo_item").drop_nulls().mode().first().alias("tipo_item_consenso"),
-            pl.col("ncm").drop_nulls().mode().first().alias("ncm_consenso"),
-            pl.col("cest").drop_nulls().mode().first().alias("cest_consenso"),
-            pl.col("gtin").drop_nulls().mode().first().alias("gtin_consenso"),
-            pl.col("unid").drop_nulls().mode().first().alias("unid_consenso"),
+            # 2. COLUNAS DE CONSENSO (como string para compatibilidade)
+            pl.col("codigo").drop_nulls().mode().first().cast(pl.Utf8).alias("codigo_consenso"),
+            pl.col("tipo_item").drop_nulls().mode().first().cast(pl.Utf8).alias("tipo_item_consenso"),
+            pl.col("ncm").drop_nulls().mode().first().cast(pl.Utf8).alias("ncm_consenso"),
+            pl.col("cest").drop_nulls().mode().first().cast(pl.Utf8).alias("cest_consenso"),
+            pl.col("gtin").drop_nulls().mode().first().cast(pl.Utf8).alias("gtin_consenso"),
+            pl.col("unid").drop_nulls().mode().first().cast(pl.Utf8).alias("unid_consenso"),
             
             # 3. ALERTAS E MÉTRICAS
             pl.col("tem_variacao_caracteristicas").any().alias("requer_revisao_manual"),
-            pl.col("cod_var_str").unique().alias("lista_cod_var"),
+            pl.col("cod_var_str").cast(pl.Utf8).unique().alias("lista_cod_var"),
             pl.len().alias("qtd_transacoes_total")
         ])
         .with_columns([
             pl.col("descricao").alias("lista_descricao"), # Compatibilidade com UI
             pl.col("lista_cod_var").list.join(" | ").alias("descricoes_conflitantes"), # Compatibilidade com UI
-            pl.col("lista_unid_raw").list.join(", ").alias("lista_unid") # Compatibilidade com UI (exibição em badge)
+            pl.col("lista_unid_raw").list.drop_nulls().list.join(", ").alias("lista_unid") # Compatibilidade com UI (exibição em badge)
         ])
     )
 
@@ -225,12 +225,13 @@ def unificar_produtos_unidades(cnpj: str) -> Dict[str, str]:
 
     dir_parquet, dir_analises, _ = config.obter_diretorios_cnpj(cnpj)
 
-    # Mapeamento de arquivos de entrada (Parquet extraídos)
+    # Mapeamento de arquivos de entrada (Conforme gerado pelo Audit Pipeline / SQL)
     caminhos_entrada = {
-        "nfe": os.path.join(dir_parquet, f"NFE_ITENS_{cnpj}.parquet"),
-        "nfce": os.path.join(dir_parquet, f"NFCE_ITENS_{cnpj}.parquet"),
-        "c170": os.path.join(dir_parquet, f"EFD_C170_{cnpj}.parquet"),
-        "c0200": os.path.join(dir_parquet, f"EFD_0200_{cnpj}.parquet")
+        "nfe": os.path.join(dir_parquet, f"NFe_{cnpj}.parquet"),
+        "nfce": os.path.join(dir_parquet, f"NFCe_{cnpj}.parquet"),
+        "c170": os.path.join(dir_parquet, f"c170_simplificada_{cnpj}.parquet"),
+        "c0200": os.path.join(dir_parquet, f"reg_0200_{cnpj}.parquet"),
+        "bloco_h": os.path.join(dir_parquet, f"bloco_h_{cnpj}.parquet")
     }
 
     return processar_produtos_cnpj(cnpj, caminhos_entrada, str(dir_analises))
@@ -251,35 +252,71 @@ def processar_produtos_cnpj(
         # NFe
         if "nfe" in caminhos_entrada and os.path.exists(caminhos_entrada["nfe"]):
             lf_nfe = pl.scan_parquet(caminhos_entrada["nfe"])
-            map_nfe = {"codigo": "CPROD", "descricao": "XPROD", "ncm": "NCM", "cest": "CEST", "gtin": "CEAN", "unid": "UCOM"}
+            map_nfe = {
+                "codigo": "CPROD", 
+                "descricao": "XPROD", 
+                "ncm": "NCM", 
+                "cest": "CEST", 
+                "gtin": "CEAN", 
+                "unid": "UCOM"
+            }
             lazy_frames.append(aplicar_mapeamento_e_schema(lf_nfe, map_nfe, "NFe"))
 
         # NFCe
         if "nfce" in caminhos_entrada and os.path.exists(caminhos_entrada["nfce"]):
             lf_nfce = pl.scan_parquet(caminhos_entrada["nfce"])
-            map_nfce = {"codigo": "CPROD", "descricao": "XPROD", "ncm": "NCM", "cest": "CEST", "gtin": "CEAN", "unid": "UCOM"}
+            map_nfce = {
+                "codigo": "CPROD", 
+                "descricao": "XPROD", 
+                "ncm": "NCM", 
+                "cest": "CEST", 
+                "gtin": "CEAN", 
+                "unid": "UCOM"
+            }
             lazy_frames.append(aplicar_mapeamento_e_schema(lf_nfce, map_nfce, "NFCe"))
 
-        # EFD (C170 + 0200)
-        lf_c170 = None
-        lf_0200 = None
-        
+        # EFD 0200 (Cadastro de Itens)
         if "c0200" in caminhos_entrada and os.path.exists(caminhos_entrada["c0200"]):
             lf_0200_raw = pl.scan_parquet(caminhos_entrada["c0200"])
-            map_0200 = {"codigo": "COD_ITEM", "descricao": "DESCR_ITEM", "ncm": "COD_NCM", "unid": "UNID_INV", "tipo_item": "TIPO_ITEM", "gtin": "COD_BARRA"}
-            lf_0200 = aplicar_mapeamento_e_schema(lf_0200_raw, map_0200, "EFD_0200")
+            map_0200 = {
+                "codigo": "COD_ITEM", 
+                "descricao": "DESCR_ITEM", 
+                "ncm": "COD_NCM", 
+                "unid": "UNID_INV", 
+                "tipo_item": "TIPO_ITEM", 
+                "gtin": "COD_BARRA"
+            }
+            lazy_frames.append(aplicar_mapeamento_e_schema(lf_0200_raw, map_0200, "EFD_0200"))
             
+        # EFD C170 (Itens das Notas - Já vem com join do 0200 via SQL)
         if "c170" in caminhos_entrada and os.path.exists(caminhos_entrada["c170"]):
             lf_c170_raw = pl.scan_parquet(caminhos_entrada["c170"])
-            map_170 = {"codigo": "COD_ITEM", "descricao": "DESCR_COMPL", "unid": "UNID"}
-            lf_c170 = aplicar_mapeamento_e_schema(lf_c170_raw, map_170, "EFD_C170")
-            
-            if lf_0200 is not None:
-                lf_c170 = cruzar_c170_0200(lf_c170, lf_0200)
-            lazy_frames.append(lf_c170)
-        
-        elif lf_0200 is not None:
-             lazy_frames.append(lf_0200)
+            map_170 = {
+                "codigo": "COD_ITEM", 
+                "descricao": "DESCR_ITEM", # Prioriza a descrição do cadastro
+                "descr_compl": "DESCR_COMPL",
+                "unid": "UNID",
+                "ncm": "COD_NCM",
+                "cest": "CEST",
+                "gtin": "COD_BARRA",
+                "tipo_item": "TIPO_ITEM"
+            }
+            lazy_frames.append(aplicar_mapeamento_e_schema(lf_c170_raw, map_170, "EFD_C170"))
+
+        # Bloco H (Inventário)
+        if "bloco_h" in caminhos_entrada and os.path.exists(caminhos_entrada["bloco_h"]):
+            lf_h = pl.scan_parquet(caminhos_entrada["bloco_h"])
+            # Mapeamento baseado no bloco_h.sql
+            map_h = {
+                "codigo": "CODIGO_PRODUTO", 
+                "descricao": "DESCRICAO_PRODUTO", 
+                "ncm": "COD_NCM", 
+                "cest": "CEST", 
+                "gtin": "COD_BARRA", 
+                "unid": "UNIDADE_MEDIDA",
+                "tipo_item": "TIPO_ITEM"
+            }
+            lazy_frames.append(aplicar_mapeamento_e_schema(lf_h, map_h, "Bloco_H"))
 
         if not lazy_frames:
             logging.warning(f"Nenhum arquivo de produto encontrado para o CNPJ {cnpj}")
@@ -324,10 +361,10 @@ def processar_produtos_cnpj(
         lf_variacoes, lf_agrupado_descricao = construir_tabelas_analiticas(lf_detalhes_reloaded)
         
         # Inserção da chave_produto baseada no índice (exigência do usuário)
-        df_agrupado = lf_agrupado_descricao.collect(streaming=True)
+        df_agrupado = lf_agrupado_descricao.collect(engine="streaming")
         df_agrupado = df_agrupado.with_columns(
-            pl.format("ID_{:04d}", pl.int_range(1, df_agrupado.height + 1)).alias("chave_produto")
-        ).select(["chave_produto", "*"])
+            pl.format("ID_{}", pl.int_range(1, df_agrupado.height + 1).cast(pl.Utf8).str.zfill(4)).alias("chave_produto")
+        ).select([pl.col("chave_produto"), pl.all().exclude("chave_produto")])
 
         # Salva Tabela 2 (Visão)
         path_agrupado = os.path.join(diretorio_saida, f"produtos_agregados_{cnpj}.parquet")
@@ -336,7 +373,7 @@ def processar_produtos_cnpj(
 
         # Salva Tabela 1 (Variações)
         path_variacoes = os.path.join(diretorio_saida, f"variacoes_produtos_{cnpj}.parquet")
-        lf_variacoes.collect(streaming=True).write_parquet(path_variacoes)
+        lf_variacoes.collect(engine="streaming").write_parquet(path_variacoes)
         
         # Geração de Mapas de Auditoria (Para compatibilidade com a UI)
         if os.path.exists(path_mapa_manual):
