@@ -846,11 +846,14 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
 
     unions = _resolve_description_unions(mapa_descricoes_path)
     if unions:
+        # ⚡ Bolt: Removed slow map_elements lambda that crosses the FFI boundary
+        # in favor of native Polars string expressions. For large datasets,
+        # replace_strict using string methods avoids creating Python objects per row,
+        # speeding up manual mapping application significantly.
+        clean_expr = pl.col("descricao").cast(pl.Utf8).fill_null("").str.strip_chars()
+        canon_expr = clean_expr.str.to_uppercase()
         df_base = df_base.with_columns(
-            pl.col("descricao").map_elements(
-                lambda value: unions.get(_canon_text(value, ""), _clean_value(value)),
-                return_dtype=pl.Utf8,
-            )
+            canon_expr.replace_strict(unions, default=clean_expr).alias("descricao")
         )
 
     if mapa_manual_path.exists():
