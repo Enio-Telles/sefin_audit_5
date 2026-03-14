@@ -2933,7 +2933,7 @@ async def detalhes_historico(cnpj: str):
         {
             "etapa": "Análises",
             "status": "concluída (histórico)",
-            "analises": [{"nome": a["analise"], "status": "recuperado"} for a in arquivos_analises if a.get("analise")]
+            "analises": [{"nome": analise, "status": "recuperado"} for a in arquivos_analises if (analise := a.get("analise"))]
         },
         {
             "etapa": "Relatórios",
