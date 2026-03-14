@@ -109,10 +109,12 @@ def build_node_command() -> str:
 
 def start_in_new_terminal(title: str, command: str) -> None:
     if os.name == "nt":
+        full_command = f'title {title} && {command}'
         subprocess.Popen(
-            ["cmd", "/c", "start", title, "cmd", "/k", command],
+            ["cmd", "/k", full_command],
             cwd=str(ROOT_DIR),
             shell=False,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
         )
         return
 
