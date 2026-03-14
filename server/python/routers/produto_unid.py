@@ -31,6 +31,7 @@ from core.produto_runtime import (
     construir_tabela_pares_descricoes_semanticos,
     construir_tabela_pares_descricoes_similares,
     merge_mapa_descricoes_manual,
+    obter_runtime_produtos_status,
     obter_status_vectorizacao,
     read_vector_cache_metadata,
     unificar_produtos_unidades,
@@ -849,6 +850,30 @@ async def get_vectorizacao_status(cnpj: str = Query(...)):
         }
     except Exception as e:
         logger.error("[get_vectorizacao_status] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/produtos/runtime-status")
+async def get_runtime_produtos_status(cnpj: str = Query(...)):
+    cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    try:
+        import importlib.util
+
+        _config_path = _PROJETO_DIR / "config.py"
+        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
+        _sefin_config = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_sefin_config)
+
+        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "runtime": obter_runtime_produtos_status(dir_analises, cnpj_limpo),
+        }
+    except Exception as e:
+        logger.error("[get_runtime_produtos_status] Erro: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 

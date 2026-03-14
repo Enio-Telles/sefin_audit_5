@@ -30,6 +30,33 @@ def produto_pipeline_em_modo_compatibilidade() -> bool:
     return True
 
 
+def obter_runtime_produtos_status(dir_analises: Path, cnpj: str) -> dict[str, Any]:
+    artefatos = {
+        "produtos_agregados": dir_analises / f"produtos_agregados_{cnpj}.parquet",
+        "base_detalhes": dir_analises / f"base_detalhes_produtos_{cnpj}.parquet",
+        "produtos_indexados": dir_analises / f"produtos_indexados_{cnpj}.parquet",
+        "codigos_multidescricao": dir_analises / f"codigos_multidescricao_{cnpj}.parquet",
+        "status_analise": dir_analises / f"status_analise_produtos_{cnpj}.parquet",
+        "pares_lexicais": dir_analises / f"pares_descricoes_similares_{cnpj}.parquet",
+        "pares_semanticos": dir_analises / f"pares_descricoes_similares_semanticos_{cnpj}.parquet",
+        "pares_hibridos": dir_analises / f"pares_descricoes_similares_hibridos_{cnpj}.parquet",
+        "mapa_manual_unificacao": dir_analises / f"mapa_manual_unificacao_{cnpj}.parquet",
+        "mapa_manual_descricoes": dir_analises / f"mapa_manual_descricoes_{cnpj}.parquet",
+    }
+    files: dict[str, dict[str, Any]] = {}
+    for key, path in artefatos.items():
+        info: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+        if path.exists():
+            info["size_bytes"] = int(path.stat().st_size)
+        files[key] = info
+
+    return {
+        "compat_mode": produto_pipeline_em_modo_compatibilidade(),
+        "pipeline_legacy_removed": True,
+        "files": files,
+    }
+
+
 def _canon_text(value: Any, vazio: str = "(VAZIO)") -> str:
     text = "" if value is None else str(value)
     text = text.strip().upper()
