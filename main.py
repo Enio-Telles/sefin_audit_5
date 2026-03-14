@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -52,6 +53,52 @@ def wait_for_port(port: int, host: str = "127.0.0.1", timeout_s: float = 20.0) -
             return True
         time.sleep(0.5)
     return False
+
+
+def wait_for_port_closed(port: int, host: str = "127.0.0.1", timeout_s: float = 10.0) -> bool:
+    start = time.time()
+    while time.time() - start < timeout_s:
+        if not is_port_open(port, host):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def get_pids_on_port(port: int) -> list[int]:
+    if os.name == "nt":
+        result = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, shell=False)
+        if result.returncode != 0:
+            return []
+        pattern = re.compile(rf"^\s*TCP\s+\S+:{port}\s+\S+\s+LISTENING\s+(\d+)\s*$", re.IGNORECASE)
+        pids: set[int] = set()
+        for line in result.stdout.splitlines():
+            match = pattern.match(line)
+            if match:
+                pids.add(int(match.group(1)))
+        return sorted(pids)
+
+    if command_exists("lsof"):
+        result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, shell=False)
+        if result.returncode not in {0, 1}:
+            return []
+        return sorted({int(line.strip()) for line in result.stdout.splitlines() if line.strip().isdigit()})
+
+    return []
+
+
+def terminate_pids(pids: list[int]) -> bool:
+    if not pids:
+        return True
+
+    if os.name == "nt":
+        args = ["taskkill", "/F"]
+        for pid in pids:
+            args.extend(["/PID", str(pid)])
+        result = subprocess.run(args, capture_output=True, text=True, shell=False)
+        return result.returncode == 0
+
+    result = subprocess.run(["kill", "-9", *[str(pid) for pid in pids]], capture_output=True, text=True, shell=False)
+    return result.returncode == 0
 
 
 def ensure_env_file() -> None:
@@ -140,17 +187,35 @@ def start_inline(command: list[str], cwd: Path) -> subprocess.Popen[str]:
     return subprocess.Popen(command, cwd=str(cwd), text=True)
 
 
-def launch_system(conda_env: str, python_port: int, node_port: int, open_browser: bool, inline: bool) -> None:
+def launch_system(conda_env: str, python_port: int, node_port: int, open_browser: bool, inline: bool, restart: bool) -> None:
     ensure_env_file()
     check_prerequisites(conda_env)
 
     python_running = is_port_open(python_port)
     node_running = is_port_open(node_port)
+    python_pids = get_pids_on_port(python_port)
+    node_pids = get_pids_on_port(node_port)
 
     if python_running:
-        warn(f"Backend Python já parece ativo na porta {python_port}.")
+        warn(f"Backend Python j? parece ativo na porta {python_port}." + (f" PID(s): {', '.join(str(pid) for pid in python_pids)}." if python_pids else ""))
     if node_running:
-        warn(f"Frontend/Node já parece ativo na porta {node_port}.")
+        warn(f"Frontend/Node j? parece ativo na porta {node_port}." + (f" PID(s): {', '.join(str(pid) for pid in node_pids)}." if node_pids else ""))
+
+    if restart and python_running:
+        info(f"Reiniciando backend Python na porta {python_port}...")
+        if not terminate_pids(python_pids):
+            fail(f"N?o foi poss?vel encerrar o backend Python na porta {python_port}.")
+        if not wait_for_port_closed(python_port):
+            fail(f"A porta {python_port} continuou ocupada ap?s tentar encerrar o backend Python.")
+        python_running = False
+
+    if restart and node_running:
+        info(f"Reiniciando frontend/Node na porta {node_port}...")
+        if not terminate_pids(node_pids):
+            fail(f"N?o foi poss?vel encerrar o frontend/Node na porta {node_port}.")
+        if not wait_for_port_closed(node_port):
+            fail(f"A porta {node_port} continuou ocupada ap?s tentar encerrar o frontend/Node.")
+        node_running = False
 
     if not python_running:
         info("Iniciando backend Python...")
@@ -223,6 +288,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Executa os processos no terminal atual em vez de abrir novas janelas.",
     )
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Encerra processos existentes nas portas configuradas antes de iniciar novamente.",
+    )
     return parser.parse_args()
 
 
@@ -234,6 +304,7 @@ def main() -> None:
         node_port=args.node_port,
         open_browser=not args.no_browser,
         inline=args.inline,
+        restart=args.restart,
     )
 
 
