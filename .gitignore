@@ -113,6 +113,10 @@ temp/
 *.sqlite
 *.sqlite3
 
+# Python
+__pycache__/
+*.pyc
+
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 CNPJ
