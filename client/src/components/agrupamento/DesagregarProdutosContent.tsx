@@ -12,6 +12,7 @@ import {
   type NcmDetailsResponse,
   type CestDetailsResponse,
 } from "@/lib/pythonApi";
+import { similarityScore } from "@/lib/productSimilarity";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,20 +59,92 @@ function canonicalText(value: unknown): string {
   return normalizeText(value).toUpperCase();
 }
 
-function buildInitialGroups(codigo: string, gruposDescricao: CodigoMultiDescricaoGrupoResumo[]): GrupoDesagregacao[] {
-  return [...gruposDescricao]
+function analyzeGroupPairs(gruposDescricao: CodigoMultiDescricaoGrupoResumo[]) {
+  let mostSimilar: { a: string; b: string; score: number } | null = null;
+  let mostDissimilar: { a: string; b: string; score: number } | null = null;
+
+  for (let i = 0; i < gruposDescricao.length; i += 1) {
+    for (let j = i + 1; j < gruposDescricao.length; j += 1) {
+      const a = gruposDescricao[i].descricao;
+      const b = gruposDescricao[j].descricao;
+      const score = similarityScore(a, b);
+
+      if (!mostSimilar || score > mostSimilar.score) {
+        mostSimilar = { a, b, score };
+      }
+      if (!mostDissimilar || score < mostDissimilar.score) {
+        mostDissimilar = { a, b, score };
+      }
+    }
+  }
+
+  return { mostSimilar, mostDissimilar };
+}
+
+function getPrimaryValue(value: string): string {
+  return normalizeText(value.split(",")[0]);
+}
+
+function fiscalAffinity(a: CodigoMultiDescricaoGrupoResumo, b: CodigoMultiDescricaoGrupoResumo): number {
+  let matches = 0;
+  const aNcm = getPrimaryValue(a.lista_ncm);
+  const bNcm = getPrimaryValue(b.lista_ncm);
+  const aCest = getPrimaryValue(a.lista_cest);
+  const bCest = getPrimaryValue(b.lista_cest);
+  const aGtin = getPrimaryValue(a.lista_gtin);
+  const bGtin = getPrimaryValue(b.lista_gtin);
+  if (aNcm && bNcm && aNcm === bNcm) matches += 1;
+  if (aCest && bCest && aCest === bCest) matches += 1;
+  if (aGtin && bGtin && aGtin === bGtin) matches += 1;
+  return matches;
+}
+
+function buildSuggestedClusters(gruposDescricao: CodigoMultiDescricaoGrupoResumo[]): CodigoMultiDescricaoGrupoResumo[][] {
+  const ordered = [...gruposDescricao]
     .sort((a, b) => {
       if (b.qtd_linhas !== a.qtd_linhas) return b.qtd_linhas - a.qtd_linhas;
       return a.descricao.localeCompare(b.descricao);
-    })
-    .map((grupoResumo, index) => ({
+    });
+
+  const visited = new Set<string>();
+  const clusters: CodigoMultiDescricaoGrupoResumo[][] = [];
+
+  ordered.forEach((seed) => {
+    if (visited.has(seed.descricao)) return;
+    const cluster: CodigoMultiDescricaoGrupoResumo[] = [];
+    const queue = [seed];
+    visited.add(seed.descricao);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      cluster.push(current);
+      ordered.forEach((candidate) => {
+        if (visited.has(candidate.descricao)) return;
+        const score = similarityScore(current.descricao, candidate.descricao);
+        const fiscalScore = fiscalAffinity(current, candidate);
+        const shouldJoin = score >= 0.46 || (score >= 0.34 && fiscalScore >= 2);
+        if (shouldJoin) {
+          visited.add(candidate.descricao);
+          queue.push(candidate);
+        }
+      });
+    }
+
+    clusters.push(cluster);
+  });
+
+  return clusters;
+}
+
+function buildInitialGroups(codigo: string, gruposDescricao: CodigoMultiDescricaoGrupoResumo[]): GrupoDesagregacao[] {
+  return buildSuggestedClusters(gruposDescricao).map((cluster, index) => ({
       id: crypto.randomUUID(),
       codigo_novo: index === 0 ? codigo : `${codigo}_${index}`,
-      descricao_nova: grupoResumo.descricao,
-      ncm_novo: normalizeText(grupoResumo.lista_ncm.split(",")[0]),
-      cest_novo: normalizeText(grupoResumo.lista_cest.split(",")[0]),
-      gtin_novo: normalizeText(grupoResumo.lista_gtin.split(",")[0]),
-      grupos_origem: [grupoResumo],
+      descricao_nova: cluster[0]?.descricao || "",
+      ncm_novo: getPrimaryValue(cluster[0]?.lista_ncm || ""),
+      cest_novo: getPrimaryValue(cluster[0]?.lista_cest || ""),
+      gtin_novo: getPrimaryValue(cluster[0]?.lista_gtin || ""),
+      grupos_origem: cluster,
     }));
 }
 
@@ -82,6 +155,16 @@ function compactGroups(grupos: GrupoDesagregacao[], codigoBase: string): GrupoDe
       ...grupo,
       codigo_novo: index === 0 ? codigoBase : `${codigoBase}_${index}`,
     }));
+}
+
+const DRAFT_MAX_AGE_DAYS = 7;
+
+function isStaleDraft(savedAt?: string): boolean {
+  if (!savedAt) return false;
+  const savedTime = new Date(savedAt).getTime();
+  if (!Number.isFinite(savedTime)) return false;
+  const maxAgeMs = DRAFT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return Date.now() - savedTime > maxAgeMs;
 }
 
 const GROUP_ACCENTS = [
@@ -99,6 +182,9 @@ export function DesagregarProdutosContent({
   onCancel,
   embedded = false,
 }: DesagregarProdutosContentProps) {
+  const storageKey = `produto-popup-separar:${cnpj}:${codigo}`;
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [undoing, setUndoing] = useState(false);
@@ -109,10 +195,100 @@ export function DesagregarProdutosContent({
   const [ncmDetailsMap, setNcmDetailsMap] = useState<Record<string, NcmDetailsResponse["data"]>>({});
   const [cestDetailsMap, setCestDetailsMap] = useState<Record<string, CestDetailsResponse["data"]>>({});
   const [loadingFiscais, setLoadingFiscais] = useState<Record<string, boolean>>({});
+  const pairAnalysis = analyzeGroupPairs(gruposDisponiveis);
+  const suggestedClusters = buildSuggestedClusters(gruposDisponiveis);
+  const suggestedClusterMap = new Map(
+    suggestedClusters.flatMap((cluster, clusterIndex) =>
+      cluster.map((item) => [item.descricao, clusterIndex] as const)
+    )
+  );
 
   const totalLinhas =
     Number(normalizeText(resumo.qtd_linhas)) ||
     gruposDisponiveis.reduce((acc, grupo) => acc + grupo.qtd_linhas, 0);
+
+  useEffect(() => {
+    if (!cnpj || !codigo || gruposDisponiveis.length === 0) return;
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return;
+      const state = JSON.parse(raw) as {
+        selectedDescriptions?: string[];
+        savedAt?: string;
+        grupos?: Array<{
+          id: string;
+          codigo_novo: string;
+          descricao_nova: string;
+          ncm_novo: string;
+          cest_novo: string;
+          gtin_novo: string;
+          grupos_origem: string[];
+        }>;
+      };
+      if (isStaleDraft(state.savedAt)) {
+        const shouldRestore = window.confirm(
+          `Existe um rascunho salvo ha mais de ${DRAFT_MAX_AGE_DAYS} dias para este codigo. Deseja restaurar mesmo assim?`
+        );
+        if (!shouldRestore) {
+          window.sessionStorage.removeItem(storageKey);
+          return;
+        }
+      }
+      if (Array.isArray(state.selectedDescriptions)) {
+        setDraftRestored(true);
+        setDraftSavedAt(state.savedAt || "");
+        setSelectedDescriptions(state.selectedDescriptions);
+      }
+      if (Array.isArray(state.grupos) && state.grupos.length > 0) {
+        const origemMap = new Map(gruposDisponiveis.map((grupo) => [grupo.descricao, grupo] as const));
+        const restored = state.grupos
+          .map((grupo) => ({
+            ...grupo,
+            grupos_origem: (grupo.grupos_origem || [])
+              .map((descricao) => origemMap.get(descricao))
+              .filter((item): item is CodigoMultiDescricaoGrupoResumo => Boolean(item)),
+          }))
+          .filter((grupo) => grupo.grupos_origem.length > 0);
+        if (restored.length > 0) {
+          setDraftRestored(true);
+          setDraftSavedAt(state.savedAt || "");
+          setGrupos(compactGroups(restored, codigo));
+        }
+      }
+    } catch {
+      // ignore invalid popup state
+    }
+  }, [cnpj, codigo, storageKey, gruposDisponiveis]);
+
+  useEffect(() => {
+    if (!cnpj || !codigo || grupos.length === 0) return;
+    const savedAt = new Date().toISOString();
+    setDraftSavedAt(savedAt);
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        savedAt,
+        selectedDescriptions,
+        grupos: grupos.map((grupo) => ({
+          id: grupo.id,
+          codigo_novo: grupo.codigo_novo,
+          descricao_nova: grupo.descricao_nova,
+          ncm_novo: grupo.ncm_novo,
+          cest_novo: grupo.cest_novo,
+          gtin_novo: grupo.gtin_novo,
+          grupos_origem: grupo.grupos_origem.map((origem) => origem.descricao),
+        })),
+      })
+    );
+  }, [cnpj, codigo, storageKey, grupos, selectedDescriptions]);
+
+  useEffect(() => {
+    const baseTitle = `Separar codigo ${codigo}`;
+    document.title = draftRestored ? `${baseTitle} [rascunho]` : baseTitle;
+    return () => {
+      document.title = "SEFIN Audit Tool";
+    };
+  }, [codigo, draftRestored]);
 
   useEffect(() => {
     if (codigo) {
@@ -212,6 +388,9 @@ export function DesagregarProdutosContent({
 
       const res = await resolverManualDesagregar(cnpj, itensDecididos);
       if (res.status === "sucesso") {
+        window.sessionStorage.removeItem(storageKey);
+        setDraftRestored(false);
+        setDraftSavedAt("");
         toast.success(res.mensagem);
         onSuccess();
       } else {
@@ -228,6 +407,9 @@ export function DesagregarProdutosContent({
     setUndoing(true);
     try {
       const res = await desfazerDecisaoCodigo(cnpj, codigo);
+      window.sessionStorage.removeItem(storageKey);
+      setDraftRestored(false);
+      setDraftSavedAt("");
       toast.success(res.mensagem);
       onSuccess();
     } catch {
@@ -300,6 +482,14 @@ export function DesagregarProdutosContent({
     });
   };
 
+  const clearDraft = () => {
+    window.sessionStorage.removeItem(storageKey);
+    setDraftRestored(false);
+    setDraftSavedAt("");
+    setSelectedDescriptions([]);
+    setGrupos(buildInitialGroups(codigo, gruposDisponiveis));
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 py-20">
@@ -335,6 +525,37 @@ export function DesagregarProdutosContent({
                   {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Desfazer decisao"}
                 </Button>
               </div>
+              {draftRestored ? (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <span>
+                    Rascunho restaurado automaticamente para este codigo.
+                    {draftSavedAt ? ` Ultimo salvamento: ${new Date(draftSavedAt).toLocaleString("pt-BR")}.` : ""}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-amber-900" onClick={clearDraft}>
+                    Limpar rascunho
+                  </Button>
+                </div>
+              ) : null}
+              {pairAnalysis.mostSimilar || pairAnalysis.mostDissimilar ? (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {pairAnalysis.mostSimilar ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Par mais similar</div>
+                      <div className="mt-1 font-medium text-slate-800">{pairAnalysis.mostSimilar.a}</div>
+                      <div className="text-slate-500">{pairAnalysis.mostSimilar.b}</div>
+                      <div className="mt-1">Similaridade: {(pairAnalysis.mostSimilar.score * 100).toFixed(0)}%</div>
+                    </div>
+                  ) : null}
+                  {pairAnalysis.mostDissimilar ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Par mais dissimilar</div>
+                      <div className="mt-1 font-medium text-slate-800">{pairAnalysis.mostDissimilar.a}</div>
+                      <div className="text-slate-500">{pairAnalysis.mostDissimilar.b}</div>
+                      <div className="mt-1">Similaridade: {(pairAnalysis.mostDissimilar.score * 100).toFixed(0)}%</div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <ScrollArea className="flex-1 p-4">
               <div className="space-y-2 pb-8">
@@ -343,13 +564,15 @@ export function DesagregarProdutosContent({
                   const grupoDestinoIdx = grupos.findIndex((grupo) =>
                     grupo.grupos_origem.some((origem) => origem.descricao === grupoResumo.descricao)
                   );
+                  const suggestedClusterIdx = suggestedClusterMap.get(grupoResumo.descricao) ?? 0;
+                  const suggestedAccent = GROUP_ACCENTS[suggestedClusterIdx % GROUP_ACCENTS.length];
 
                   return (
                     <button
                       key={grupoResumo.descricao}
                       type="button"
                       onClick={() => toggleDescricaoSelection(grupoResumo.descricao)}
-                      className={`w-full rounded-lg border px-3 py-3 text-left transition ${
+                      className={`w-full rounded-lg border-l-4 ${suggestedAccent} px-3 py-3 text-left transition ${
                         isSelected
                           ? "border-purple-500 bg-purple-50"
                           : "border-slate-200 bg-white hover:border-slate-300"
@@ -363,16 +586,14 @@ export function DesagregarProdutosContent({
                           <div className="mt-1 text-xs text-slate-500">
                             {grupoResumo.qtd_linhas} linha{grupoResumo.qtd_linhas > 1 ? "s" : ""}
                             {grupoDestinoIdx >= 0 ? ` | grupo ${grupoDestinoIdx + 1}` : ""}
+                            {` | sugestao ${suggestedClusterIdx + 1}`}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            NCM {grupoResumo.lista_ncm || "-"} | CEST {grupoResumo.lista_cest || "-"}
+                            Compl. {grupoResumo.lista_descr_compl || "-"} | NCM {grupoResumo.lista_ncm || "-"}
                           </div>
                           <div className="text-xs text-slate-500">
                             GTIN {grupoResumo.lista_gtin || "-"} | Tipo {grupoResumo.lista_tipo_item || "-"}
                           </div>
-                          {grupoResumo.lista_descr_compl ? (
-                            <div className="mt-1 text-xs text-slate-500">{grupoResumo.lista_descr_compl}</div>
-                          ) : null}
                         </div>
                         <div
                           className={`mt-1 h-4 w-4 rounded-full border ${
@@ -484,9 +705,8 @@ export function DesagregarProdutosContent({
                           {grupo.cest_novo && cestDetailsMap[grupo.cest_novo] ? (
                             <div className="border-t border-slate-200 pt-3 text-[11px] space-y-1">
                               <p className="font-black uppercase tracking-wider text-slate-600">CEST {grupo.cest_novo}</p>
-                              <div className="text-slate-600">
-                                <p>{cestDetailsMap[grupo.cest_novo].nome_segmento}</p>
-                                <p className="mt-1">{cestDetailsMap[grupo.cest_novo].descricoes?.[0]}</p>
+                              <div className="text-slate-600 whitespace-pre-wrap">
+                                {cestDetailsMap[grupo.cest_novo].descricoes?.[0] || cestDetailsMap[grupo.cest_novo].nome_segmento}
                               </div>
                             </div>
                           ) : null}

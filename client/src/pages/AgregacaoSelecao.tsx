@@ -21,7 +21,15 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { readParquet, type ParquetReadResponse } from "@/lib/pythonApi";
+import {
+  desfazerProdutoVerificado,
+  getStatusAnaliseProdutos,
+  marcarProdutoVerificado,
+  readParquet,
+  type ParquetReadResponse,
+  type ProdutoAnaliseStatusResumo,
+  type ProdutoAnaliseStatusItem,
+} from "@/lib/pythonApi";
 
 const DESCRIPTION_SEPARATOR = "<<#>>";
 
@@ -30,9 +38,12 @@ export default function AgregacaoSelecao() {
   const searchParams = new URLSearchParams(window.location.search);
   const cnpj = searchParams.get("cnpj") || "";
   const filePath = searchParams.get("file_path") || "";
+  const storageKey = `produto-consolidacao-selecao-ui:${cnpj}:${filePath}`;
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ParquetReadResponse | null>(null);
+  const [statusRows, setStatusRows] = useState<ProdutoAnaliseStatusItem[]>([]);
+  const [statusResumo, setStatusResumo] = useState<ProdutoAnaliseStatusResumo | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [searchInput, setSearchInput] = useState({
     chave_produto: "",
@@ -42,6 +53,55 @@ export default function AgregacaoSelecao() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | undefined>(undefined);
 
   const [selectedCodigos, setSelectedCodigos] = useState<Set<string>>(new Set());
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [showVerified, setShowVerified] = useState(false);
+
+  const resetUiState = () => {
+    setSearchInput({ chave_produto: "", lista_descricao: "" });
+    setFilters({});
+    setSortColumn(undefined);
+    setSortDirection(undefined);
+    setShowVerified(false);
+    window.sessionStorage.removeItem(storageKey);
+  };
+
+  useEffect(() => {
+    if (!cnpj || !filePath) return;
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return;
+      const state = JSON.parse(raw) as {
+        searchInput?: { chave_produto?: string; lista_descricao?: string };
+        sortColumn?: string;
+        sortDirection?: "asc" | "desc";
+        showVerified?: boolean;
+      };
+      if (state.searchInput) {
+        setSearchInput({
+          chave_produto: state.searchInput.chave_produto || "",
+          lista_descricao: state.searchInput.lista_descricao || "",
+        });
+      }
+      if (typeof state.sortColumn === "string") setSortColumn(state.sortColumn);
+      if (state.sortDirection === "asc" || state.sortDirection === "desc") setSortDirection(state.sortDirection);
+      if (typeof state.showVerified === "boolean") setShowVerified(state.showVerified);
+    } catch {
+      // ignore invalid session state
+    }
+  }, [cnpj, filePath, storageKey]);
+
+  useEffect(() => {
+    if (!cnpj || !filePath) return;
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        searchInput,
+        sortColumn,
+        sortDirection,
+        showVerified,
+      })
+    );
+  }, [cnpj, filePath, storageKey, searchInput, sortColumn, sortDirection, showVerified]);
 
   useEffect(() => {
     if (filePath) {
@@ -74,15 +134,31 @@ export default function AgregacaoSelecao() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await readParquet({
-        file_path: filePath,
-        page: 1,
-        page_size: 2000,
-        filters,
-        sort_column: sortColumn,
-        sort_direction: sortDirection
-      });
+      const [res, statusRes] = await Promise.all([
+        readParquet({
+          file_path: filePath,
+          page: 1,
+          page_size: 2000,
+          filters,
+          sort_column: sortColumn,
+          sort_direction: sortDirection
+        }),
+        getStatusAnaliseProdutos(cnpj).catch(() => ({
+          success: true,
+          file_path: "",
+          data: [] as ProdutoAnaliseStatusItem[],
+          resumo: {
+            pendentes: 0,
+            verificados: 0,
+            consolidados: 0,
+            separados: 0,
+            decididos_entre_grupos: 0,
+          } as ProdutoAnaliseStatusResumo,
+        })),
+      ]);
       setData(res);
+      setStatusRows(statusRes.success ? statusRes.data : []);
+      setStatusResumo(statusRes.success ? statusRes.resumo : null);
     } catch (error) {
       console.error("Erro ao carregar dados para agregação:", error);
       toast.error("Erro ao carregar dados", {
@@ -118,7 +194,15 @@ export default function AgregacaoSelecao() {
     }
   };
 
-  const filteredRows = data?.rows || [];
+  const verifiedByGrupo = new Set(
+    statusRows
+      .filter((item) => item.tipo_ref === "POR_GRUPO" && item.status_analise === "VERIFICADO_SEM_ACAO")
+      .map((item) => String(item.ref_id))
+  );
+
+  const filteredRows = (data?.rows || []).filter((row) =>
+    showVerified ? true : !verifiedByGrupo.has(String(row.chave_produto))
+  );
 
   const toggleSelection = (codigo: string) => {
     const next = new Set(selectedCodigos);
@@ -153,6 +237,66 @@ export default function AgregacaoSelecao() {
     }
   };
 
+  const handleMarkSelectedVerified = async () => {
+    if (selectedCodigos.size === 0) {
+      toast.error("Selecione ao menos um produto.");
+      return;
+    }
+
+    setStatusSaving(true);
+    try {
+      const selectedRows = filteredRows.filter((row) => selectedCodigos.has(String(row.chave_produto)));
+      await Promise.all(
+        selectedRows.map((row) =>
+          marcarProdutoVerificado({
+            cnpj,
+            tipo_ref: "POR_GRUPO",
+            ref_id: String(row.chave_produto),
+            descricao_ref: String(row.descricao || row.lista_descricao || ""),
+            contexto_tela: "CONSOLIDACAO_SELECAO",
+          })
+        )
+      );
+      setSelectedCodigos(new Set());
+      toast.success("Produtos marcados como verificados.");
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao marcar produtos como verificados.");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleUnverifySelected = async () => {
+    if (selectedCodigos.size === 0) {
+      toast.error("Selecione ao menos um produto.");
+      return;
+    }
+
+    setStatusSaving(true);
+    try {
+      const selectedRows = filteredRows.filter((row) => selectedCodigos.has(String(row.chave_produto)));
+      await Promise.all(
+        selectedRows.map((row) =>
+          desfazerProdutoVerificado({
+            cnpj,
+            tipo_ref: "POR_GRUPO",
+            ref_id: String(row.chave_produto),
+            descricao_ref: String(row.descricao || row.lista_descricao || ""),
+            contexto_tela: "CONSOLIDACAO_SELECAO",
+          })
+        )
+      );
+      setSelectedCodigos(new Set());
+      toast.success("Marcacao de verificado removida.");
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao desfazer verificado.");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   if (!filePath) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
@@ -182,6 +326,43 @@ export default function AgregacaoSelecao() {
         </div>
         
         <div className="flex items-center gap-2">
+           <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-9"
+            onClick={resetUiState}
+           >
+             Restaurar padrao
+           </Button>
+           <Button
+            variant={showVerified ? "default" : "outline"}
+            size="sm"
+            className="gap-2 h-9"
+            onClick={() => setShowVerified((prev) => !prev)}
+           >
+             <CheckCircle2 className="h-4 w-4" />
+             {showVerified ? "Ocultar verificados" : "Mostrar verificados"}
+           </Button>
+           <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-9"
+            onClick={handleMarkSelectedVerified}
+            disabled={selectedCodigos.size === 0 || statusSaving}
+           >
+             {statusSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+             Verificados ({selectedCodigos.size})
+           </Button>
+           <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-9"
+            onClick={handleUnverifySelected}
+            disabled={selectedCodigos.size === 0 || statusSaving}
+           >
+             {statusSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+             Desfazer verificado
+           </Button>
            <Button 
             variant="default" 
             size="sm" 
@@ -199,6 +380,29 @@ export default function AgregacaoSelecao() {
       </div>
 
       <Separator />
+
+      <div className="grid gap-3 md:grid-cols-5">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pendentes</div>
+          <div className="mt-1 text-2xl font-black text-slate-900">{statusResumo?.pendentes ?? 0}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Verificados</div>
+          <div className="mt-1 text-2xl font-black text-slate-900">{statusResumo?.verificados ?? 0}</div>
+        </div>
+        <div className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-3 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Consolidados</div>
+          <div className="mt-1 text-2xl font-black text-indigo-900">{statusResumo?.consolidados ?? 0}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Separados</div>
+          <div className="mt-1 text-2xl font-black text-slate-900">{statusResumo?.separados ?? 0}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Decididos entre grupos</div>
+          <div className="mt-1 text-2xl font-black text-slate-900">{statusResumo?.decididos_entre_grupos ?? 0}</div>
+        </div>
+      </div>
 
       {/* Filtros */}
       <Card className="border-slate-200 shadow-sm">

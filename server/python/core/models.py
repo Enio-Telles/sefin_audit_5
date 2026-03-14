@@ -158,6 +158,13 @@ class ResolverManualMultiDetalhesRequest(BaseModel):
     codigos: list[str]
 
 
+class AutoSepararResidualRequest(BaseModel):
+    cnpj: str
+    modo: str
+    preview: bool = False
+    codigos: Optional[list[str]] = None
+
+
 class DescricaoManualMapItem(BaseModel):
     tipo_regra: str = "UNIR_GRUPOS"
     descricao_origem: str
@@ -182,3 +189,12 @@ class DesfazerManualCodigoRequest(BaseModel):
 class DesfazerManualDescricoesRequest(BaseModel):
     cnpj: str
     descricoes: list[str]
+
+
+class ProdutoAnaliseStatusRequest(BaseModel):
+    cnpj: str
+    tipo_ref: str
+    ref_id: str
+    ref_id_aux: Optional[str] = None
+    descricao_ref: Optional[str] = None
+    contexto_tela: Optional[str] = None

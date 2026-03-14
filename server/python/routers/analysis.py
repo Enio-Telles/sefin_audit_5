@@ -11,6 +11,7 @@ from core.models import (
     AnaliseFaturamentoRequest, 
     AuditPipelineRequest
 )
+from core.produto_runtime import produto_pipeline_em_modo_compatibilidade, unificar_produtos_unidades
 from core.utils import validar_cnpj, ler_sql, normalizar_colunas, extrair_parametros_sql
 
 logger = logging.getLogger("sefin_audit_python")
@@ -154,8 +155,6 @@ async def audit_pipeline(req: AuditPipelineRequest):
         conexao.close()
 
         # ETAPA 2: Análises
-        # ... (simplified for now to match implementation, adding imports)
-        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
         from gerar_relatorio import gerar_relatorio_jinja, gerar_resumo_txt
 
         arquivos_analises = []
@@ -163,7 +162,7 @@ async def audit_pipeline(req: AuditPipelineRequest):
 
         try:
             # 1. Unificação Master (único pipeline de produtos — produto_unid.py)
-            df_unid = unificar_produtos_unidades(cnpj_limpo)
+            df_unid = unificar_produtos_unidades(cnpj_limpo, projeto_dir=_PROJETO_DIR)
 
             # Guardrail: não aceitar "sucesso" com base de produtos zerada quando as fontes têm dados.
             fontes_produto = [
@@ -185,19 +184,28 @@ async def audit_pipeline(req: AuditPipelineRequest):
 
             base_detalhes_path = dir_analises / f"base_detalhes_produtos_{cnpj_limpo}.parquet"
             if fontes_com_dados:
-                if not base_detalhes_path.exists():
+                if not base_detalhes_path.exists() and not produto_pipeline_em_modo_compatibilidade():
                     fontes_txt = ", ".join([f"{n}:{r}" for n, r in fontes_com_dados])
                     raise HTTPException(
                         status_code=422,
                         detail=f"Unificação de produtos não gerou base_detalhes. Fontes com dados: {fontes_txt}",
                     )
 
-                base_rows = pl.scan_parquet(str(base_detalhes_path)).select(pl.len()).collect().item()
-                if int(base_rows) == 0:
+                base_rows = (
+                    pl.scan_parquet(str(base_detalhes_path)).select(pl.len()).collect().item()
+                    if base_detalhes_path.exists()
+                    else 0
+                )
+                if int(base_rows) == 0 and not produto_pipeline_em_modo_compatibilidade():
                     fontes_txt = ", ".join([f"{n}:{r}" for n, r in fontes_com_dados])
                     raise HTTPException(
                         status_code=422,
                         detail=f"Unificação de produtos gerou 0 linhas com fontes preenchidas. Verifique mapeamento de colunas. Fontes: {fontes_txt}",
+                    )
+                if produto_pipeline_em_modo_compatibilidade() and not base_detalhes_path.exists():
+                    logger.warning(
+                        "[audit_pipeline] modo de compatibilidade de produtos ativo; base_detalhes nao foi regenerada para %s",
+                        cnpj_limpo,
                     )
             
             # Lista de arquivos esperados na pasta de análises para a seção de produtos
@@ -206,6 +214,10 @@ async def audit_pipeline(req: AuditPipelineRequest):
                 (f"base_detalhes_produtos_{cnpj_limpo}.parquet", "Base Detalhes"),
                 (f"produtos_indexados_{cnpj_limpo}.parquet", "Produtos Indexados"),
                 (f"codigos_multidescricao_{cnpj_limpo}.parquet", "Códigos Multidescrição"),
+                (f"status_analise_produtos_{cnpj_limpo}.parquet", "Status de Analise"),
+                (f"pares_descricoes_similares_{cnpj_limpo}.parquet", "Pares Similares"),
+                (f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet", "Pares Similares Semanticos"),
+                (f"pares_descricoes_similares_hibridos_{cnpj_limpo}.parquet", "Pares Similares Hibridos"),
                 (f"variacoes_produtos_{cnpj_limpo}.parquet", "Variações Encontradas"),
                 (f"mapa_manual_descricoes_{cnpj_limpo}.parquet", "Mapa Manual de Descrições"),
                 (f"mapa_auditoria_descricoes_{cnpj_limpo}.parquet", "Auditoria de Descrições"),

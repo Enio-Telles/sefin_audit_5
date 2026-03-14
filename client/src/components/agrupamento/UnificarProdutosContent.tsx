@@ -30,6 +30,16 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+const DRAFT_MAX_AGE_DAYS = 7;
+
+function isStaleDraft(savedAt?: string): boolean {
+  if (!savedAt) return false;
+  const savedTime = new Date(savedAt).getTime();
+  if (!Number.isFinite(savedTime)) return false;
+  const maxAgeMs = DRAFT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return Date.now() - savedTime > maxAgeMs;
+}
+
 export function UnificarProdutosContent({
   cnpj,
   codigo,
@@ -37,6 +47,9 @@ export function UnificarProdutosContent({
   onCancel,
   embedded = false,
 }: UnificarProdutosContentProps) {
+  const storageKey = `produto-popup-unificar:${cnpj}:${codigo}`;
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [undoing, setUndoing] = useState(false);
@@ -54,6 +67,53 @@ export function UnificarProdutosContent({
     cest: "",
     gtin: "",
   });
+
+  useEffect(() => {
+    if (!cnpj || !codigo) return;
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return;
+      const state = JSON.parse(raw) as { decisao?: typeof decisao; savedAt?: string };
+      if (isStaleDraft(state.savedAt)) {
+        const shouldRestore = window.confirm(
+          `Existe um rascunho salvo ha mais de ${DRAFT_MAX_AGE_DAYS} dias para este codigo. Deseja restaurar mesmo assim?`
+        );
+        if (!shouldRestore) {
+          window.sessionStorage.removeItem(storageKey);
+          return;
+        }
+      }
+      if (state.decisao) {
+        setDraftRestored(true);
+        setDraftSavedAt(state.savedAt || "");
+        setDecisao({
+          codigo: state.decisao.codigo || codigo,
+          descricao: state.decisao.descricao || "",
+          ncm: state.decisao.ncm || "",
+          cest: state.decisao.cest || "",
+          gtin: state.decisao.gtin || "",
+        });
+      }
+    } catch {
+      // ignore invalid popup state
+    }
+  }, [cnpj, codigo, storageKey]);
+
+  useEffect(() => {
+    if (!cnpj || !codigo) return;
+    if (!decisao.descricao && !decisao.ncm && !decisao.cest && !decisao.gtin) return;
+    const savedAt = new Date().toISOString();
+    setDraftSavedAt(savedAt);
+    window.sessionStorage.setItem(storageKey, JSON.stringify({ decisao, savedAt }));
+  }, [cnpj, codigo, storageKey, decisao]);
+
+  useEffect(() => {
+    const baseTitle = `Consolidar codigo ${codigo}`;
+    document.title = draftRestored ? `${baseTitle} [rascunho]` : baseTitle;
+    return () => {
+      document.title = "SEFIN Audit Tool";
+    };
+  }, [codigo, draftRestored]);
 
   const [ncmCache, setNcmCache] = useState<Record<string, string>>({});
   const [cestCache, setCestCache] = useState<Record<string, string>>({});
@@ -104,13 +164,13 @@ export function UnificarProdutosContent({
       setOpcoesCest(res.opcoes_consenso?.cest || []);
       setOpcoesGtin(res.opcoes_consenso?.gtin || []);
 
-      setDecisao({
+      setDecisao((current) => ({
         codigo,
-        descricao: res.opcoes_consenso?.descricao?.[0]?.valor || "",
-        ncm: res.opcoes_consenso?.ncm?.[0]?.valor || "",
-        cest: res.opcoes_consenso?.cest?.[0]?.valor || "",
-        gtin: res.opcoes_consenso?.gtin?.[0]?.valor || "",
-      });
+        descricao: current.descricao || res.opcoes_consenso?.descricao?.[0]?.valor || "",
+        ncm: current.ncm || res.opcoes_consenso?.ncm?.[0]?.valor || "",
+        cest: current.cest || res.opcoes_consenso?.cest?.[0]?.valor || "",
+        gtin: current.gtin || res.opcoes_consenso?.gtin?.[0]?.valor || "",
+      }));
 
       const uniqueNcms = (res.opcoes_consenso?.ncm || []).map((item) => normalizeText(item.valor)).filter(Boolean);
       const uniqueCests = (res.opcoes_consenso?.cest || []).map((item) => normalizeText(item.valor)).filter(Boolean);
@@ -151,6 +211,9 @@ export function UnificarProdutosContent({
       }
       const res = await resolverManualUnificar(cnpj, detalhes.itens, decisao);
       if (res.status === "sucesso") {
+        window.sessionStorage.removeItem(storageKey);
+        setDraftRestored(false);
+        setDraftSavedAt("");
         toast.success(res.mensagem);
         onSuccess();
       } else {
@@ -167,6 +230,9 @@ export function UnificarProdutosContent({
     setUndoing(true);
     try {
       const res = await desfazerDecisaoCodigo(cnpj, codigo);
+      window.sessionStorage.removeItem(storageKey);
+      setDraftRestored(false);
+      setDraftSavedAt("");
       toast.success(res.mensagem);
       onSuccess();
     } catch {
@@ -184,6 +250,19 @@ export function UnificarProdutosContent({
   const totalDescricoes = Number(normalizeText(resumo.qtd_descricoes)) || gruposDescricao.length;
   const totalGruposAfetados =
     Number(normalizeText(resumo.qtd_grupos_descricao_afetados)) || gruposDescricao.length;
+
+  const clearDraft = () => {
+    window.sessionStorage.removeItem(storageKey);
+    setDraftRestored(false);
+    setDraftSavedAt("");
+    setDecisao({
+      codigo,
+      descricao: opcoesDescricao[0]?.valor || "",
+      ncm: opcoesNcm[0]?.valor || "",
+      cest: opcoesCest[0]?.valor || "",
+      gtin: opcoesGtin[0]?.valor || "",
+    });
+  };
 
   if (loading) {
     return (
@@ -229,6 +308,17 @@ export function UnificarProdutosContent({
                   {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Desfazer decisao"}
                 </Button>
               </div>
+              {draftRestored ? (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <span>
+                    Rascunho restaurado automaticamente para este codigo.
+                    {draftSavedAt ? ` Ultimo salvamento: ${new Date(draftSavedAt).toLocaleString("pt-BR")}.` : ""}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-amber-900" onClick={clearDraft}>
+                    Limpar rascunho
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-4">

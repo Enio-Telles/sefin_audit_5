@@ -1,4 +1,23 @@
+
+# Python temporários
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ambientes virtuais
+venv/
+env/
+.env
+
+# Arquivos de dados (opcional, mas recomendado para auditoria)
+*.parquet
+*.csv
+*.xlsx
+
 # ==========================================
+
+
 # FERRAMENTAS PORTÁVEIS (NÃO VERSIONADAS)
 # ==========================================
 Git-Portable/
@@ -107,6 +126,8 @@ jspm_packages/
 # Temporary folders
 tmp/
 temp/
+.tmp/
+.tmp_docx_deps/
 
 # Database
 *.db
@@ -116,3 +137,5 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 CNPJ.pytest_cache/
+*.parquet
+*.docx

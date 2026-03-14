@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import logging
 from typing import Optional
+from core.produto_runtime import unificar_produtos_unidades
 
 # Initialize dotenv explicitly
 env_path = Path(".env")
@@ -586,7 +587,6 @@ async def submit_revisao_manual(req: RevisaoManualSubmitRequest):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
     try:
         import importlib.util
-        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
         
         _config_path = _PROJETO_DIR / "config.py"
         _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
@@ -627,7 +627,6 @@ async def resolver_manual_unificar(req: ResolverManualUnificarRequest):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
     try:
         import importlib.util
-        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
         
         _config_path = _PROJETO_DIR / "config.py"
         _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
@@ -682,7 +681,6 @@ async def resolver_manual_desagregar(req: ResolverManualDesagregarRequest):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
     try:
         import importlib.util
-        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
         
         _config_path = _PROJETO_DIR / "config.py"
         _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
@@ -2078,7 +2076,6 @@ async def agrupar_produtos(req: ProdutoUnidRequest):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     try:
-        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
 
         logger.info("[agrupamento_produtos] Iniciando (Via Unificador) para CNPJ %s", cnpj_limpo)
         df_resultado = unificar_produtos_unidades(cnpj_limpo)

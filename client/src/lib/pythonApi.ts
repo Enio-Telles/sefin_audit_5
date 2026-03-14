@@ -637,6 +637,55 @@ export interface ProdutosRevisaoManualResponse {
   data: Record<string, unknown>[];
 }
 
+export interface ParesGruposSimilaresItem {
+  chave_produto_a: string;
+  descricao_a: string;
+  ncm_a?: string;
+  cest_a?: string;
+  gtin_a?: string;
+  qtd_codigos_a?: number;
+  conflitos_a?: string;
+  chave_produto_b: string;
+  descricao_b: string;
+  ncm_b?: string;
+  cest_b?: string;
+  gtin_b?: string;
+  qtd_codigos_b?: number;
+  conflitos_b?: string;
+  score_descricao: number;
+  score_semantico?: number;
+  score_ncm: number;
+  score_cest: number;
+  score_gtin: number;
+  score_final: number;
+  recomendacao: string;
+  motivo_recomendacao?: string;
+  uniao_automatica_elegivel?: boolean;
+  bloquear_uniao?: boolean;
+  metodo_similaridade?: string;
+  modelo_vetorizacao?: string;
+  origem_par_hibrido?: string;
+}
+
+export interface ParesGruposSimilaresResponse {
+  success: boolean;
+  available?: boolean;
+  metodo?: "lexical" | "semantic" | "hybrid";
+  message?: string;
+  cache_metadata?: {
+    metodo?: string;
+    engine?: string | null;
+    input_base_hash?: string | null;
+    generated_at_utc?: string | null;
+    modelo_vetorizacao?: string | null;
+    top_k?: number | null;
+    min_semantic_score?: number | null;
+    batch_size?: number | null;
+  };
+  file_path: string;
+  data: ParesGruposSimilaresItem[];
+}
+
 export interface CodigosMultiDescricaoResponse {
   success: boolean;
   file_path: string;
@@ -699,12 +748,83 @@ export interface DescricaoManualMapItem {
   acao_manual?: string;
 }
 
+export interface ProdutoAnaliseStatusItem {
+  tipo_ref: string;
+  ref_id: string;
+  ref_id_aux?: string;
+  descricao_ref?: string;
+  contexto_tela?: string;
+  status_analise?: string;
+  dt_ultima_acao?: string;
+}
+
+export interface ProdutoAnaliseStatusResumo {
+  pendentes: number;
+  verificados: number;
+  consolidados: number;
+  separados: number;
+  decididos_entre_grupos: number;
+}
+
+export type AutoSepararResidualMode = "NCM_CEST_GTIN" | "NCM_GTIN" | "NCM_ONLY" | "TEXT_ONLY";
+
+export interface AutoSepararResidualResponse {
+  status: string;
+  preview: boolean;
+  modo: AutoSepararResidualMode;
+  qtd_codigos_avaliados: number;
+  qtd_codigos_elegiveis: number;
+  qtd_codigos_aplicados: number;
+  qtd_codigos_ignorados: number;
+  motivos_ignorados: { codigo: string; motivo: string }[];
+  resumo_motivos_ignorados: { motivo: string; qtd_codigos: number; codigos_amostra: string[] }[];
+}
+
 export async function getProdutoDetalhes(cnpj: string, codigo: string) {
   return request<DetalhesCodigoResponse>(`/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`);
 }
 
 export async function getProdutosRevisaoManual(cnpj: string) {
   return request<ProdutosRevisaoManualResponse>(`/produtos/revisao-manual?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
+export async function getParesGruposSimilares(
+  cnpj: string,
+  metodo: "lexical" | "semantic" | "hybrid" = "lexical",
+  forcarRecalculo = false,
+  options?: { topK?: number; minSemanticScore?: number }
+) {
+  const topK = options?.topK ?? 8;
+  const minSemanticScore = options?.minSemanticScore ?? 0.32;
+  return request<ParesGruposSimilaresResponse>(
+    `/produtos/pares-grupos-similares?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}&forcar_recalculo=${forcarRecalculo ? "true" : "false"}&top_k=${encodeURIComponent(String(topK))}&min_semantic_score=${encodeURIComponent(String(minSemanticScore))}`
+  );
+}
+
+export interface VectorizacaoStatusResponse {
+  success: boolean;
+  current_base_hash?: string | null;
+  status: {
+    available: boolean;
+    message: string;
+    model_name?: string;
+    engine?: string | null;
+  };
+  caches: {
+    semantic?: Record<string, unknown> & { stale?: boolean };
+    hybrid?: Record<string, unknown> & { stale?: boolean };
+  };
+}
+
+export async function getVectorizacaoStatus(cnpj: string) {
+  return request<VectorizacaoStatusResponse>(`/produtos/vectorizacao-status?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
+export async function clearVectorizacaoCache(cnpj: string, metodo: "semantic" | "hybrid" | "all" = "all") {
+  return request<{ success: boolean; message: string; removed: string[] }>(
+    `/produtos/vectorizacao-clear-cache?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}`,
+    { method: "POST" }
+  );
 }
 
 export async function getCodigosMultiDescricao(cnpj: string) {
@@ -735,6 +855,13 @@ export async function resolverManualDesagregar(cnpj: string, itensDecididos: any
   return request<ResolverManualResponse>("/produtos/resolver-manual-desagregar", {
     method: "POST",
     body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
+  });
+}
+
+export async function autoSepararResidual(cnpj: string, modo: AutoSepararResidualMode, preview = false, codigos?: string[]) {
+  return request<AutoSepararResidualResponse>("/produtos/auto-separar-residual", {
+    method: "POST",
+    body: JSON.stringify({ cnpj, modo, preview, codigos }),
   });
 }
 
@@ -771,6 +898,32 @@ export async function desfazerManualDescricoes(cnpj: string, descricoes: string[
     {
       method: "POST",
       body: JSON.stringify({ cnpj, descricoes }),
+    }
+  );
+}
+
+export async function getStatusAnaliseProdutos(cnpj: string) {
+  return request<{ success: boolean; file_path: string; data: ProdutoAnaliseStatusItem[]; resumo: ProdutoAnaliseStatusResumo }>(
+    `/produtos/status-analise?cnpj=${encodeURIComponent(cnpj)}`
+  );
+}
+
+export async function marcarProdutoVerificado(item: ProdutoAnaliseStatusItem & { cnpj: string }) {
+  return request<{ success: boolean; mensagem: string; arquivo: string; status_file: string }>(
+    "/produtos/marcar-verificado",
+    {
+      method: "POST",
+      body: JSON.stringify(item),
+    }
+  );
+}
+
+export async function desfazerProdutoVerificado(item: ProdutoAnaliseStatusItem & { cnpj: string }) {
+  return request<{ success: boolean; mensagem: string; qtd_removidos: number; status_file: string }>(
+    "/produtos/desfazer-verificado",
+    {
+      method: "POST",
+      body: JSON.stringify(item),
     }
   );
 }

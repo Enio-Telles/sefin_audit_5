@@ -344,6 +344,18 @@ async def detalhes_historico_cnpj(cnpj: str):
             elif name.startswith("codigos_multidescricao_"):
                 f["analise"] = "C?digos Multidescri??o"
                 arquivos_produtos.append(f)
+            elif name.startswith("status_analise_produtos_"):
+                f["analise"] = "Status de Analise"
+                arquivos_produtos.append(f)
+            elif name.startswith("pares_descricoes_similares_semanticos_"):
+                f["analise"] = "Pares Similares Semanticos"
+                arquivos_produtos.append(f)
+            elif name.startswith("pares_descricoes_similares_hibridos_"):
+                f["analise"] = "Pares Similares Hibridos"
+                arquivos_produtos.append(f)
+            elif name.startswith("pares_descricoes_similares_"):
+                f["analise"] = "Pares Similares"
+                arquivos_produtos.append(f)
             elif name.startswith("base_detalhes_produtos_"):
                 f["analise"] = "Base Detalhes"
                 arquivos_produtos.append(f)

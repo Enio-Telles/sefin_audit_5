@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,13 +20,14 @@ import {
   Loader2,
   Boxes,
   MousePointerClick,
+  RefreshCw,
   ListTree,
   GitBranch,
   GitMerge,
 } from "lucide-react";
 import { useLocation } from "wouter";
-import type { AuditPipelineResponse, AuditFileResult } from "@/lib/pythonApi";
-import { downloadRevisaoManualExcel } from "@/lib/pythonApi";
+import type { AuditPipelineResponse, AuditFileResult, ProdutoAnaliseStatusResumo } from "@/lib/pythonApi";
+import { clearVectorizacaoCache, downloadRevisaoManualExcel, getParesGruposSimilares, getStatusAnaliseProdutos, getVectorizacaoStatus } from "@/lib/pythonApi";
 
 interface AuditResultViewProps {
   result: AuditPipelineResponse;
@@ -46,6 +47,70 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
   const [, navigate] = useLocation();
   const [downloadingRevisao, setDownloadingRevisao] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState<string | null>(null);
+  const [statusResumo, setStatusResumo] = useState<ProdutoAnaliseStatusResumo | null>(null);
+  const [vectorStatus, setVectorStatus] = useState<{
+    available: boolean;
+    message: string;
+    model_name?: string;
+    engine?: string | null;
+  } | null>(null);
+  const [vectorCaches, setVectorCaches] = useState<{ semantic?: Record<string, unknown>; hybrid?: Record<string, unknown> } | null>(null);
+  const [currentBaseHash, setCurrentBaseHash] = useState<string | null>(null);
+  const [vectorLoading, setVectorLoading] = useState(false);
+  const vectorEngine = String(vectorStatus?.engine || "").toUpperCase();
+  const vectorEngineIsFaiss = vectorEngine === "FAISS";
+  const vectorEngineIsNumpy = vectorEngine === "NUMPY";
+  const vectorCacheStale = Boolean(vectorCaches?.semantic?.stale || vectorCaches?.hybrid?.stale);
+  const vectorRecommendation = !vectorStatus?.available
+    ? "Vetorizacao indisponivel"
+    : vectorCacheStale
+      ? "Recalculo recomendado"
+      : vectorEngineIsFaiss
+        ? "Usar FAISS"
+        : vectorEngineIsNumpy
+          ? "Fallback aceitavel"
+          : "Status normal";
+
+  useEffect(() => {
+    let active = true;
+    const cleanCnpj = result.cnpj?.replace(/\D/g, "");
+    if (!cleanCnpj) {
+      setStatusResumo(null);
+      return;
+    }
+
+    getStatusAnaliseProdutos(cleanCnpj)
+      .then((res) => {
+        if (active) {
+          setStatusResumo(res.resumo || null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setStatusResumo(null);
+        }
+      });
+
+    getVectorizacaoStatus(cleanCnpj)
+      .then((res) => {
+        if (active) {
+          setVectorStatus(res.status || null);
+          setVectorCaches(res.caches || null);
+          setCurrentBaseHash(res.current_base_hash || null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setVectorStatus(null);
+          setVectorCaches(null);
+          setCurrentBaseHash(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [result.cnpj]);
 
   const handleDownloadRevisao = async () => {
     if (!result.cnpj) return;
@@ -68,11 +133,89 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
     window.open(url, "_blank");
   };
 
+  const refreshVectorStatus = async () => {
+    if (!result.cnpj) return;
+    const cleanCnpj = result.cnpj.replace(/\D/g, "");
+    try {
+      const res = await getVectorizacaoStatus(cleanCnpj);
+      setVectorStatus(res.status || null);
+      setVectorCaches(res.caches || null);
+      setCurrentBaseHash(res.current_base_hash || null);
+    } catch {
+      setVectorStatus(null);
+      setVectorCaches(null);
+      setCurrentBaseHash(null);
+    }
+  };
+
+  const handleRecalculateSemantic = async () => {
+    if (!result.cnpj) return;
+    const cleanCnpj = result.cnpj.replace(/\D/g, "");
+    setVectorLoading(true);
+    try {
+      const res = await getParesGruposSimilares(cleanCnpj, "semantic", true);
+      if (!res.success) {
+        setDownloadMsg(res.message || "Modo semantico indisponivel.");
+      } else {
+        setDownloadMsg("Pares semanticos recalculados");
+      }
+      await refreshVectorStatus();
+    } catch (err: any) {
+      setDownloadMsg(err?.message || "Erro ao recalcular pares semanticos");
+    } finally {
+      setVectorLoading(false);
+      setTimeout(() => setDownloadMsg(null), 4000);
+    }
+  };
+
+  const handleRecalculateHybrid = async () => {
+    if (!result.cnpj) return;
+    const cleanCnpj = result.cnpj.replace(/\D/g, "");
+    setVectorLoading(true);
+    try {
+      const res = await getParesGruposSimilares(cleanCnpj, "hybrid", true);
+      if (!res.success) {
+        setDownloadMsg(res.message || "Modo hibrido indisponivel.");
+      } else {
+        setDownloadMsg("Pares hibridos recalculados");
+      }
+      await refreshVectorStatus();
+    } catch (err: any) {
+      setDownloadMsg(err?.message || "Erro ao recalcular pares hibridos");
+    } finally {
+      setVectorLoading(false);
+      setTimeout(() => setDownloadMsg(null), 4000);
+    }
+  };
+
+  const handleClearVectorCache = async () => {
+    if (!result.cnpj) return;
+    const cleanCnpj = result.cnpj.replace(/\D/g, "");
+    setVectorLoading(true);
+    try {
+      await clearVectorizacaoCache(cleanCnpj, "all");
+      setDownloadMsg("Cache vetorizado removido");
+      await refreshVectorStatus();
+    } catch (err: any) {
+      setDownloadMsg(err?.message || "Erro ao limpar cache vetorizado");
+    } finally {
+      setVectorLoading(false);
+      setTimeout(() => setDownloadMsg(null), 4000);
+    }
+  };
+
   const openAnaliseFileByName = (expectedName: string) => {
     const allFiles = [...(result.arquivos_analises || []), ...(result.arquivos_produtos || [])];
     const existingFile = allFiles.find((file) => file.name === expectedName);
     const path = existingFile ? existingFile.path : `${result.dir_analises || ""}/${expectedName}`;
     openParquetInNewTab(path.replace(/\\/g, "/"));
+  };
+
+  const openVectorAnaliseFile = (expectedName: string, stale?: boolean) => {
+    if (stale && !window.confirm("O cache vetorizado desta tabela esta desatualizado em relacao a base atual. Deseja abrir mesmo assim?")) {
+      return;
+    }
+    openAnaliseFileByName(expectedName);
   };
 
   const FileCard = ({ file, index }: { file: AuditFileResult; index: number }) => (
@@ -208,7 +351,111 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
             <div className="space-y-3">
               <code className="block truncate text-[10px] text-muted-foreground">{result.dir_analises}</code>
 
-              <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1.4fr_auto]">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                {[
+                  { label: "Pendentes", value: statusResumo?.pendentes ?? 0 },
+                  { label: "Verificados", value: statusResumo?.verificados ?? 0 },
+                  { label: "Consolidados", value: statusResumo?.consolidados ?? 0 },
+                  { label: "Separados", value: statusResumo?.separados ?? 0 },
+                  { label: "Decididos entre grupos", value: statusResumo?.decididos_entre_grupos ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border bg-white px-3 py-2">
+                    <div className="text-[11px] font-semibold text-slate-500">{item.label}</div>
+                    <div className="text-lg font-semibold text-slate-900">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className={`rounded-lg border px-3 py-3 ${
+                  vectorCaches?.semantic?.stale || vectorCaches?.hybrid?.stale
+                    ? "border-amber-300 bg-amber-50"
+                    : "bg-white"
+                }`}
+              >
+                <div className="mb-1 text-[11px] font-semibold text-slate-500">Vetorizacao</div>
+                <div className="text-sm text-slate-700">
+                  {vectorStatus ? (
+                    <>
+                      <span>Status: <strong>{vectorStatus.available ? "disponivel" : "indisponivel"}</strong>.</span>
+                      {vectorStatus.engine ? <span className="ml-2">Engine: <strong>{vectorEngine}</strong>.</span> : null}
+                      {vectorStatus.model_name ? <span className="ml-2">Modelo: <strong>{vectorStatus.model_name}</strong>.</span> : null}
+                    </>
+                  ) : (
+                    <span>Status nao carregado.</span>
+                  )}
+                </div>
+                {vectorEngineIsFaiss ? (
+                  <div
+                    className="mt-2 inline-flex rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700"
+                    title="FAISS usa indice vetorial dedicado e tende a ser mais rapido para busca de vizinhos."
+                  >
+                    FAISS ativo
+                  </div>
+                ) : null}
+                {vectorEngineIsNumpy ? (
+                  <div
+                    className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800"
+                    title="NUMPY fallback dispensa FAISS, mas tende a ser mais lento em bases maiores."
+                  >
+                    NUMPY fallback
+                  </div>
+                ) : null}
+                {vectorEngineIsFaiss ? (
+                  <div className="mt-1 text-xs text-emerald-700">
+                    Busca vetorial otimizada, mais adequada para uso recorrente.
+                  </div>
+                ) : null}
+                {vectorEngineIsNumpy ? (
+                  <div className="mt-1 text-xs text-amber-800">
+                    Fallback sem FAISS. Funciona, mas com custo maior em CPU para bases maiores.
+                  </div>
+                ) : null}
+                {vectorStatus?.message ? <div className="mt-1 text-xs text-slate-500">{vectorStatus.message}</div> : null}
+                <div
+                  className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                    !vectorStatus?.available
+                      ? "bg-slate-200 text-slate-700"
+                      : vectorCacheStale
+                        ? "bg-amber-100 text-amber-800"
+                        : vectorEngineIsFaiss
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-sky-100 text-sky-700"
+                  }`}
+                >
+                  {vectorRecommendation}
+                </div>
+                {currentBaseHash ? <div className="mt-1 text-xs text-slate-500">Base atual: {currentBaseHash.slice(0, 10)}...</div> : null}
+                <div className="mt-1 text-xs text-slate-500">
+                  {vectorCaches?.semantic?.generated_at_utc ? (
+                    <span>Semantico: {new Date(String(vectorCaches.semantic.generated_at_utc)).toLocaleString("pt-BR")}{vectorCaches.semantic?.stale ? " (desatualizado)" : ""}.</span>
+                  ) : (
+                    <span>Semantico sem cache.</span>
+                  )}
+                  {" "}
+                  {vectorCaches?.hybrid?.generated_at_utc ? (
+                    <span>Hibrido: {new Date(String(vectorCaches.hybrid.generated_at_utc)).toLocaleString("pt-BR")}{vectorCaches.hybrid?.stale ? " (desatualizado)" : ""}.</span>
+                  ) : (
+                    <span>Hibrido sem cache.</span>
+                  )}
+                </div>
+                {(vectorCaches?.semantic?.stale || vectorCaches?.hybrid?.stale) ? (
+                  <div className="mt-2 text-xs font-medium text-amber-800">
+                    Ha cache vetorizado desatualizado. Recalcule antes de usar as tabelas semanticas/hibridas.
+                  </div>
+                ) : null}
+                <div className="mt-1 text-xs text-slate-500">
+                  {vectorCaches?.semantic?.top_k ? <span>Top K semantico: {String(vectorCaches.semantic.top_k)}.</span> : null}
+                  {" "}
+                  {vectorCaches?.semantic?.min_semantic_score != null ? <span>Limiar semantico: {String(vectorCaches.semantic.min_semantic_score)}.</span> : null}
+                  {" "}
+                  {vectorCaches?.hybrid?.top_k ? <span>Top K hibrido: {String(vectorCaches.hybrid.top_k)}.</span> : null}
+                  {" "}
+                  {vectorCaches?.hybrid?.min_semantic_score != null ? <span>Limiar hibrido: {String(vectorCaches.hybrid.min_semantic_score)}.</span> : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1.4fr_0.8fr_auto]">
                 <ActionGroup title="Revisao">
                   <Button
                     variant="outline"
@@ -227,7 +474,7 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
                     className="h-8 gap-1.5"
                     onClick={() => {
                       const cleanCnpj = result.cnpj.replace(/\D/g, "");
-                      navigate(`/revisao-manual?cnpj=${cleanCnpj}`);
+                      window.open(`/revisao-manual?cnpj=${cleanCnpj}`, "_blank");
                     }}
                   >
                     <Boxes className="h-3.5 w-3.5" />
@@ -243,7 +490,10 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
                       const productFile = result.arquivos_produtos?.find((f) => f.name === expectedFileName);
                       const path = productFile ? productFile.path : `${result.dir_analises || ""}/${expectedFileName}`;
                       const normalizedPath = path.replace(/\\/g, "/");
-                      navigate(`/agregacao-selecao?cnpj=${cleanCnpj}&file_path=${encodeURIComponent(normalizedPath)}`);
+                      window.open(
+                        `/agregacao-selecao?cnpj=${cleanCnpj}&file_path=${encodeURIComponent(normalizedPath)}`,
+                        "_blank"
+                      );
                     }}
                   >
                     <MousePointerClick className="h-3.5 w-3.5" />
@@ -326,6 +576,69 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
                   >
                     <GitMerge className="h-3.5 w-3.5" />
                     Manual
+                  </Button>
+                </ActionGroup>
+
+                <ActionGroup title="Status">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => {
+                      const cleanCnpj = result.cnpj.replace(/\D/g, "");
+                      openAnaliseFileByName(`status_analise_produtos_${cleanCnpj}.parquet`);
+                    }}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    Status
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => {
+                      const cleanCnpj = result.cnpj.replace(/\D/g, "");
+                      openAnaliseFileByName(`pares_descricoes_similares_${cleanCnpj}.parquet`);
+                    }}
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    Pares
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => {
+                      const cleanCnpj = result.cnpj.replace(/\D/g, "");
+                      openVectorAnaliseFile(`pares_descricoes_similares_semanticos_${cleanCnpj}.parquet`, Boolean(vectorCaches?.semantic?.stale));
+                    }}
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    {`Pares semanticos${vectorCaches?.semantic?.stale ? " (desatualizado)" : ""}`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => {
+                      const cleanCnpj = result.cnpj.replace(/\D/g, "");
+                      openVectorAnaliseFile(`pares_descricoes_similares_hibridos_${cleanCnpj}.parquet`, Boolean(vectorCaches?.hybrid?.stale));
+                    }}
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    {`Pares hibridos${vectorCaches?.hybrid?.stale ? " (desatualizado)" : ""}`}
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={handleRecalculateSemantic} disabled={vectorLoading}>
+                    {vectorLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Recalcular semanticos
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={handleRecalculateHybrid} disabled={vectorLoading}>
+                    {vectorLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Recalcular hibridos
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={handleClearVectorCache} disabled={vectorLoading}>
+                    <XCircle className="h-3.5 w-3.5" />
+                    Limpar cache
                   </Button>
                 </ActionGroup>
 

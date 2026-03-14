@@ -1,6 +1,7 @@
 import re
 import os
 import keyring
+import socket
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from dotenv import load_dotenv, set_key
@@ -15,12 +16,40 @@ router = APIRouter(prefix="/api/python/oracle", tags=["oracle"])
 # Get project root from environment or handle it
 _PROJETO_DIR = Path(__file__).resolve().parent.parent.parent.parent
 
+
+def _oracle_network_precheck(host: str, port: int) -> None:
+    """Valida DNS e conectividade TCP basica antes do connect do Oracle."""
+    host_clean = str(host or "").strip()
+    if not host_clean:
+        raise ValueError("Host Oracle nao informado.")
+
+    try:
+        socket.getaddrinfo(host_clean, port)
+    except socket.gaierror as exc:
+        raise ConnectionError(
+            f"Host Oracle nao resolvido por DNS: {host_clean}. Verifique hostname, VPN ou DNS da rede corporativa."
+        ) from exc
+
+    try:
+        with socket.create_connection((host_clean, int(port)), timeout=3):
+            pass
+    except TimeoutError as exc:
+        raise ConnectionError(
+            f"Host Oracle resolvido, mas a porta {port} nao respondeu em tempo habil para {host_clean}. Verifique rede, VPN ou firewall."
+        ) from exc
+    except OSError as exc:
+        raise ConnectionError(
+            f"Host Oracle resolvido, mas a porta {port} nao esta acessivel em {host_clean}. Verifique rede, VPN, firewall ou disponibilidade do listener Oracle."
+        ) from exc
+
+
 @router.post("/test-connection")
 async def test_oracle_connection(config: OracleConnectionConfig):
     """Testa conexão com o banco Oracle."""
     try:
         import oracledb
         from db_manager import DatabaseManager
+        _oracle_network_precheck(config.host, config.port)
         dsn = oracledb.makedsn(config.host, config.port, service_name=config.service)
         db_manager = DatabaseManager(dsn=dsn, user=config.user, password=config.password)
         with db_manager.get_connection() as conexao:
@@ -46,6 +75,7 @@ async def extract_oracle_data(request: ExtractionRequest):
     try:
         import oracledb
         from db_manager import DatabaseManager
+        _oracle_network_precheck(request.connection.host, request.connection.port)
         dsn = oracledb.makedsn(request.connection.host, request.connection.port, service_name=request.connection.service)
         db_manager = DatabaseManager(dsn=dsn, user=request.connection.user, password=request.connection.password)
         

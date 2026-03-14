@@ -12,26 +12,30 @@ _REF_DIR = _PROJETO_DIR / "referencias"
 
 @router.get("/ncm/{codigo}")
 async def get_ncm_details(codigo: str):
-    """Busca detalhes do NCM (Capítulo, Posição, Descrição)."""
-    # Voltando para tabela_ncm.parquet conforme solicitado pelo usuário
+    """Busca detalhes do NCM (Capitulo, Posicao, Descricao)."""
     ncm_path = _REF_DIR / "NCM" / "tabela_ncm.parquet"
+    ncm_posicao_path = _REF_DIR / "NCM" / "ncm_posicao.parquet"
+    ncm_capitulos_path = _REF_DIR / "NCM" / "ncm_capitulos.parquet"
     if not ncm_path.exists():
-        # Fallback para o postgres se a principal não existir
-        ncm_path = _REF_DIR / "NCM" / "ncm_postgres.parquet"
-        
+        ncm_path = _REF_DIR / "NCM" / "ncm_tabela.parquet"
+
     if not ncm_path.exists():
-        raise HTTPException(status_code=404, detail="Tabela NCM não encontrada.")
-    
+        raise HTTPException(status_code=404, detail="Tabela NCM nao encontrada.")
+
     try:
         codigo_limpo = re.sub(r"[^0-9]", "", codigo)
         df = pl.read_parquet(str(ncm_path))
-        
-        # Detecção automática de colunas (tabela_ncm usa CamelCase, ncm_postgres usa minúsculas)
+
         cols = df.columns
+
         def get_col(options):
             for opt in options:
-                if opt in cols: return opt
+                if opt in cols:
+                    return opt
             return options[0]
+
+        def is_invalid(v):
+            return v is None or str(v).strip().lower() in ["none", "nan", "null", ""]
 
         col_codigo = get_col(["Codigo_NCM", "codigo"])
         col_cap = get_col(["Capitulo", "capitulo"])
@@ -40,83 +44,99 @@ async def get_ncm_details(codigo: str):
         col_descr_pos = get_col(["Descr_Posicao", "descr_posicao"])
         col_desc = get_col(["Descricao", "descricao"])
 
-        # Filtra pelo código NCM
-        res = df.filter(pl.col(col_codigo).str.replace_all(r"[^0-9]", "") == codigo_limpo)
-        
+        df = df.with_columns(
+            [
+                pl.col(col_codigo).cast(pl.Utf8).fill_null("").str.replace_all(r"[^0-9]", "").alias("__codigo_norm"),
+                pl.col(col_pos).cast(pl.Utf8).fill_null("").str.replace_all(r"[^0-9]", "").alias("__pos_norm"),
+                pl.col(col_descr_pos).cast(pl.Utf8).fill_null("").alias("__descr_pos_txt"),
+            ]
+        )
+
+        res = df.filter(pl.col("__codigo_norm") == codigo_limpo)
         if res.is_empty():
-            # Busca por prefixo se não achar exato
-            res = df.filter(pl.col(col_codigo).str.replace_all(r"[^0-9]", "").str.starts_with(codigo_limpo[:4]))
+            res = df.filter(pl.col("__codigo_norm").str.starts_with(codigo_limpo[:4]))
             if res.is_empty():
-                raise HTTPException(status_code=404, detail="NCM não localizado.")
-        
-        # Ordena para pegar o mais específico (maior comprimento de código)
-        try:
-            res = res.with_columns(l = pl.col(col_codigo).str.len_chars()).sort("l", descending=True)
-        except:
-            res = res.with_columns(l = pl.col(col_codigo).str.lengths()).sort("l", descending=True)
-            
+                raise HTTPException(status_code=404, detail="NCM nao localizado.")
+
+        res = res.with_columns(l=pl.col("__codigo_norm").str.len_chars()).sort("l", descending=True)
         item = res.to_dicts()[0]
-        
-        # Extração de campos
+
         ncm_val = re.sub(r"[^0-9]", "", str(item.get(col_codigo, "")))
         capitulo = str(item.get(col_cap) or ncm_val[:2])
         posicao = str(item.get(col_pos) or ncm_val[:4])
-        
+
         descr_capitulo = item.get(col_descr_cap) or ""
         descr_posicao = item.get(col_descr_pos) or ""
-        
-        def is_invalid(v):
-            return v is None or str(v).lower() in ['none', 'nan', 'null', '']
 
-        # Busca recursiva se a posição estiver vazia
-        if is_invalid(descr_posicao):
+        if is_invalid(descr_capitulo) and ncm_capitulos_path.exists():
             try:
-                # 1. Tenta buscar em qualquer linha da PRÓPRIA tabela que tenha essa posição preenchida
-                pos_res = df.filter((pl.col(col_pos) == posicao) & (~pl.col(col_descr_pos).is_null())).head(1)
+                df_cap = pl.read_parquet(str(ncm_capitulos_path)).with_columns(
+                    pl.col("NCM").cast(pl.Utf8).fill_null("").str.replace_all(r"[^0-9]", "").alias("__cap_norm")
+                )
+                cap_res = df_cap.filter(pl.col("__cap_norm") == ncm_val[:2]).head(1)
+                if not cap_res.is_empty():
+                    descr_capitulo = cap_res.row(0, named=True).get("Descrição", "")
+            except Exception:
+                pass
+
+        if is_invalid(descr_posicao):
+            pos_prefix = ncm_val[:4]
+
+            exact_code_pos = (
+                df.filter(
+                    (pl.col("__codigo_norm") == codigo_limpo)
+                    & (pl.col("__descr_pos_txt").str.strip_chars() != "")
+                )
+                .head(1)
+            )
+            if not exact_code_pos.is_empty():
+                descr_posicao = exact_code_pos.row(0, named=True).get(col_descr_pos)
+
+            if is_invalid(descr_posicao):
+                pos_res = (
+                    df.filter(
+                        (pl.col("__pos_norm") == pos_prefix)
+                        & (pl.col("__descr_pos_txt").str.strip_chars() != "")
+                    )
+                    .head(1)
+                )
                 if not pos_res.is_empty():
                     descr_posicao = pos_res.row(0, named=True).get(col_descr_pos)
-                
-                # 2. Se ainda não achou, tenta buscar por código de NCM exato da posição na PRÓPRIA tabela
-                if is_invalid(descr_posicao):
-                    fmt_pos = f"{posicao[:2]}.{posicao[2:]}"
-                    exact_res = df.filter(pl.col(col_codigo).is_in([posicao, fmt_pos])).head(1)
-                    if not exact_res.is_empty():
-                        row = exact_res.row(0, named=True)
-                        descr_posicao = row.get(col_desc) or row.get(col_descr_pos)
-            except: pass
 
-        # 3. EXTRA FALLBACK: Se ainda assim estiver vazio, tenta carregar do ncm_postgres.parquet (se houver)
-        # apenas para preencher o gap de informação técnica de hierarquia
-        if is_invalid(descr_posicao) and ncm_path.name == "tabela_ncm.parquet":
-            alt_path = _REF_DIR / "NCM" / "ncm_postgres.parquet"
-            if alt_path.exists():
+            if is_invalid(descr_posicao):
+                code_res = (
+                    df.filter(
+                        (pl.col("__codigo_norm") == pos_prefix)
+                        & (pl.col("__descr_pos_txt").str.strip_chars() != "")
+                    )
+                    .head(1)
+                )
+                if not code_res.is_empty():
+                    descr_posicao = code_res.row(0, named=True).get(col_descr_pos)
+
+            if is_invalid(descr_posicao) and ncm_posicao_path.exists():
                 try:
-                    df_alt = pl.read_parquet(str(alt_path))
-                    # Busca direta pelo código da posição ou pelo código total
-                    alt_res = df_alt.filter(
-                        (pl.col("codigo").str.replace_all(r"[^0-9]", "") == posicao) |
-                        (pl.col("codigo").str.replace_all(r"[^0-9]", "").str.starts_with(posicao))
-                    ).sort("descr_posicao", descending=True).head(1)
-                    
-                    if not alt_res.is_empty():
-                        descr_posicao = alt_res.to_dicts()[0].get("descr_posicao")
-                except: pass
+                    df_pos = pl.read_parquet(str(ncm_posicao_path)).with_columns(
+                        pl.col("NCM").cast(pl.Utf8).fill_null("").str.replace_all(r"[^0-9]", "").alias("__pos_norm")
+                    )
+                    pos_ref = df_pos.filter(pl.col("__pos_norm") == pos_prefix).head(1)
+                    if not pos_ref.is_empty():
+                        descr_posicao = pos_ref.row(0, named=True).get("Descrição", "")
+                except Exception:
+                    pass
 
-        # Formatação final conforme solicitado: Capitulo - Descr_Capitulo; Posicao: Descr_Posicao; Codigo_NCM - Descricao
         d_cap = descr_capitulo if not is_invalid(descr_capitulo) else ""
         d_pos = descr_posicao if not is_invalid(descr_posicao) else ""
-        
-        # Limpa descrição do item (remove dashes iniciais)
+
         item_desc = str(item.get(col_desc, "")).strip()
         item_desc = re.sub(r"^[-\s]+", "", item_desc)
-        
-        # Constrói as 3 linhas no formato premium
+
         formatted_desc = (
-            f"Capítulo: {capitulo} - {d_cap}\n"
-            f"Posição: {posicao} - {d_pos}\n"
+            f"Capitulo: {capitulo} - {d_cap}\n"
+            f"Posicao: {posicao} - {d_pos}\n"
             f"NCM: {item.get(col_codigo)} - {item_desc}"
         )
-        
+
         return {
             "success": True,
             "data": {
@@ -125,21 +145,11 @@ async def get_ncm_details(codigo: str):
                 "descr_capitulo": descr_capitulo,
                 "posicao": posicao,
                 "descr_posicao": descr_posicao,
-                "descricao": formatted_desc
-            }
+                "descricao": formatted_desc,
+            },
         }
-        
-        return {
-            "success": True,
-            "data": {
-                "codigo": item.get("Codigo_NCM"),
-                "capitulo": capitulo,
-                "descr_capitulo": descr_capitulo,
-                "posicao": posicao,
-                "descr_posicao": descr_posicao,
-                "descricao": formatted_desc
-            }
-        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[references] Erro NCM: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

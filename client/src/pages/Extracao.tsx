@@ -36,6 +36,88 @@ import {
 } from "@/lib/pythonApi";
 import { FolderBrowserDialog } from "@/components/ui/folder-browser-dialog";
 
+
+type ConnectionDiagnostic = {
+  title: string;
+  summary: string;
+  hints: string[];
+  tone: "amber" | "red" | "blue";
+};
+
+function buildOracleDiagnostic(message: string, host: string, port: number): ConnectionDiagnostic | null {
+  const normalized = String(message || "").toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized.includes("nao resolvido por dns") || normalized.includes("getaddrinfo failed")) {
+    return {
+      title: "Host Oracle nao resolvido",
+      summary: `O nome ${host} nao foi resolvido por DNS antes da tentativa de conexao.`,
+      hints: [
+        "Verifique se o hostname Oracle esta correto.",
+        "Confirme se a VPN/rede corporativa esta ativa.",
+        `Teste externamente: nslookup ${host}`,
+      ],
+      tone: "red",
+    };
+  }
+
+  if (normalized.includes("porta") && (normalized.includes("nao respondeu") || normalized.includes("nao esta acessivel"))) {
+    return {
+      title: "Porta Oracle inacessivel",
+      summary: `O host foi resolvido, mas a porta ${port} nao respondeu como esperado.`,
+      hints: [
+        "Verifique firewall, VPN e disponibilidade do listener Oracle.",
+        `Teste externamente: Test-NetConnection ${host} -Port ${port}`,
+        "Confirme se a porta e o servico Oracle continuam corretos.",
+      ],
+      tone: "amber",
+    };
+  }
+
+  if (normalized.includes("ora-01017")) {
+    return {
+      title: "Credenciais Oracle invalidas",
+      summary: "O servidor respondeu, mas rejeitou usuario ou senha.",
+      hints: [
+        "Confira CPF/usuario e senha.",
+        "Se usar credencial salva, remova e informe novamente.",
+      ],
+      tone: "red",
+    };
+  }
+
+  if (normalized.includes("ora-12514") || normalized.includes("ora-12505")) {
+    return {
+      title: "Servico Oracle nao reconhecido",
+      summary: "O host respondeu, mas o servico informado nao foi aceito pelo listener.",
+      hints: [
+        "Confira o campo Servico.",
+        "Valide se o ambiente usa service_name ou outro alias.",
+      ],
+      tone: "amber",
+    };
+  }
+
+  if (normalized.includes("driver oracle") || normalized.includes("oracledb")) {
+    return {
+      title: "Driver Oracle indisponivel",
+      summary: "O backend nao conseguiu usar o driver Python do Oracle.",
+      hints: ["Verifique a instalacao do pacote oracledb no ambiente Python."],
+      tone: "blue",
+    };
+  }
+
+  return {
+    title: "Falha de conexao",
+    summary: message,
+    hints: [
+      "Revise host, porta, servico, usuario e senha.",
+      "Se o host for interno, valide VPN e DNS corporativo.",
+    ],
+    tone: "amber",
+  };
+}
+
 export default function Extracao() {
   // Removido fallback com caminhos absolutos. Use diretórios do projeto via API ou escolha manual do usuário.
   const FALLBACK_SQL_DIR = "";
@@ -57,6 +139,7 @@ export default function Extracao() {
   const [includeAuxiliary, setIncludeAuxiliary] = useState(true);
   const [rememberCredentials, setRememberCredentials] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [connectionDiagnostic, setConnectionDiagnostic] = useState<ConnectionDiagnostic | null>(null);
 
   // Browser state
   const [browserType, setBrowserType] = useState<"output" | "sql" | null>(null);
@@ -243,6 +326,7 @@ export default function Extracao() {
       }
     } catch (err: any) {
       setIsConnected(false);
+      setConnectionDiagnostic(buildOracleDiagnostic(err.message, connection.host, connection.port));
       addLog(`Erro: ${err.message}`);
       toast.error("Erro ao testar conexão", { description: err.message });
     } finally {
@@ -281,6 +365,7 @@ export default function Extracao() {
       });
 
       if (result.success) {
+        setConnectionDiagnostic(null);
         for (const r of result.results) {
           completed++;
           setProgress(Math.round((completed / total) * 100));
