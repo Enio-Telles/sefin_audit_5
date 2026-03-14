@@ -333,14 +333,33 @@ async def detalhes_historico_cnpj(cnpj: str):
         for f in all_analises:
             name = f["name"]
             if name.startswith("produtos_agregados_"):
-                # Adicionar rótulo amigável com base no nome do arquivo
-                if "descr_total" in name: f["analise"] = "Agregação Total"
-                elif "descr" in name: f["analise"] = "Conflitos Descrição"
-                else: f["analise"] = "Unificação Master"
+                # Adicionar r?tulo amig?vel com base no nome do arquivo
+                if "descr_total" in name: f["analise"] = "Agrega??o Total"
+                elif "descr" in name: f["analise"] = "Conflitos Descri??o"
+                else: f["analise"] = "Unifica??o Master"
+                arquivos_produtos.append(f)
+            elif name.startswith("produtos_indexados_"):
+                f["analise"] = "Produtos Indexados"
+                arquivos_produtos.append(f)
+            elif name.startswith("codigos_multidescricao_"):
+                f["analise"] = "C?digos Multidescri??o"
+                arquivos_produtos.append(f)
+            elif name.startswith("base_detalhes_produtos_"):
+                f["analise"] = "Base Detalhes"
+                arquivos_produtos.append(f)
+            elif name.startswith("variacoes_produtos_"):
+                f["analise"] = "Varia??es Encontradas"
+                arquivos_produtos.append(f)
+            elif name.startswith("mapa_manual_descricoes_"):
+                f["analise"] = "Mapa Manual de Descri??es"
                 arquivos_produtos.append(f)
             elif name.startswith("mapa_auditoria_"):
-                if "agregados" in name: f["analise"] = "Mapa de Agregados"
+                # Check more specific labels first.
+                if "descricoes_bloqueadas" in name: f["analise"] = "Descri??es Bloqueadas"
+                elif "descricoes_aplicadas" in name: f["analise"] = "Descri??es Aplicadas"
+                elif "descricoes" in name: f["analise"] = "Auditoria de Descri??es"
                 elif "desagregados" in name: f["analise"] = "Mapa de Desagregados"
+                elif "agregados" in name: f["analise"] = "Mapa de Agregados"
                 else: f["analise"] = "Mapa de Auditoria"
                 arquivos_produtos.append(f)
             else:

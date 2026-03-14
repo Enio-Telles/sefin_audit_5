@@ -4,7 +4,11 @@ Este módulo realiza a consolidação de dados de produtos provenientes de múlt
 
 ## Arquivos Principais
 
-- **`produto_unid.py`**: Motor analítico em Polars para normalização e agrupamento.
+- **`produto_unid.py`**: Fachada pública do módulo e ponto de entrada compatível com o restante do projeto.
+- **`_produto_unid_shared.py`**: Schemas, mapeamentos, normalização e utilitários compartilhados.
+- **`_produto_unid_analytics.py`**: Consensos, agrupamentos e geração das tabelas analíticas.
+- **`_produto_unid_manual.py`**: Aplicação do mapa manual e geração dos parquets de auditoria manual.
+- **`_produto_unid_pipeline.py`**: Orquestração do fluxo de leitura, processamento e persistência.
 - **`README.md`**: Documentação técnica do módulo.
 
 ## Conceitos Chave
@@ -60,3 +64,4 @@ python cruzamentos/produtos/produto_unid.py <CNPJ>
 ```
 
 Ele buscará automaticamente os dados em `CNPJ/{cnpj}/arquivos_parquet/`.
+

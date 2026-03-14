@@ -170,7 +170,13 @@ def start_servers(env_name: str = "audit") -> None:
 
     if os.name == 'nt':
         print("Abrindo o servidor Python (FastAPI) em uma nova janela...")
-        os.system('start cmd /k "cd server\\python && conda run -n ' + env_name + ' --live-stream python -m uvicorn api:app --host 0.0.0.0 --port ' + str(python_port) + ' --reload"')
+        os.system(
+            'start cmd /k "cd server\\python && conda run -n '
+            + env_name
+            + ' --live-stream python -m uvicorn api:app --host 0.0.0.0 --port '
+            + str(python_port)
+            + ' --reload --reload-dir . --reload-dir ..\\.."'
+        )
 
         print("Abrindo o servidor Node (Vite + Express) em uma nova janela...")
         # Importante: sem espaços após o valor no set var
@@ -178,7 +184,14 @@ def start_servers(env_name: str = "audit") -> None:
     else:
         # Linux/Mac
         print("Abrindo o servidor Python (FastAPI)...")
-        subprocess.Popen(["bash", "-c", f"conda run -n {env_name} uvicorn api:app --host 0.0.0.0 --port {python_port} --reload"], cwd="server/python")
+        subprocess.Popen(
+            [
+                "bash",
+                "-c",
+                f"conda run -n {env_name} uvicorn api:app --host 0.0.0.0 --port {python_port} --reload --reload-dir . --reload-dir ../..",
+            ],
+            cwd="server/python",
+        )
 
         print("Abrindo o servidor Node (Vite + Express)...")
         subprocess.Popen(["bash", "-c", "pnpm dev"])  # PORT é resolvido do .env pelo Node

@@ -23,6 +23,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { readParquet, type ParquetReadResponse } from "@/lib/pythonApi";
 
+const DESCRIPTION_SEPARATOR = "<<#>>";
+
 export default function AgregacaoSelecao() {
   const [location, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
@@ -147,7 +149,7 @@ export default function AgregacaoSelecao() {
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.history.back()}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-800">Agregação por Seleção</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-800">Consolidacao por Selecao</h1>
           </div>
           <p className="text-muted-foreground flex items-center gap-2">
             <Badge variant="outline" className="font-mono bg-slate-50">{cnpj}</Badge>
@@ -164,7 +166,7 @@ export default function AgregacaoSelecao() {
             disabled={selectedCodigos.size === 0}
            >
              <Boxes className="h-4 w-4" />
-             Agregar Selecionados ({selectedCodigos.size})
+             Consolidar Selecionados ({selectedCodigos.size})
            </Button>
            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => loadData()}>
              <Loader2 className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -247,6 +249,8 @@ export default function AgregacaoSelecao() {
                     {[
                       { key: "chave_produto", label: "CÓDIGO" },
                       { key: "lista_descricao", label: "DESCRIÇÕES" },
+                      { key: "qtd_descricoes", label: "QTD. DESC." },
+                      { key: "qtd_codigos", label: "QTD. COD." },
                       { key: "ncm_consenso", label: "NCM" },
                       { key: "lista_unid", label: "UNIDADES" }
                     ].map(col => (
@@ -267,6 +271,7 @@ export default function AgregacaoSelecao() {
                   {filteredRows.map((row, idx) => {
                     const codigo = String(row.chave_produto);
                     const isSelected = selectedCodigos.has(codigo);
+                    const descricoes = String(row.lista_descricao || "").split(DESCRIPTION_SEPARATOR).map((desc) => desc.trim()).filter(Boolean);
                     return (
                       <tr 
                         key={idx} 
@@ -282,16 +287,18 @@ export default function AgregacaoSelecao() {
                         <td className="px-4 py-3 font-mono text-xs font-bold text-slate-600">{codigo}</td>
                         <td className="px-4 py-3 max-w-md text-slate-800">
                           <div className="flex flex-col gap-1">
-                            {String(row.lista_descricao || "").split(" | ").slice(0, 2).map((desc, i) => (
+                            {descricoes.slice(0, 2).map((desc, i) => (
                               <span key={i} className={i > 0 ? "text-[10px] text-muted-foreground" : "font-medium"}>
                                 {desc}
                               </span>
                             ))}
-                            {String(row.lista_descricao || "").split(" | ").length > 2 && (
-                                <span className="text-[9px] text-blue-500 font-bold italic">+{String(row.lista_descricao || "").split(" | ").length - 2} mais...</span>
+                            {descricoes.length > 2 && (
+                                <span className="text-[9px] text-blue-500 font-bold italic">+{descricoes.length - 2} mais...</span>
                             )}
                           </div>
                         </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600 text-center">{String(row.qtd_descricoes ?? "")}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600 text-center">{String(row.qtd_codigos ?? "")}</td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.ncm_consenso as string}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">

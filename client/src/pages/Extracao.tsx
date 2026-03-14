@@ -118,8 +118,19 @@ export default function Extracao() {
       try {
         const res = await listSqlQueries(sqlDir);
         setAvailableQueries(res.queries || []);
-      } catch (err) {
+      } catch (err: any) {
         setAvailableQueries([]);
+        if (err?.status === 403) {
+          try {
+            const paths = await getProjectPaths();
+            if (paths.consultas_fonte && paths.consultas_fonte !== sqlDir) {
+              setSqlDir(paths.consultas_fonte);
+              toast.warning("Pasta SQL fora da área permitida. Diretório padrão restaurado.");
+            }
+          } catch {
+            // no-op
+          }
+        }
       }
     }
     fetchQueries();
@@ -136,8 +147,19 @@ export default function Extracao() {
       try {
         const res = await listAuxiliaryQueries(auxDir);
         setAuxiliaryQueries(res.queries || []);
-      } catch (err) {
+      } catch (err: any) {
         setAuxiliaryQueries([]);
+        if (err?.status === 403) {
+          try {
+            const paths = await getProjectPaths();
+            if (paths.consultas_fonte && paths.consultas_fonte !== sqlDir) {
+              setSqlDir(paths.consultas_fonte);
+              toast.warning("Pasta de auxiliares fora da área permitida. Diretório padrão restaurado.");
+            }
+          } catch {
+            // no-op
+          }
+        }
       }
     }
     fetchAuxQueries();

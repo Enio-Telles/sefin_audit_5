@@ -16,6 +16,7 @@ import AnaliseFaturamentoPeriodo from "./pages/AnaliseFaturamentoPeriodo";
 import AuditarCNPJ from "./pages/AuditarCNPJ";
 import LoteAuditoria from "./pages/LoteAuditoria";
 import RevisaoManual from "./pages/RevisaoManual";
+import RevisaoParesGrupos from "./pages/RevisaoParesGrupos";
 import AgregacaoSelecao from "./pages/AgregacaoSelecao";
 import UnificarProdutoPage from "./pages/UnificarProdutoPage";
 import MultiUnificarProdutoPage from "./pages/MultiUnificarProdutoPage";
@@ -37,6 +38,7 @@ function Router() {
             <Route path="/tabelas" component={Tabelas} />
             <Route path="/tabelas/view" component={Tabelas} />
             <Route path="/revisao-manual" component={RevisaoManual} />
+            <Route path="/revisao-pares-grupos" component={RevisaoParesGrupos} />
             <Route path="/agregacao-selecao" component={AgregacaoSelecao} />
             <Route path="/exportar" component={Exportar} />
             <Route path="/relatorios" component={Relatorios} />

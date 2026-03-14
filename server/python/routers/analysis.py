@@ -77,6 +77,8 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
             "file": str(out_path),
             "sample": out.head(10).to_dicts(),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[analise_faturamento] Erro: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
@@ -162,12 +164,53 @@ async def audit_pipeline(req: AuditPipelineRequest):
         try:
             # 1. Unificação Master (único pipeline de produtos — produto_unid.py)
             df_unid = unificar_produtos_unidades(cnpj_limpo)
+
+            # Guardrail: não aceitar "sucesso" com base de produtos zerada quando as fontes têm dados.
+            fontes_produto = [
+                dir_parquet / f"NFe_{cnpj_limpo}.parquet",
+                dir_parquet / f"NFCe_{cnpj_limpo}.parquet",
+                dir_parquet / f"c170_simplificada_{cnpj_limpo}.parquet",
+                dir_parquet / f"reg_0200_{cnpj_limpo}.parquet",
+                dir_parquet / f"bloco_h_{cnpj_limpo}.parquet",
+            ]
+            fontes_com_dados = []
+            for fp in fontes_produto:
+                if fp.exists():
+                    try:
+                        n_rows = pl.scan_parquet(str(fp)).select(pl.len()).collect().item()
+                        if n_rows > 0:
+                            fontes_com_dados.append((fp.name, int(n_rows)))
+                    except Exception:
+                        continue
+
+            base_detalhes_path = dir_analises / f"base_detalhes_produtos_{cnpj_limpo}.parquet"
+            if fontes_com_dados:
+                if not base_detalhes_path.exists():
+                    fontes_txt = ", ".join([f"{n}:{r}" for n, r in fontes_com_dados])
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unificação de produtos não gerou base_detalhes. Fontes com dados: {fontes_txt}",
+                    )
+
+                base_rows = pl.scan_parquet(str(base_detalhes_path)).select(pl.len()).collect().item()
+                if int(base_rows) == 0:
+                    fontes_txt = ", ".join([f"{n}:{r}" for n, r in fontes_com_dados])
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unificação de produtos gerou 0 linhas com fontes preenchidas. Verifique mapeamento de colunas. Fontes: {fontes_txt}",
+                    )
             
             # Lista de arquivos esperados na pasta de análises para a seção de produtos
             targets = [
                 (f"produtos_agregados_{cnpj_limpo}.parquet", "Tabela Visão"),
                 (f"base_detalhes_produtos_{cnpj_limpo}.parquet", "Base Detalhes"),
+                (f"produtos_indexados_{cnpj_limpo}.parquet", "Produtos Indexados"),
+                (f"codigos_multidescricao_{cnpj_limpo}.parquet", "Códigos Multidescrição"),
                 (f"variacoes_produtos_{cnpj_limpo}.parquet", "Variações Encontradas"),
+                (f"mapa_manual_descricoes_{cnpj_limpo}.parquet", "Mapa Manual de Descrições"),
+                (f"mapa_auditoria_descricoes_{cnpj_limpo}.parquet", "Auditoria de Descrições"),
+                (f"mapa_auditoria_descricoes_aplicadas_{cnpj_limpo}.parquet", "Descrições Aplicadas"),
+                (f"mapa_auditoria_descricoes_bloqueadas_{cnpj_limpo}.parquet", "Descrições Bloqueadas"),
                 (f"mapa_auditoria_agregados_{cnpj_limpo}.parquet", "Mapa de Agregados"),
                 (f"mapa_auditoria_desagregados_{cnpj_limpo}.parquet", "Mapa de Desagregados"),
             ]
@@ -194,6 +237,8 @@ async def audit_pipeline(req: AuditPipelineRequest):
                             "analise": label
                         })
 
+        except HTTPException:
+            raise
         except Exception as e: 
             erros.append(f"Processamento de Produtos: {str(e)}")
             logger.error(f"[audit_pipeline] Erro em Produtos: {e}")
@@ -222,7 +267,8 @@ async def audit_pipeline(req: AuditPipelineRequest):
             "dir_analises": str(dir_analises),
             "dir_relatorios": str(dir_relatorios),
         }
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[pipeline] Erro: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
@@ -286,6 +332,8 @@ async def importar_fatores_excel(
 
         fatores_atualizados.write_parquet(fatores_path)
         return {"success": True, "cnpj": cnpj_limpo, "file": str(fatores_path), "registros": fatores_atualizados.height}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[importar_fatores_excel] Erro: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro ao importar fatores: {e}")

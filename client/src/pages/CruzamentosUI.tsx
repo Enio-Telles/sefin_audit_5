@@ -115,9 +115,7 @@ export default function CruzamentosUI() {
 
           // Suggest output path
           if (selectedLeftFile) {
-            const leftName = selectedLeftFile.name.replace('.parquet', '');
             const rightName = selectedRightFile.name.replace('.parquet', '');
-            const dir = selectedLeftFile.path.substring(0, selectedLeftFile.path.lastIndexOf(/[/\\]/ + 1));
             setOutputPath(`${selectedLeftFile.path.replace('.parquet', '')}_merged_${rightName}.parquet`);
           }
         })
@@ -140,18 +138,18 @@ export default function CruzamentosUI() {
     setMergeResult(null);
     try {
       const request: ParquetMergeRequest = {
-        left_path: selectedLeftFile.path,
-        right_path: selectedRightFile.path,
-        output_path: outputPath,
-        how: how,
-        left_on: leftOn,
-        right_on: rightOn,
-        left_columns: leftColsToKeep,
-        right_columns: rightColsToKeep,
+        file_a: selectedLeftFile.path,
+        file_b: selectedRightFile.path,
+        output_dir: outputPath.substring(0, outputPath.lastIndexOf("/") >= 0 ? outputPath.lastIndexOf("/") : outputPath.lastIndexOf("\\")),
+        output_name: outputPath.split(/[/\\]/).pop() || "merge_result.parquet",
+        how,
+        on: how === "cross" ? [] : leftOn,
+        columns_a: leftColsToKeep,
+        columns_b: rightColsToKeep,
       };
 
       const res = await mergeParquetFiles(request);
-      setMergeResult({ success: true, message: res.message, path: res.output_path });
+      setMergeResult({ success: true, message: res.message, path: res.file_path });
       toast.success("Cruzamento concluído com sucesso!");
     } catch (err: any) {
       setMergeResult({ success: false, message: err.message });
@@ -342,7 +340,7 @@ export default function CruzamentosUI() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-bold text-indigo-700">Colunas da Esquerda para manter</Label>
-                    <Button variant="ghost" size="xs" className="h-6 text-[10px]" onClick={() => setLeftColsToKeep(leftColumns)}>Todas</Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setLeftColsToKeep(leftColumns)}>Todas</Button>
                   </div>
                   <ScrollArea className="h-[200px] border rounded p-2 bg-slate-50/50">
                     <div className="grid grid-cols-2 gap-1.5">
@@ -363,7 +361,7 @@ export default function CruzamentosUI() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-bold text-amber-700">Colunas da Direita para manter</Label>
-                    <Button variant="ghost" size="xs" className="h-6 text-[10px]" onClick={() => setRightColsToKeep(rightColumns)}>Todas</Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setRightColsToKeep(rightColumns)}>Todas</Button>
                   </div>
                   <ScrollArea className="h-[200px] border rounded p-2 bg-slate-50/50">
                     <div className="grid grid-cols-2 gap-1.5">

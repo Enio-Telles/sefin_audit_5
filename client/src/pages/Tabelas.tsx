@@ -244,7 +244,7 @@ export default function Tabelas() {
         page: resetPagination ? 1 : page, 
         page_size: pageSize,
         filters: resetPagination ? {} : debouncedFilters,
-        sort_column: resetPagination ? null : sortColumn,
+        sort_column: resetPagination ? undefined : sortColumn ?? undefined,
         sort_direction: resetPagination ? "asc" : sortDirection
       });
       
@@ -721,7 +721,7 @@ export default function Tabelas() {
                                             window.open(`/unificar/${currentCnpj}/${codigo}`, '_blank');
                                         }}
                                     >
-                                        <Boxes className="h-3 w-3" /> Agregar
+                                        <Boxes className="h-3 w-3" /> Consolidar
                                     </Button>
                                     <Button 
                                         size="sm" 
@@ -733,7 +733,7 @@ export default function Tabelas() {
                                             window.open(`/desagregar/${currentCnpj}/${codigo}`, '_blank');
                                         }}
                                     >
-                                        <SplitSquareHorizontal className="h-3 w-3" /> Desagregar
+                                        <SplitSquareHorizontal className="h-3 w-3" /> Separar
                                     </Button>
                                 </div>
                             </td>

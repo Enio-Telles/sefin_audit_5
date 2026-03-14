@@ -16,7 +16,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `API Error: ${res.status}`);
+    const err: any = new Error(error.detail || `API Error: ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 
   return res.json();
@@ -33,7 +35,9 @@ async function downloadFile(path: string, options?: RequestInit): Promise<Blob> 
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `API Error: ${res.status}`);
+    const err: any = new Error(error.detail || `API Error: ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 
   return res.blob();
@@ -376,6 +380,27 @@ export async function getUniqueValues(file_path: string, column: string) {
   );
 }
 
+export type ParquetMergeRequest = {
+  file_a: string;
+  file_b: string;
+  on: string[];
+  how: "inner" | "left" | "outer" | "cross";
+  columns_a?: string[];
+  columns_b?: string[];
+  output_dir?: string;
+  output_name: string;
+};
+
+export async function mergeParquetFiles(data: ParquetMergeRequest) {
+  return request<{ success: boolean; message: string; file_path: string; rows: number; columns: number }>(
+    "/parquet/merge",
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    }
+  );
+}
+
 // ============================================================
 // CNPJ
 // ============================================================
@@ -607,8 +632,89 @@ export interface ResolverManualResponse {
   mensagem: string;
 }
 
+export interface ProdutosRevisaoManualResponse {
+  success: boolean;
+  data: Record<string, unknown>[];
+}
+
+export interface CodigosMultiDescricaoResponse {
+  success: boolean;
+  file_path: string;
+  data: Record<string, unknown>[];
+}
+
+export interface CodigoMultiDescricaoOpcao {
+  valor: string;
+  qtd_linhas: number;
+}
+
+export interface CodigoMultiDescricaoGrupoResumo {
+  descricao: string;
+  qtd_linhas: number;
+  qtd_combinacoes: number;
+  lista_chave_produto: string;
+  lista_descr_compl: string;
+  lista_tipo_item: string;
+  lista_ncm: string;
+  lista_cest: string;
+  lista_gtin: string;
+  lista_unidades: string;
+  lista_fontes: string;
+}
+
+export interface CodigoMultiDescricaoResumoResponse {
+  success: boolean;
+  codigo: string;
+  resumo: Record<string, unknown>;
+  grupos_descricao: CodigoMultiDescricaoGrupoResumo[];
+  opcoes_consenso: {
+    descricao: CodigoMultiDescricaoOpcao[];
+    ncm: CodigoMultiDescricaoOpcao[];
+    cest: CodigoMultiDescricaoOpcao[];
+    gtin: CodigoMultiDescricaoOpcao[];
+  };
+}
+
+export interface RevisaoManualDecisionItem {
+  fonte: string;
+  codigo_original: string;
+  descricao_original: string;
+  tipo_item_original?: string;
+  codigo_novo: string;
+  descricao_nova: string;
+  ncm_novo?: string;
+  cest_novo?: string;
+  gtin_novo?: string;
+  tipo_item_novo?: string;
+}
+
+export interface DescricaoManualMapItem {
+  tipo_regra?: string;
+  descricao_origem: string;
+  descricao_destino: string;
+  descricao_par?: string;
+  chave_grupo_a?: string;
+  chave_grupo_b?: string;
+  score_origem?: string;
+  acao_manual?: string;
+}
+
 export async function getProdutoDetalhes(cnpj: string, codigo: string) {
   return request<DetalhesCodigoResponse>(`/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`);
+}
+
+export async function getProdutosRevisaoManual(cnpj: string) {
+  return request<ProdutosRevisaoManualResponse>(`/produtos/revisao-manual?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
+export async function getCodigosMultiDescricao(cnpj: string) {
+  return request<CodigosMultiDescricaoResponse>(`/produtos/codigos-multidescricao?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
+export async function getCodigoMultiDescricaoResumo(cnpj: string, codigo: string) {
+  return request<CodigoMultiDescricaoResumoResponse>(
+    `/produtos/codigo-multidescricao-resumo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`
+  );
 }
 
 export async function getProdutosDetalhesMulti(cnpj: string, codigos: string[]) {
@@ -630,6 +736,23 @@ export async function resolverManualDesagregar(cnpj: string, itensDecididos: any
     method: "POST",
     body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
   });
+}
+
+export async function submitProdutosRevisaoManual(cnpj: string, decisoes: RevisaoManualDecisionItem[]) {
+  return request<{ success: boolean; message: string }>("/produtos/revisao-manual/submit", {
+    method: "POST",
+    body: JSON.stringify({ cnpj, decisoes }),
+  });
+}
+
+export async function resolverManualDescricoes(cnpj: string, regras: DescricaoManualMapItem[]) {
+  return request<{ status: string; mensagem: string; arquivo: string; qtd_regras: number }>(
+    "/produtos/resolver-manual-descricoes",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, regras }),
+    }
+  );
 }
 
 // ============================================================

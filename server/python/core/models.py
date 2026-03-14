@@ -156,3 +156,19 @@ class ResolverManualDesagregarRequest(BaseModel):
 class ResolverManualMultiDetalhesRequest(BaseModel):
     cnpj: str
     codigos: list[str]
+
+
+class DescricaoManualMapItem(BaseModel):
+    tipo_regra: str = "UNIR_GRUPOS"
+    descricao_origem: str
+    descricao_destino: str
+    descricao_par: Optional[str] = None
+    chave_grupo_a: Optional[str] = None
+    chave_grupo_b: Optional[str] = None
+    score_origem: Optional[str] = None
+    acao_manual: Optional[str] = "AGREGAR"
+
+
+class ResolverManualDescricoesRequest(BaseModel):
+    cnpj: str
+    regras: list[DescricaoManualMapItem]
