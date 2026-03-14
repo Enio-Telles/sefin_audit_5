@@ -98,7 +98,8 @@ def _materializar_tabela_agrupada(
     total_registros_fontes = int(sum(fonte_counts.values()))
 
     df_agrupado = lf_agrupado_descricao.collect(engine="streaming")
-    sort_cols = [c for c in ["descricao", "codigo_consenso", "ncm_consenso", "cest_consenso"] if c in df_agrupado.columns]
+    agrupado_cols = set(df_agrupado.columns)
+    sort_cols = [c for c in ["descricao", "codigo_consenso", "ncm_consenso", "cest_consenso"] if c in agrupado_cols]
     if sort_cols:
         df_agrupado = df_agrupado.sort(sort_cols)
 
