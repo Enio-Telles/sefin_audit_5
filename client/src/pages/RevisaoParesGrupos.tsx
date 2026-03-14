@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   ArrowLeftRight,
@@ -227,7 +228,6 @@ export default function RevisaoParesGrupos() {
   const cnpj = searchParams.get("cnpj") || "";
   const storageKey = `produto-pares-ui:${cnpj}`;
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<ParesGruposSimilaresItem[]>([]);
   const [statusResumo, setStatusResumo] = useState<ProdutoAnaliseStatusResumo | null>(null);
@@ -269,6 +269,7 @@ export default function RevisaoParesGrupos() {
   const [currentBaseHash, setCurrentBaseHash] = useState<string | null>(null);
   const [vectorCaches, setVectorCaches] = useState<{ semantic?: Record<string, unknown>; hybrid?: Record<string, unknown> } | null>(null);
   const [pendingVectorMode, setPendingVectorMode] = useState<SimilarityMode | null>(null);
+  const queryClient = useQueryClient();
   const semanticModel = useMemo(
     () => rows.find((row) => normalizeValue(row.modelo_vetorizacao))?.modelo_vetorizacao || "",
     [rows]
@@ -352,15 +353,21 @@ export default function RevisaoParesGrupos() {
     );
   }, [cnpj, storageKey, search, showAnalyzed, quickFilter, sortKey, page, pageSize, similarityMode, pendingVectorMode, semanticTopK, semanticThreshold, cacheMeta, currentBaseHash]);
 
-  const loadRows = async () => {
-    if (!cnpj) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
+  const pairsQuery = useQuery({
+    queryKey: [
+      "produto-pares-grupos",
+      cnpj,
+      similarityMode,
+      semanticTopK,
+      semanticThreshold,
+      page,
+      pageSize,
+      search,
+      quickFilter,
+      sortKey,
+      showAnalyzed,
+    ],
+    queryFn: async () => {
       const [res, statusRes] = await Promise.all([
         getParesGruposSimilares(cnpj, similarityMode, false, {
           topK: semanticTopK,
@@ -385,65 +392,69 @@ export default function RevisaoParesGrupos() {
           } as ProdutoAnaliseStatusResumo,
         })),
       ]);
-      if (!res.success && similarityMode === "semantic") {
-        toast.error("Modo semantico indisponivel", {
-          description: res.message || "Dependencias de vetorizacao indisponiveis neste ambiente.",
-        });
-        setSimilarityMode("lexical");
-        const lexicalRes = await getParesGruposSimilares(cnpj, "lexical", false, {
-          topK: semanticTopK,
-          minSemanticScore: semanticThreshold,
-          page,
-          pageSize,
-          search,
-          quickFilter,
-          sortKey,
-          showAnalyzed,
-        });
-        setRows(lexicalRes.success ? lexicalRes.data : []);
-        setCacheMeta(lexicalRes.cache_metadata || null);
-        setTotalRows(lexicalRes.total || 0);
-        setTotalPages(lexicalRes.total_pages || 1);
-        setServerQuickFilterCounts(lexicalRes.quick_filter_counts || { todos: 0, unirAutomatico: 0, bloqueios: 0, revisar: 0 });
-      } else if (!res.success && similarityMode === "hybrid") {
-        toast.error("Modo hibrido indisponivel", {
-          description: res.message || "Dependencias de vetorizacao indisponiveis neste ambiente.",
-        });
-        setSimilarityMode("lexical");
-        const lexicalRes = await getParesGruposSimilares(cnpj, "lexical", false, {
-          topK: semanticTopK,
-          minSemanticScore: semanticThreshold,
-          page,
-          pageSize,
-          search,
-          quickFilter,
-          sortKey,
-          showAnalyzed,
-        });
-        setRows(lexicalRes.success ? lexicalRes.data : []);
-        setCacheMeta(lexicalRes.cache_metadata || null);
-        setTotalRows(lexicalRes.total || 0);
-        setTotalPages(lexicalRes.total_pages || 1);
-        setServerQuickFilterCounts(lexicalRes.quick_filter_counts || { todos: 0, unirAutomatico: 0, bloqueios: 0, revisar: 0 });
-      } else {
-        setRows(res.success ? res.data : []);
-        setCacheMeta(res.cache_metadata || null);
-        setTotalRows(res.total || 0);
-        setTotalPages(res.total_pages || 1);
-        setServerQuickFilterCounts(res.quick_filter_counts || { todos: 0, unirAutomatico: 0, bloqueios: 0, revisar: 0 });
-      }
-      setStatusResumo(statusRes.success ? statusRes.resumo : null);
+      return { res, statusRes };
+    },
+    enabled: Boolean(cnpj),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const loading = pairsQuery.isLoading || pairsQuery.isFetching;
+
+  const applyPairsPayload = (payload?: {
+    res: Awaited<ReturnType<typeof getParesGruposSimilares>>;
+    statusRes: Awaited<ReturnType<typeof getStatusAnaliseProdutos>>;
+  }) => {
+    if (!payload) return;
+    const { res, statusRes } = payload;
+    setStatusResumo(statusRes.success ? statusRes.resumo : null);
+
+    if (!res.success && similarityMode === "semantic") {
+      toast.error("Modo semantico indisponivel", {
+        description: res.message || "Dependencias de vetorizacao indisponiveis neste ambiente.",
+      });
+      setSimilarityMode("lexical");
+      setPendingVectorMode(null);
+      return;
+    }
+
+    if (!res.success && similarityMode === "hybrid") {
+      toast.error("Modo hibrido indisponivel", {
+        description: res.message || "Dependencias de vetorizacao indisponiveis neste ambiente.",
+      });
+      setSimilarityMode("lexical");
+      setPendingVectorMode(null);
+      return;
+    }
+
+    setRows(res.success ? res.data : []);
+    setCacheMeta(res.cache_metadata || null);
+    setTotalRows(res.total || 0);
+    setTotalPages(res.total_pages || 1);
+    setServerQuickFilterCounts(res.quick_filter_counts || { todos: 0, unirAutomatico: 0, bloqueios: 0, revisar: 0 });
+  };
+
+  const loadRows = async () => {
+    if (!cnpj) {
+      setRows([]);
+      setStatusResumo(null);
+      return;
+    }
+    try {
+      queryClient.invalidateQueries({ queryKey: ["produto-pares-grupos", cnpj] });
+      const payload = await pairsQuery.refetch();
+      applyPairsPayload(payload.data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao carregar pares candidatos.";
       toast.error("Erro ao carregar pares", { description: message });
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadRows();
-  }, [cnpj, similarityMode, semanticTopK, semanticThreshold, page, pageSize, search, quickFilter, sortKey, showAnalyzed]);
+    if (!pairsQuery.data) return;
+    applyPairsPayload(pairsQuery.data);
+  }, [pairsQuery.data, similarityMode]);
 
   useEffect(() => {
     let active = true;
@@ -470,7 +481,6 @@ export default function RevisaoParesGrupos() {
 
   const handleRecalculateSemantic = async () => {
     if (!cnpj) return;
-    setLoading(true);
     try {
       const targetMode: SimilarityMode = similarityMode === "hybrid" ? "hybrid" : "semantic";
       const res = await getParesGruposSimilares(cnpj, targetMode, true, {
@@ -505,8 +515,6 @@ export default function RevisaoParesGrupos() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao recalcular pares vetorizados.";
       toast.error("Erro ao recalcular modo vetorizado", { description: message });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -514,7 +522,6 @@ export default function RevisaoParesGrupos() {
     if (!cnpj) return;
     const targetMode = similarityMode === "hybrid" ? "hybrid" : "semantic";
     if (!window.confirm(`Limpar cache vetorizado do modo ${targetMode}?`)) return;
-    setLoading(true);
     try {
       const res = await clearVectorizacaoCache(cnpj, targetMode);
       toast.success("Cache vetorizado removido.", {
@@ -529,8 +536,6 @@ export default function RevisaoParesGrupos() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao limpar cache vetorizado.";
       toast.error("Erro ao limpar cache", { description: message });
-    } finally {
-      setLoading(false);
     }
   };
 

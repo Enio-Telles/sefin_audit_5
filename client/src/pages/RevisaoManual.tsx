@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   AlertCircle,
@@ -128,7 +129,6 @@ export default function RevisaoManual() {
   const cnpj = searchParams.get("cnpj") || "";
   const storageKey = `produto-revisao-residual-ui:${cnpj}`;
 
-  const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [statusResumo, setStatusResumo] = useState<ProdutoAnaliseStatusResumo | null>(null);
   const [page, setPage] = useState(1);
@@ -145,6 +145,7 @@ export default function RevisaoManual() {
   const [reasonGroupFilter, setReasonGroupFilter] = useState<ReasonGroupFilter>(null);
   const [statusUpdatingCode, setStatusUpdatingCode] = useState<string | null>(null);
   const [showVerified, setShowVerified] = useState(false);
+  const queryClient = useQueryClient();
 
   const resetUiState = () => {
       setSortColumn("qtd_descricoes");
@@ -203,16 +204,10 @@ export default function RevisaoManual() {
     );
   }, [cnpj, storageKey, page, pageSize, sortColumn, sortDirection, showVerified, activeReasonFilter, reasonGroupFilter]);
 
-  const loadData = async () => {
-    if (!cnpj) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-        const [res, statusRes] = await Promise.all([
+  const reviewQuery = useQuery({
+    queryKey: ["produto-revisao-residual", cnpj, page, pageSize, sortColumn, sortDirection, showVerified],
+    queryFn: async () => {
+      const [res, statusRes] = await Promise.all([
         getCodigosMultiDescricao(cnpj, {
           page,
           pageSize,
@@ -220,51 +215,60 @@ export default function RevisaoManual() {
           sortDirection: sortDirection ?? "desc",
           showVerified,
         }),
-        getStatusAnaliseProdutos(cnpj, { includeData: false }).catch(() => ({
-          success: true,
-          file_path: "",
-          data: [],
-          resumo: {
-            pendentes: 0,
-            verificados: 0,
-            consolidados: 0,
-            separados: 0,
-            decididos_entre_grupos: 0,
-          } as ProdutoAnaliseStatusResumo,
-        })),
+        getStatusAnaliseProdutos(cnpj, { includeData: false }),
       ]);
-      setRows(res.success ? res.data : []);
-      setPage(res.page || page);
-      setPageSize(res.page_size || pageSize);
-      setTotalRows(res.total || 0);
-      setTotalPages(res.total_pages || 1);
-      setTableSummary(res.summary || null);
-      setStatusResumo(statusRes.success ? statusRes.resumo : null);
-    } catch (error) {
-      console.error("Erro ao carregar codigos multidescricao:", error);
-      toast.error("Erro ao carregar revisao residual", {
-        description: "Nao foi possivel carregar a tabela residual de codigos com multiplas descricoes.",
-      });
-    } finally {
-      setLoading(false);
+      return { res, statusRes };
+    },
+    enabled: Boolean(cnpj),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const loading = reviewQuery.isLoading || reviewQuery.isFetching;
+
+  const loadData = async () => {
+    if (!cnpj) {
+      setRows([]);
+      setStatusResumo(null);
+      return;
     }
+    const payload = await reviewQuery.refetch();
+    if (!payload.data) return;
+    const { res, statusRes } = payload.data;
+    setRows(res.success ? res.data : []);
+    setPage(res.page || page);
+    setPageSize(res.page_size || pageSize);
+    setTotalRows(res.total || 0);
+    setTotalPages(res.total_pages || 1);
+    setTableSummary(res.summary || null);
+    setStatusResumo(statusRes.success ? statusRes.resumo : null);
   };
 
   useEffect(() => {
-    void loadData();
-  }, [cnpj, page, pageSize, sortColumn, sortDirection, showVerified]);
+    if (!reviewQuery.data) return;
+    const { res, statusRes } = reviewQuery.data;
+    setRows(res.success ? res.data : []);
+    setPage(res.page || page);
+    setPageSize(res.page_size || pageSize);
+    setTotalRows(res.total || 0);
+    setTotalPages(res.total_pages || 1);
+    setTableSummary(res.summary || null);
+    setStatusResumo(statusRes.success ? statusRes.resumo : null);
+  }, [reviewQuery.data]);
 
   useEffect(() => {
     const handleAtualizacao = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== "produto-revisao-atualizada") return;
       if (event.data?.cnpj !== cnpj) return;
-      void loadData();
+      queryClient.invalidateQueries({ queryKey: ["produto-revisao-residual", cnpj] });
+      void reviewQuery.refetch();
     };
 
     window.addEventListener("message", handleAtualizacao);
     return () => window.removeEventListener("message", handleAtualizacao);
-  }, [cnpj]);
+  }, [cnpj, queryClient, reviewQuery]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
