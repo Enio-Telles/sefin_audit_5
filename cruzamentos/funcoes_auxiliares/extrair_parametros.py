@@ -14,7 +14,9 @@ def extrair_parametros_sql(sql: str) -> set[str]:
         set[str]: Um conjunto contendo os nomes das variáveis encontradas (sem o dois-pontos).
     """
     # Expressão regular para encontrar :variavel
-    # \b garante que não pegue dois pontos no meio de strings se não for variável (embora SQL tenha suas especificidades)
-    # A regex r":(\w+)" captura palavras que começam com :
-    binds = re.findall(r":(\w+)", sql)
+    # O lookbehind (?<![:\w]) garante que o dois-pontos não seja precedido por outro dois-pontos (ex: ::cast)
+    # ou por um caractere de palavra (ex: HH24:MI:SS).
+    # A regex r"(?<![:\w]):(\w+)" captura palavras que começam com : e são precedidas por um espaço,
+    # início de linha ou caractere não alfanumérico.
+    binds = re.findall(r"(?<![:\w]):(\w+)", sql)
     return set(binds)
