@@ -115,6 +115,9 @@ export default function Tabelas() {
   const [showFilterRow, setShowFilterRow] = useState(true);
   const [columnStyles, setColumnStyles] = useState<Record<string, ColumnStyle>>({});
   const [rowStyles, setRowStyles] = useState<Record<number, RowStyle>>({});
+  const showReviewActions =
+    localColumns.includes("codigo_original") &&
+    !String(selectedFile?.name || "").toLowerCase().startsWith("mapa_auditoria_");
 
   // Debounce Filters effect
   useEffect(() => {
@@ -634,7 +637,7 @@ export default function Tabelas() {
                           </div>
                         </th>
                       ))}
-                      {localColumns.includes("codigo_original") && (
+                      {showReviewActions && (
                         <th className="px-3 py-2 text-center font-semibold text-muted-foreground border-b border-r bg-muted sticky right-10 z-40 w-[260px]">Ações de Revisão</th>
                       )}
                       <th className="px-3 py-2 text-center font-semibold text-muted-foreground border-b border-r bg-muted sticky right-0 z-40 w-10"></th>
@@ -652,7 +655,7 @@ export default function Tabelas() {
                             />
                           </th>
                         ))}
-                        {localColumns.includes("codigo_original") && (
+                        {showReviewActions && (
                           <th className="px-2 py-1.5 border-b border-r bg-muted/80 sticky right-10 z-40 w-[260px]"></th>
                         )}
                         <th className="px-2 py-1.5 border-b border-r bg-muted/80 sticky right-0 z-40 w-10"></th>
@@ -708,7 +711,7 @@ export default function Tabelas() {
                               </td>
                             );
                           })}
-                          {localColumns.includes("codigo_original") && (
+                          {showReviewActions && (
                             <td className="px-2 py-1 border-b border-r grow shrink-0 sticky right-10 bg-background/95 z-10 w-[260px]">
                                 <div className="flex items-center gap-1.5 justify-center h-full">
                                     <Button 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { 
   Boxes, 
@@ -49,6 +49,28 @@ export default function AgregacaoSelecao() {
     }
   }, [filePath, filters, sortColumn, sortDirection]);
 
+  useEffect(() => {
+    const handleConsolidacaoConcluida = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      if (event.data?.type !== "produto-consolidacao-concluida") {
+        return;
+      }
+
+      if (event.data?.cnpj !== cnpj) {
+        return;
+      }
+
+      setSelectedCodigos(new Set());
+      loadData();
+    };
+
+    window.addEventListener("message", handleConsolidacaoConcluida);
+    return () => window.removeEventListener("message", handleConsolidacaoConcluida);
+  }, [cnpj, filePath, filters, sortColumn, sortDirection]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -96,10 +118,7 @@ export default function AgregacaoSelecao() {
     }
   };
 
-  const filteredRows = useMemo(() => {
-    if (!data) return [];
-    return data.rows;
-  }, [data]);
+  const filteredRows = data?.rows || [];
 
   const toggleSelection = (codigo: string) => {
     const next = new Set(selectedCodigos);
@@ -126,7 +145,12 @@ export default function AgregacaoSelecao() {
     }
     const codigosArr = Array.from(selectedCodigos);
     const url = `/unificar-multi/${cnpj}?codigos=${encodeURIComponent(codigosArr.join(","))}`;
-    window.open(url, "_blank");
+    const popup = window.open(url, "_blank");
+
+    if (!popup) {
+      toast.error("Não foi possível abrir a janela de consolidação.");
+      return;
+    }
   };
 
   if (!filePath) {

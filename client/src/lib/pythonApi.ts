@@ -755,6 +755,26 @@ export async function resolverManualDescricoes(cnpj: string, regras: DescricaoMa
   );
 }
 
+export async function desfazerDecisaoCodigo(cnpj: string, codigo: string) {
+  return request<{ status: string; mensagem: string; qtd_regras_removidas: number }>(
+    "/produtos/desfazer-decisao-codigo",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, codigo }),
+    }
+  );
+}
+
+export async function desfazerManualDescricoes(cnpj: string, descricoes: string[]) {
+  return request<{ status: string; mensagem: string; qtd_regras_removidas: number }>(
+    "/produtos/desfazer-manual-descricoes",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, descricoes }),
+    }
+  );
+}
+
 // ============================================================
 // Referências Fiscais (NCM/CEST)
 // ============================================================

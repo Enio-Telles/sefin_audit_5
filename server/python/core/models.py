@@ -172,3 +172,13 @@ class DescricaoManualMapItem(BaseModel):
 class ResolverManualDescricoesRequest(BaseModel):
     cnpj: str
     regras: list[DescricaoManualMapItem]
+
+
+class DesfazerManualCodigoRequest(BaseModel):
+    cnpj: str
+    codigo: str
+
+
+class DesfazerManualDescricoesRequest(BaseModel):
+    cnpj: str
+    descricoes: list[str]

@@ -16,6 +16,20 @@ export default function UnificarProdutoPage() {
 
   const { cnpj, codigo } = params;
 
+  const handleUpdated = () => {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        {
+          type: "produto-revisao-atualizada",
+          cnpj,
+          codigo,
+        },
+        window.location.origin
+      );
+    }
+    window.close();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col overflow-hidden">
       <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-3">
@@ -42,7 +56,7 @@ export default function UnificarProdutoPage() {
           <UnificarProdutosContent
             cnpj={cnpj}
             codigo={codigo}
-            onSuccess={() => undefined}
+            onSuccess={handleUpdated}
             onCancel={() => window.close()}
             embedded={false}
           />

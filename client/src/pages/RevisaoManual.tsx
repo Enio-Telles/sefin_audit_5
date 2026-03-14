@@ -76,6 +76,18 @@ export default function RevisaoManual() {
     void loadData();
   }, [cnpj]);
 
+  useEffect(() => {
+    const handleAtualizacao = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "produto-revisao-atualizada") return;
+      if (event.data?.cnpj !== cnpj) return;
+      void loadData();
+    };
+
+    window.addEventListener("message", handleAtualizacao);
+    return () => window.removeEventListener("message", handleAtualizacao);
+  }, [cnpj]);
+
   const handleSort = (column: string) => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : prev === "desc" ? undefined : "asc"));

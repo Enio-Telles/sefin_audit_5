@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Loader2, Plus, ChevronRight, X } from "lucide-react";
 import {
+  desfazerDecisaoCodigo,
   getCodigoMultiDescricaoResumo,
   getProdutoDetalhes,
   resolverManualDesagregar,
@@ -74,6 +75,15 @@ function buildInitialGroups(codigo: string, gruposDescricao: CodigoMultiDescrica
     }));
 }
 
+function compactGroups(grupos: GrupoDesagregacao[], codigoBase: string): GrupoDesagregacao[] {
+  return grupos
+    .filter((grupo) => grupo.grupos_origem.length > 0)
+    .map((grupo, index) => ({
+      ...grupo,
+      codigo_novo: index === 0 ? codigoBase : `${codigoBase}_${index}`,
+    }));
+}
+
 const GROUP_ACCENTS = [
   "border-l-blue-500",
   "border-l-emerald-500",
@@ -91,6 +101,7 @@ export function DesagregarProdutosContent({
 }: DesagregarProdutosContentProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [resumo, setResumo] = useState<Record<string, unknown>>({});
   const [gruposDisponiveis, setGruposDisponiveis] = useState<CodigoMultiDescricaoGrupoResumo[]>([]);
   const [grupos, setGrupos] = useState<GrupoDesagregacao[]>([]);
@@ -213,6 +224,19 @@ export function DesagregarProdutosContent({
     }
   };
 
+  const handleUndo = async () => {
+    setUndoing(true);
+    try {
+      const res = await desfazerDecisaoCodigo(cnpj, codigo);
+      toast.success(res.mensagem);
+      onSuccess();
+    } catch {
+      toast.error("Erro ao desfazer separacao.");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   const handleCriarNovoGrupo = () => {
     const novoIndex = grupos.length;
     setGrupos([
@@ -248,7 +272,7 @@ export function DesagregarProdutosContent({
           if (!destino.gtin_novo) destino.gtin_novo = normalizeText(descricoesSelecionadas[0].lista_gtin.split(",")[0]);
         }
       }
-      return novosGrupos;
+      return compactGroups(novosGrupos, codigo);
     });
 
     setSelectedDescriptions([]);
@@ -272,7 +296,7 @@ export function DesagregarProdutosContent({
       if (novos.length > 0) {
         novos[0].grupos_origem.push(...removido.grupos_origem);
       }
-      return novos;
+      return compactGroups(novos, codigo);
     });
   };
 
@@ -291,9 +315,25 @@ export function DesagregarProdutosContent({
         <div className="h-full grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] divide-x divide-slate-200 overflow-hidden">
           <div className="flex h-full flex-col overflow-hidden bg-white">
             <div className="border-b bg-white px-4 py-3 shrink-0">
-              <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Descricoes do codigo</h3>
-              <div className="mt-1 text-xs text-slate-500">
-                {gruposDisponiveis.length} descricoes | {totalLinhas} linhas | {selectedDescriptions.length} selecionadas
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Descricoes do codigo</h3>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {gruposDisponiveis.length} descricoes | {totalLinhas} linhas | {selectedDescriptions.length} selecionadas
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    Selecione uma ou mais descricoes e use <span className="font-semibold text-slate-700">Mover</span> no grupo de destino para manter itens juntos.
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUndo}
+                  disabled={loading || saving || undoing}
+                  className="shrink-0"
+                >
+                  {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Desfazer decisao"}
+                </Button>
               </div>
             </div>
             <ScrollArea className="flex-1 p-4">
@@ -496,7 +536,7 @@ export function DesagregarProdutosContent({
           <Button variant="ghost" onClick={onCancel} className="h-10 px-6 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 rounded-xl">
             Voltar
           </Button>
-          <Button disabled={loading || saving || selectedDescriptions.length > 0} onClick={handleConfirm} className="h-12 px-12 bg-purple-600 hover:bg-purple-700 font-black text-[14px] uppercase tracking-widest rounded-xl">
+          <Button disabled={loading || saving || undoing || selectedDescriptions.length > 0} onClick={handleConfirm} className="h-12 px-12 bg-purple-600 hover:bg-purple-700 font-black text-[14px] uppercase tracking-widest rounded-xl">
             {saving ? (
               <>
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />

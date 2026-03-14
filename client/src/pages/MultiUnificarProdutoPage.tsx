@@ -60,7 +60,17 @@ export default function MultiUnificarProdutoPage() {
                         cnpj={cnpj} 
                         codigos={codigos} 
                         onSuccess={() => {
-                            // Sucesso!
+                            if (window.opener && !window.opener.closed) {
+                                window.opener.postMessage(
+                                    {
+                                        type: "produto-consolidacao-concluida",
+                                        cnpj,
+                                        codigos,
+                                    },
+                                    window.location.origin
+                                );
+                            }
+                            window.close();
                         }}
                         onCancel={() => window.close()}
                     />

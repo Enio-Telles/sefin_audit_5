@@ -14,6 +14,20 @@ export default function DesagregarProdutoPage() {
     );
   }
 
+  const handleUpdated = () => {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        {
+          type: "produto-revisao-atualizada",
+          cnpj,
+          codigo,
+        },
+        window.location.origin
+      );
+    }
+    window.close();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col overflow-hidden">
       <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-3">
@@ -40,9 +54,7 @@ export default function DesagregarProdutoPage() {
           <DesagregarProdutosContent
             cnpj={cnpj}
             codigo={codigo}
-            onSuccess={() => {
-              setTimeout(() => window.close(), 2000);
-            }}
+            onSuccess={handleUpdated}
             onCancel={() => window.close()}
           />
         </div>

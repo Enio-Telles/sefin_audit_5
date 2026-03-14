@@ -4,11 +4,14 @@ import sys
 import traceback
 import logging
 import hashlib
+from datetime import UTC, datetime
 import polars as pl
 from pathlib import Path
 from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from core.models import (
+    DesfazerManualCodigoRequest,
+    DesfazerManualDescricoesRequest,
     DescricaoManualMapItem,
     ProdutoUnidRequest,
     RevisaoManualSubmitRequest,
@@ -41,6 +44,21 @@ _MANUAL_MAP_COLUMNS = [
     "cest_novo",
     "gtin_novo",
     "tipo_item_novo",
+    "acao_manual",
+]
+
+_DESCRIPTION_HISTORY_COLUMNS = [
+    "snapshot_seq",
+    "snapshot_ts_utc",
+    "snapshot_label",
+    "tipo_regra",
+    "descricao_origem",
+    "descricao_destino",
+    "descricao_par",
+    "hash_descricoes_key",
+    "chave_grupo_a",
+    "chave_grupo_b",
+    "score_origem",
     "acao_manual",
 ]
 
@@ -139,6 +157,55 @@ def _merge_manual_map(mapa_path: Path, df_novo: pl.DataFrame, default_acao: str)
         df_merge.write_parquet(mapa_path)
     else:
         df_novo_norm.write_parquet(mapa_path)
+
+
+def _snapshot_mapa_descricoes_history(history_path: Path, mapa_df: pl.DataFrame, snapshot_label: str) -> int:
+    snapshot_seq = 1
+    if history_path.exists():
+        try:
+            df_history = pl.read_parquet(str(history_path))
+            if "snapshot_seq" in df_history.columns and df_history.height > 0:
+                snapshot_seq = int(df_history["snapshot_seq"].max()) + 1
+        except Exception:
+            snapshot_seq = 1
+
+    snapshot_ts = datetime.now(UTC).isoformat()
+    if mapa_df.is_empty():
+        df_snapshot = pl.DataFrame(schema={c: pl.Utf8 for c in _DESCRIPTION_HISTORY_COLUMNS}).with_columns(
+            [
+                pl.lit(snapshot_seq).cast(pl.Int64).alias("snapshot_seq"),
+                pl.lit(snapshot_ts).alias("snapshot_ts_utc"),
+                pl.lit(snapshot_label).alias("snapshot_label"),
+            ]
+        ).select(_DESCRIPTION_HISTORY_COLUMNS)
+    else:
+        df_snapshot = mapa_df.with_columns(
+            [
+                pl.lit(snapshot_seq).cast(pl.Int64).alias("snapshot_seq"),
+                pl.lit(snapshot_ts).alias("snapshot_ts_utc"),
+                pl.lit(snapshot_label).alias("snapshot_label"),
+            ]
+        ).select(_DESCRIPTION_HISTORY_COLUMNS)
+
+    if history_path.exists():
+        df_history = pl.read_parquet(str(history_path))
+        pl.concat([df_history, df_snapshot], how="diagonal_relaxed").write_parquet(str(history_path))
+    else:
+        df_snapshot.write_parquet(str(history_path))
+
+    return snapshot_seq
+
+
+def _descricao_rule_matches(row: dict[str, Any], descricoes_set: set[str]) -> bool:
+    tipo_regra = str(row.get("tipo_regra") or "").strip().upper()
+    origem = _canon_text(row.get("descricao_origem"), "")
+    destino = _canon_text(row.get("descricao_destino"), "")
+    descricao_par = _canon_text(row.get("descricao_par"), "")
+    if tipo_regra == "UNIR_GRUPOS":
+        return origem in descricoes_set and destino in descricoes_set
+    if tipo_regra == "MANTER_SEPARADO":
+        return origem in descricoes_set and descricao_par in descricoes_set
+    return False
 
 
 @router.get("/produtos/revisao-manual")
@@ -602,6 +669,7 @@ async def resolver_manual_descricoes(req: ResolverManualDescricoesRequest):
             merge_mapa_descricoes_manual,
             unificar_produtos_unidades,
         )
+        from cruzamentos.produtos._produto_unid_manual import _normalize_mapa_descricoes_manual
 
         _config_path = _PROJETO_DIR / "config.py"
         _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
@@ -610,6 +678,28 @@ async def resolver_manual_descricoes(req: ResolverManualDescricoesRequest):
 
         _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
         mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
+        history_path = dir_analises / f"mapa_manual_descricoes_historico_{cnpj_limpo}.parquet"
+
+        if mapa_descricoes_path.exists():
+            df_before = _normalize_mapa_descricoes_manual(
+                pl.read_parquet(str(mapa_descricoes_path)),
+                default_acao="AGREGAR",
+            )
+        else:
+            df_before = pl.DataFrame(
+                schema={
+                    "tipo_regra": pl.Utf8,
+                    "descricao_origem": pl.Utf8,
+                    "descricao_destino": pl.Utf8,
+                    "descricao_par": pl.Utf8,
+                    "hash_descricoes_key": pl.Utf8,
+                    "chave_grupo_a": pl.Utf8,
+                    "chave_grupo_b": pl.Utf8,
+                    "score_origem": pl.Utf8,
+                    "acao_manual": pl.Utf8,
+                }
+            )
+        _snapshot_mapa_descricoes_history(history_path, df_before, "before_merge")
 
         regras = [item.dict() for item in req.regras]
         df_novo = pl.DataFrame(regras) if regras else pl.DataFrame(schema={c: pl.Utf8 for c in [
@@ -624,6 +714,11 @@ async def resolver_manual_descricoes(req: ResolverManualDescricoesRequest):
         ]})
 
         merge_mapa_descricoes_manual(str(mapa_descricoes_path), df_novo, default_acao="AGREGAR")
+        df_after = _normalize_mapa_descricoes_manual(
+            pl.read_parquet(str(mapa_descricoes_path)),
+            default_acao="AGREGAR",
+        )
+        _snapshot_mapa_descricoes_history(history_path, df_after, "after_merge")
         unificar_produtos_unidades(cnpj_limpo)
 
         return {
@@ -634,4 +729,215 @@ async def resolver_manual_descricoes(req: ResolverManualDescricoesRequest):
         }
     except Exception as e:
         logger.error("[resolver_manual_descricoes] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/produtos/desfazer-decisao-codigo")
+async def desfazer_decisao_codigo(req: DesfazerManualCodigoRequest):
+    """Remove decisoes manuais por item associadas a um codigo original e reprocessa os produtos."""
+    cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
+    codigo_limpo = _canon_text(req.codigo, "")
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    if not codigo_limpo:
+        raise HTTPException(status_code=400, detail="Codigo invalido")
+
+    try:
+        import importlib.util
+        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
+
+        _config_path = _PROJETO_DIR / "config.py"
+        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
+        _sefin_config = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_sefin_config)
+
+        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
+
+        if not mapa_path.exists():
+            return {
+                "status": "sucesso",
+                "mensagem": f"Nenhuma decisao manual encontrada para o codigo {codigo_limpo}.",
+                "qtd_regras_removidas": 0,
+            }
+
+        df_existente = _normalize_manual_decisions(pl.read_parquet(str(mapa_path)), default_acao="AGREGAR")
+        total_antes = df_existente.height
+        df_restante = df_existente.filter(pl.col("codigo_original") != codigo_limpo)
+        removidas = total_antes - df_restante.height
+
+        if removidas == 0:
+            return {
+                "status": "sucesso",
+                "mensagem": f"Nenhuma decisao manual encontrada para o codigo {codigo_limpo}.",
+                "qtd_regras_removidas": 0,
+            }
+
+        if df_restante.is_empty():
+            mapa_path.unlink(missing_ok=True)
+        else:
+            df_restante.write_parquet(str(mapa_path))
+
+        unificar_produtos_unidades(cnpj_limpo)
+        return {
+            "status": "sucesso",
+            "mensagem": f"{removidas} decisao(oes) manual(is) removida(s) para o codigo {codigo_limpo}.",
+            "qtd_regras_removidas": removidas,
+        }
+    except Exception as e:
+        logger.error("[desfazer_decisao_codigo] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/produtos/desfazer-manual-descricoes")
+async def desfazer_manual_descricoes(req: DesfazerManualDescricoesRequest):
+    """Restaura o estado anterior das regras por descricao entre as descricoes selecionadas e reprocessa os produtos."""
+    cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
+    descricoes = sorted({_canon_text(descricao, "") for descricao in req.descricoes if _canon_text(descricao, "")})
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    if len(descricoes) < 2:
+        raise HTTPException(status_code=400, detail="Informe pelo menos duas descricoes.")
+
+    try:
+        import importlib.util
+        from cruzamentos.produtos.produto_unid import unificar_produtos_unidades
+        from cruzamentos.produtos._produto_unid_manual import _normalize_mapa_descricoes_manual
+
+        _config_path = _PROJETO_DIR / "config.py"
+        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
+        _sefin_config = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_sefin_config)
+
+        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
+        history_path = dir_analises / f"mapa_manual_descricoes_historico_{cnpj_limpo}.parquet"
+
+        if not mapa_descricoes_path.exists():
+            return {
+                "status": "sucesso",
+                "mensagem": "Nenhuma regra manual de descricoes encontrada.",
+                "qtd_regras_removidas": 0,
+            }
+
+        df_existente = _normalize_mapa_descricoes_manual(
+            pl.read_parquet(str(mapa_descricoes_path)),
+            default_acao="AGREGAR",
+        )
+        descricoes_set = set(descricoes)
+        rows_atuais = df_existente.to_dicts()
+        regras_atuais_alvo = [row for row in rows_atuais if _descricao_rule_matches(row, descricoes_set)]
+
+        if not regras_atuais_alvo:
+            return {
+                "status": "sucesso",
+                "mensagem": "Nenhuma regra manual encontrada entre as descricoes selecionadas.",
+                "qtd_regras_removidas": 0,
+            }
+
+        if not history_path.exists():
+            return {
+                "status": "sucesso",
+                "mensagem": "Historico nao encontrado. Nao e possivel reconstruir o estado anterior.",
+                "qtd_regras_removidas": 0,
+            }
+
+        df_history = pl.read_parquet(str(history_path))
+        if df_history.is_empty() or "snapshot_seq" not in df_history.columns:
+            return {
+                "status": "sucesso",
+                "mensagem": "Historico vazio. Nao e possivel reconstruir o estado anterior.",
+                "qtd_regras_removidas": 0,
+            }
+
+        current_seq = int(df_history["snapshot_seq"].max())
+        regras_alvo_norm = _normalize_mapa_descricoes_manual(pl.DataFrame(regras_atuais_alvo), default_acao="AGREGAR")
+        regras_alvo_set = {
+            (
+                row["tipo_regra"],
+                row["descricao_origem"],
+                row["descricao_destino"],
+                row["descricao_par"],
+            )
+            for row in regras_alvo_norm.to_dicts()
+        }
+
+        prev_subset_rows: list[dict[str, Any]] = []
+        previous_seq_found: int | None = None
+        for snapshot_seq in sorted(
+            {
+                int(value)
+                for value in df_history["snapshot_seq"].to_list()
+                if int(value) < current_seq
+            },
+            reverse=True,
+        ):
+            df_snapshot = (
+                df_history.filter(pl.col("snapshot_seq") == snapshot_seq)
+                .drop(["snapshot_seq", "snapshot_ts_utc", "snapshot_label"], strict=False)
+            )
+            df_snapshot_norm = _normalize_mapa_descricoes_manual(df_snapshot, default_acao="AGREGAR")
+            subset_rows = [
+                row
+                for row in df_snapshot_norm.to_dicts()
+                if _descricao_rule_matches(row, descricoes_set)
+            ]
+            subset_set = {
+                (
+                    row["tipo_regra"],
+                    row["descricao_origem"],
+                    row["descricao_destino"],
+                    row["descricao_par"],
+                )
+                for row in subset_rows
+            }
+            if subset_set != regras_alvo_set:
+                prev_subset_rows = subset_rows
+                previous_seq_found = snapshot_seq
+                break
+
+        rows_restantes = [row for row in rows_atuais if not _descricao_rule_matches(row, descricoes_set)]
+        rows_reconstruidas = rows_restantes + prev_subset_rows
+        removidas = len(regras_atuais_alvo)
+
+        _snapshot_mapa_descricoes_history(history_path, df_existente, "before_restore")
+
+        if rows_reconstruidas:
+            df_reconstruido = _normalize_mapa_descricoes_manual(
+                pl.DataFrame(rows_reconstruidas),
+                default_acao="AGREGAR",
+            )
+            df_reconstruido.write_parquet(str(mapa_descricoes_path))
+            _snapshot_mapa_descricoes_history(history_path, df_reconstruido, f"after_restore_from_{previous_seq_found or 0}")
+        else:
+            mapa_descricoes_path.unlink(missing_ok=True)
+            _snapshot_mapa_descricoes_history(
+                history_path,
+                pl.DataFrame(
+                    schema={
+                        "tipo_regra": pl.Utf8,
+                        "descricao_origem": pl.Utf8,
+                        "descricao_destino": pl.Utf8,
+                        "descricao_par": pl.Utf8,
+                        "hash_descricoes_key": pl.Utf8,
+                        "chave_grupo_a": pl.Utf8,
+                        "chave_grupo_b": pl.Utf8,
+                        "score_origem": pl.Utf8,
+                        "acao_manual": pl.Utf8,
+                    }
+                ),
+                f"after_restore_from_{previous_seq_found or 0}",
+            )
+
+        unificar_produtos_unidades(cnpj_limpo)
+        return {
+            "status": "sucesso",
+            "mensagem": (
+                f"{removidas} regra(s) manual(is) revertida(s) com base no snapshot anterior "
+                f"{previous_seq_found if previous_seq_found is not None else 'vazio'}."
+            ),
+            "qtd_regras_removidas": removidas,
+        }
+    except Exception as e:
+        logger.error("[desfazer_manual_descricoes] Erro: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

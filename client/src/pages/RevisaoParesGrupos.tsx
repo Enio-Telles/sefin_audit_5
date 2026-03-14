@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { getProdutosRevisaoManual, resolverManualDescricoes, type DescricaoManualMapItem } from "@/lib/pythonApi";
+import { desfazerManualDescricoes, getProdutosRevisaoManual, resolverManualDescricoes, type DescricaoManualMapItem } from "@/lib/pythonApi";
 
 type ReviewRow = Record<string, unknown>;
 
@@ -191,6 +191,39 @@ export default function RevisaoParesGrupos() {
     }
   };
 
+  const handleUndoRules = async () => {
+    if (selectedRows.length < 2) {
+      toast.error("Selecione pelo menos dois grupos.");
+      return;
+    }
+
+    const descricoes = selectedRows.map((row) => getRowDescription(row)).filter(Boolean);
+    if (descricoes.length < 2) {
+      toast.error("Nao ha descricoes suficientes para desfazer regras.");
+      return;
+    }
+
+    if (!window.confirm(`Remover regras manuais de descricao entre ${selectedRows.length} grupos selecionados?`)) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await desfazerManualDescricoes(cnpj, descricoes);
+      toast.success("Regras removidas.", {
+        description: `${res.qtd_regras_removidas} regra(s) removida(s).`,
+      });
+      setSelectedKeys([]);
+      setCanonicalKey("");
+      await loadRows();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao remover regras manuais de descricoes.";
+      toast.error("Erro ao desfazer regras", { description: message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -323,6 +356,10 @@ export default function RevisaoParesGrupos() {
               <Button variant="outline" className="h-10 gap-2" disabled={saving || selectedRows.length < 2} onClick={() => void submitRules("separar")}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SplitSquareHorizontal className="h-4 w-4" />}
                 Manter grupos separados
+              </Button>
+              <Button variant="ghost" className="h-10 gap-2" disabled={saving || selectedRows.length < 2} onClick={() => void handleUndoRules()}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+                Desfazer regras entre selecionados
               </Button>
             </div>
 

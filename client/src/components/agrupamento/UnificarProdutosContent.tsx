@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import {
+  desfazerDecisaoCodigo,
   getCodigoMultiDescricaoResumo,
   getProdutoDetalhes,
   resolverManualUnificar,
@@ -38,6 +39,7 @@ export function UnificarProdutosContent({
 }: UnificarProdutosContentProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [resumo, setResumo] = useState<Record<string, unknown>>({});
   const [gruposDescricao, setGruposDescricao] = useState<CodigoMultiDescricaoGrupoResumo[]>([]);
   const [opcoesDescricao, setOpcoesDescricao] = useState<CodigoMultiDescricaoOpcao[]>([]);
@@ -161,6 +163,19 @@ export function UnificarProdutosContent({
     }
   };
 
+  const handleUndo = async () => {
+    setUndoing(true);
+    try {
+      const res = await desfazerDecisaoCodigo(cnpj, codigo);
+      toast.success(res.mensagem);
+      onSuccess();
+    } catch {
+      toast.error("Erro ao desfazer consolidacao.");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   const resumoDescricaoMap = new Map(gruposDescricao.map((grupo) => [grupo.descricao, grupo]));
 
   const totalLinhas =
@@ -185,7 +200,8 @@ export function UnificarProdutosContent({
         <ScrollArea className="h-full pr-4">
           <div className="flex flex-col gap-5 pb-6">
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <div className="grid gap-3 text-sm md:grid-cols-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid flex-1 gap-3 text-sm md:grid-cols-4">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Codigo</div>
                   <div className="mt-1 font-mono font-black text-slate-900">{codigo}</div>
@@ -202,6 +218,16 @@ export function UnificarProdutosContent({
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Linhas</div>
                   <div className="mt-1 font-black text-slate-900">{totalLinhas}</div>
                 </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUndo}
+                  disabled={loading || saving || undoing}
+                  className="shrink-0"
+                >
+                  {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Desfazer decisao"}
+                </Button>
               </div>
             </div>
 
@@ -368,7 +394,7 @@ export function UnificarProdutosContent({
         <Button variant="ghost" size="sm" onClick={onCancel} className="h-8 px-5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800">
           Voltar
         </Button>
-        <Button size="sm" disabled={loading || saving} onClick={handleConfirm} className="h-10 px-12 bg-blue-600 hover:bg-blue-700 shadow-xl font-black text-[13px] uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] rounded-lg">
+        <Button size="sm" disabled={loading || saving || undoing} onClick={handleConfirm} className="h-10 px-12 bg-blue-600 hover:bg-blue-700 shadow-xl font-black text-[13px] uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] rounded-lg">
           {saving ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
