@@ -148,21 +148,26 @@ def check_prerequisites(conda_env: str) -> None:
 
 def build_python_command(conda_env: str, python_port: int) -> str:
     return (
-        f'cd /d "{SERVER_PYTHON_DIR}" && '
+        f"$Host.UI.RawUI.WindowTitle = 'SEFIN Python API'; "
+        f"Set-Location -LiteralPath '{SERVER_PYTHON_DIR}'; "
         f"conda run -n {conda_env} --live-stream python -m uvicorn "
         f"api:app --host 0.0.0.0 --port {python_port} --reload --reload-dir . --reload-dir ..\\.."
     )
 
 
 def build_node_command() -> str:
-    return f'cd /d "{ROOT_DIR}" && set NODE_ENV=development&& pnpm dev'
+    return (
+        "$Host.UI.RawUI.WindowTitle = 'SEFIN Frontend'; "
+        f"Set-Location -LiteralPath '{ROOT_DIR}'; "
+        "$env:NODE_ENV='development'; "
+        "pnpm dev"
+    )
 
 
 def start_in_new_terminal(title: str, command: str) -> None:
     if os.name == "nt":
-        full_command = f'title {title} && {command}'
         subprocess.Popen(
-            ["cmd", "/k", full_command],
+            ["powershell", "-NoExit", "-Command", command],
             cwd=str(ROOT_DIR),
             shell=False,
             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
