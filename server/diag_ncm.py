@@ -1,6 +1,5 @@
 import polars as pl
 import json
-import os
 
 path = r'c:\Users\eniot\OneDrive - SECRETARIA DE ESTADO DE FINANCAS\Desenvolvimento\sefin_audit_2\referencias\NCM\tabela_ncm.parquet'
 df = pl.read_parquet(path)
