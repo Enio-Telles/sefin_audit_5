@@ -864,9 +864,12 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
                     canon_expr.replace(unions, default=clean_expr).alias("descricao")
                 )
             except Exception:
-                # Fallback for even older Polars versions (< 0.19)
+                # Fallback for even older Polars versions that do not support replace/replace_strict with defaults
                 df_base = df_base.with_columns(
-                    canon_expr.map_dict(unions, default=clean_expr).alias("descricao")
+                    pl.col("descricao").map_elements(
+                        lambda value: unions.get(_canon_text(value, ""), _clean_value(value)),
+                        return_dtype=pl.Utf8,
+                    ).alias("descricao")
                 )
 
     if mapa_manual_path.exists():
