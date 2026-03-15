@@ -785,7 +785,7 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
         expr = pl.col(col_name).fill_null("").cast(pl.Utf8).str.strip_chars().str.to_uppercase()
         return pl.when(expr == "").then(pl.lit(default_empty)).otherwise(expr)
 
-    return df.with_columns(
+    df = df.with_columns(
         [
             pl.col("fonte").cast(pl.Utf8),
             pl.col("codigo").cast(pl.Utf8),
@@ -809,11 +809,20 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
                 expr_canon("tipo_item_original", "(VAZIO)"),
             ],
             separator="|",
-        ).map_elements(
+        ).alias("__temp_concat")
+    )
+
+    # ⚡ Bolt Optimization: apply hashlib.sha1 only to unique values to minimize
+    # map_elements overhead and FFI boundary crossing, making it significantly faster
+    # for dataframes with repetitive items.
+    unique_df = df.select("__temp_concat").unique().with_columns(
+        pl.col("__temp_concat").map_elements(
             lambda x: hashlib.sha1(x.encode("utf-8")).hexdigest(),
             return_dtype=pl.Utf8,
         ).alias("hash_manual_key")
     )
+
+    return df.join(unique_df, on="__temp_concat", how="left").drop("__temp_concat")
 
 
 def _resolve_description_unions(mapa_descricoes_path: Path) -> dict[str, str]:
