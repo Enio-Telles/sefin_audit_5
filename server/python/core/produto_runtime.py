@@ -134,16 +134,16 @@ def _normalize_similarity_text(value: str) -> str:
     )
 
 @lru_cache(maxsize=10000)
-def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
+def _normalize_similarity_tokens(value: str) -> frozenset[str]:
     clean_text = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
-    return tuple(
+    return frozenset(
         token for token in clean_text.split()
         if len(token) > 1 and token not in _STOP_WORDS
     )
 
 @lru_cache(maxsize=10000)
-def _jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
-    set_a, set_b = set(a), set(b)
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    set_a, set_b = a, b
     if not set_a and not set_b:
         return 1.0
     intersection = len(set_a & set_b)
@@ -248,7 +248,7 @@ def _prepare_group_rows(df_agregados: pl.DataFrame) -> list[dict[str, Any]]:
     conflitos_col = _pick_col(work, "descricoes_conflitantes", "lista_descricoes", "conflitos")
 
     rows: list[dict[str, Any]] = []
-    for row in work.to_dicts():
+    for row in work.iter_rows(named=True):
         rows.append(
             {
                 "chave_produto": str(row.get(chave_col) or "").strip(),
@@ -557,7 +557,7 @@ def construir_tabela_pares_descricoes_hibridos(df_lexical: pl.DataFrame, df_sema
     for source_name, df in [("somente_lexical", df_lexical), ("somente_semantico", df_semantic)]:
         if df.is_empty():
             continue
-        for row in df.to_dicts():
+        for row in df.iter_rows(named=True):
             pair = tuple(sorted([str(row.get("chave_produto_a") or ""), str(row.get("chave_produto_b") or "")]))
             if not pair[0] or not pair[1]:
                 continue
@@ -656,7 +656,7 @@ def _normalize_mapa_descricoes_manual(df: pl.DataFrame, default_acao: str = "AGR
             df = df.with_columns(pl.lit("").cast(pl.Utf8).alias(col))
 
     rows: list[dict[str, str]] = []
-    for row in df.select(DESCRIPTION_MANUAL_MAP_COLUMNS).to_dicts():
+    for row in df.select(DESCRIPTION_MANUAL_MAP_COLUMNS).iter_rows(named=True):
         tipo_regra = _canon_text(row.get("tipo_regra"), "")
         origem = _canon_text(row.get("descricao_origem"), "")
         destino = _canon_text(row.get("descricao_destino"), "")
@@ -696,7 +696,7 @@ def _source_frame_rows(path: Path, fonte: str, mappings: dict[str, str]) -> pl.D
         return pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
     df = pl.read_parquet(str(path))
     rows: list[dict[str, Any]] = []
-    for row in df.to_dicts():
+    for row in df.iter_rows(named=True):
         codigo = _clean_value(row.get(mappings.get("codigo", "")))
         descricao = _clean_value(row.get(mappings.get("descricao", "")))
         if not codigo or not descricao:
@@ -843,7 +843,7 @@ def _resolve_description_unions(mapa_descricoes_path: Path) -> dict[str, str]:
         return {}
     df = _normalize_mapa_descricoes_manual(pl.read_parquet(str(mapa_descricoes_path)))
     parent: dict[str, str] = {}
-    for row in df.to_dicts():
+    for row in df.iter_rows(named=True):
         if row.get("tipo_regra") != "UNIR_GRUPOS":
             continue
         origem = _canon_text(row.get("descricao_origem"), "")
