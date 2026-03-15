@@ -1,4 +1,6 @@
 from __future__ import annotations
+import difflib
+from functools import lru_cache
 
 import hashlib
 import json
@@ -106,7 +108,13 @@ def _join_unique(values: list[str], sep: str = ", ") -> str:
     return sep.join(uniq)
 
 
-def _normalize_similarity_text(value: Any) -> str:
+import difflib
+from functools import lru_cache
+
+_STOP_WORDS = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "SEM", "PARA", "UN", "PCT", "CX", "KG", "LT", "ML", "GR", "PC", "LATA", "LITRO", "LITROS", "GARRAFA"}
+
+@lru_cache(maxsize=10000)
+def _normalize_similarity_text(value: str) -> str:
     return (
         str(value or "")
         .strip()
@@ -125,40 +133,45 @@ def _normalize_similarity_text(value: Any) -> str:
         .replace("Ç", "C")
     )
 
+@lru_cache(maxsize=10000)
+def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
+    clean_text = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
+    return tuple(
+        token for token in clean_text.split()
+        if len(token) > 1 and token not in _STOP_WORDS
+    )
 
-def _normalize_similarity_tokens(value: Any) -> list[str]:
-    return [
-        token.strip()
-        for token in re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value)).split()
-        if token.strip() and len(token.strip()) > 1
-    ]
-
-
-def _build_char_ngrams(value: Any, size: int = 3) -> set[str]:
-    compact = re.sub(r"[^A-Z0-9]+", " ", _normalize_similarity_text(value))
-    grams: set[str] = set()
-    if len(compact) <= size:
-        if compact.strip():
-            grams.add(compact.strip())
-        return grams
-    for idx in range(0, len(compact) - size + 1):
-        slice_value = compact[idx : idx + size].strip()
-        if slice_value:
-            grams.add(slice_value)
-    return grams
-
-
-def _jaccard(a: set[str], b: set[str]) -> float:
-    if not a and not b:
+@lru_cache(maxsize=10000)
+def _jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
+    set_a, set_b = set(a), set(b)
+    if not set_a and not set_b:
         return 1.0
-    union = len(a | b)
-    return 0.0 if union == 0 else len(a & b) / union
+    intersection = len(set_a & set_b)
+    union = len(set_a | set_b)
+    return 0.0 if union == 0 else intersection / union
 
+@lru_cache(maxsize=10000)
+def _sequence_match(a: str, b: str) -> float:
+    str_a = " ".join(_normalize_similarity_tokens(a))
+    str_b = " ".join(_normalize_similarity_tokens(b))
+    if not str_a and not str_b:
+        return 1.0
+    if not str_a or not str_b:
+        return 0.0
+    return difflib.SequenceMatcher(None, str_a, str_b).ratio()
 
-def _similarity_score(a: Any, b: Any) -> float:
-    token_score = _jaccard(set(_normalize_similarity_tokens(a)), set(_normalize_similarity_tokens(b)))
-    ngram_score = _jaccard(_build_char_ngrams(a), _build_char_ngrams(b))
-    return 0.6 * token_score + 0.4 * ngram_score
+@lru_cache(maxsize=10000)
+def _similarity_score(a: str, b: str) -> float:
+    if not a and not b: return 1.0
+    if not a or not b: return 0.0
+
+    a_str = str(a)
+    b_str = str(b)
+
+    token_score = _jaccard(_normalize_similarity_tokens(a_str), _normalize_similarity_tokens(b_str))
+    sequence_score = _sequence_match(a_str, b_str)
+
+    return 0.4 * token_score + 0.6 * sequence_score
 
 
 def _build_description_hash(origem: Any, destino: Any, descricao_par: Any, tipo_regra: Any) -> str:
