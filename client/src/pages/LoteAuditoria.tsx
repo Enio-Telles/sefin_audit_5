@@ -101,7 +101,7 @@ export default function LoteAuditoria() {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center space-x-4 mb-4">
-                <Button variant="ghost" size="icon" onClick={() => setLocation("/")}>
+                <Button variant="ghost" size="icon" onClick={() => setLocation("/")} aria-label="Voltar" title="Voltar">
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900 border-l-4 border-indigo-500 pl-4 h-8 flex items-center">

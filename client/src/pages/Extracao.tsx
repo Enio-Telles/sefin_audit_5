@@ -559,7 +559,7 @@ export default function Extracao() {
                     onChange={(e) => setSqlDir(e.target.value)}
                     className="h-8 text-xs font-mono flex-1"
                   />
-                  <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setBrowserType("sql")}>
+                  <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setBrowserType("sql")} aria-label="Selecionar pasta de consultas SQL" title="Selecionar pasta de consultas SQL">
                     <FolderOpen className="h-4 w-4" />
                   </Button>
                 </div>
@@ -573,7 +573,7 @@ export default function Extracao() {
                     onChange={(e) => setOutputDir(e.target.value)}
                     className="h-8 text-xs font-mono flex-1"
                   />
-                  <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setBrowserType("output")}>
+                  <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setBrowserType("output")} aria-label="Selecionar pasta de saída" title="Selecionar pasta de saída">
                     <FolderOpen className="h-4 w-4" />
                   </Button>
                 </div>
