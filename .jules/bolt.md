@@ -1,3 +1,6 @@
 ## 2024-03-24 - [Polars Python FFI Bottlenecks]
 **Learning:** `map_elements` with Python lambdas (like `hashlib.sha1`) triggers massive FFI overhead per row. Native hashing isn't always viable if exact SHA-1 is expected for backwards compatibility.
 **Action:** When a Python lambda MUST be used in Polars, map the elements ONLY over `.unique()` values, then `join(..., how='left')` back into the main DataFrame. This provides near-native performance (~3x to 5x faster) on datasets with repeated string permutations.
+## 2025-03-15 - [frozenset for lru_cache in Jaccard similarity]
+**Learning:** When using `functools.lru_cache` to speed up string processing functions that feed into Jaccard similarity calculations, returning a `frozenset` instead of a `list` or `set` is highly advantageous. It ensures the cache returns an immutable object (preventing accidental side effects) and entirely eliminates the O(N) overhead of casting the result to a `set()` before performing intersection/union operations. Wait out for `TypeError: unhashable type` exceptions when changing function signatures to accept strings directly into cached wrappers.
+**Action:** Always prefer `frozenset` as the return type for cached tokenization or n-gram extraction functions intended for set-based comparisons.

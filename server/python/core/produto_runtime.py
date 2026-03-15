@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -126,29 +127,31 @@ def _normalize_similarity_text(value: Any) -> str:
     )
 
 
-def _normalize_similarity_tokens(value: Any) -> list[str]:
-    return [
+@functools.lru_cache(maxsize=4096)
+def _normalize_similarity_tokens(value: str) -> frozenset[str]:
+    return frozenset([
         token.strip()
         for token in re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value)).split()
         if token.strip() and len(token.strip()) > 1
-    ]
+    ])
 
 
-def _build_char_ngrams(value: Any, size: int = 3) -> set[str]:
+@functools.lru_cache(maxsize=4096)
+def _build_char_ngrams(value: str, size: int = 3) -> frozenset[str]:
     compact = re.sub(r"[^A-Z0-9]+", " ", _normalize_similarity_text(value))
     grams: set[str] = set()
     if len(compact) <= size:
         if compact.strip():
             grams.add(compact.strip())
-        return grams
+        return frozenset(grams)
     for idx in range(0, len(compact) - size + 1):
         slice_value = compact[idx : idx + size].strip()
         if slice_value:
             grams.add(slice_value)
-    return grams
+    return frozenset(grams)
 
 
-def _jaccard(a: set[str], b: set[str]) -> float:
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not a and not b:
         return 1.0
     union = len(a | b)
@@ -156,8 +159,9 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 
 
 def _similarity_score(a: Any, b: Any) -> float:
-    token_score = _jaccard(set(_normalize_similarity_tokens(a)), set(_normalize_similarity_tokens(b)))
-    ngram_score = _jaccard(_build_char_ngrams(a), _build_char_ngrams(b))
+    a_str, b_str = str(a or ""), str(b or "")
+    token_score = _jaccard(_normalize_similarity_tokens(a_str), _normalize_similarity_tokens(b_str))
+    ngram_score = _jaccard(_build_char_ngrams(a_str), _build_char_ngrams(b_str))
     return 0.6 * token_score + 0.4 * ngram_score
 
 
