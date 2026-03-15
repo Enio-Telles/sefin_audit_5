@@ -197,6 +197,56 @@ def ler_sql(arquivo: Path) -> str:
     )
 
 
+def _allowed_paths() -> list[Path]:
+    """Retorna a lista de diretórios permitidos para operações de arquivo."""
+    bases = [
+        _PROJETO_DIR,
+        _AUDIT_DIR,
+        _CRUZAMENTOS_DIR,
+    ]
+    extra = os.getenv("ALLOWED_BASE_DIRS", "").strip()
+    if extra:
+        for raw in re.split(r"[;,]", extra):
+            raw = raw.strip()
+            if raw:
+                try:
+                    bases.append(Path(raw))
+                except Exception:
+                    pass
+    norm = []
+    for p in bases:
+        try:
+            norm.append(p.resolve())
+        except Exception:
+            pass
+    # dedup
+    seen = set()
+    uniq = []
+    for p in norm:
+        s = str(p)
+        if s not in seen:
+            seen.add(s)
+            uniq.append(p)
+    return uniq
+
+
+def _is_allowed(p: Path) -> bool:
+    """Verifica se o caminho está dentro dos diretórios permitidos."""
+    try:
+        rp = p.resolve()
+    except Exception:
+        return False
+    for base in _allowed_paths():
+        try:
+            if hasattr(rp, "is_relative_to") and rp.is_relative_to(base):
+                return True
+            if os.path.commonpath([str(rp), str(base)]) == str(base):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 # ====== Utilitário: escrita Excel com formatação e autoajuste ======
 
 def _write_excel_with_format(pdf, writer, sheet_name: str = "Plan1"):
@@ -788,6 +838,8 @@ async def extract_oracle_data(request: ExtractionRequest):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     output_path = Path(request.output_dir) / cnpj_limpo if cnpj_limpo else Path(request.output_dir)
+    if not _is_allowed(output_path):
+        raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
     output_path.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
@@ -800,6 +852,15 @@ async def extract_oracle_data(request: ExtractionRequest):
         with db_manager.get_connection() as conexao:
             for query_path in request.queries:
                 query_file = Path(query_path)
+                if query_file.is_absolute() or ".." in query_path:
+                    if not _is_allowed(query_file):
+                         results.append({
+                            "query": query_path,
+                            "status": "error",
+                            "message": "Acesso ao arquivo de consulta não permitido",
+                        })
+                         continue
+
                 query_name = query_file.stem if query_file.exists() else query_path
                 try:
                     sql = ler_sql(query_file) if query_file.exists() else query_path
@@ -859,7 +920,9 @@ async def extract_oracle_data(request: ExtractionRequest):
 
             if request.include_auxiliary and request.auxiliary_queries_dir:
                 aux_sql_dir = Path(request.auxiliary_queries_dir)
-                if aux_sql_dir.exists() and aux_sql_dir.is_dir():
+                if not _is_allowed(aux_sql_dir):
+                     logger.warning("[extract] Acesso ao diretório de consultas auxiliares não permitido: %s", aux_sql_dir)
+                elif aux_sql_dir.exists() and aux_sql_dir.is_dir():
                     aux_output_path = Path(request.output_dir) / "tabelas_auxiliares"
                     aux_output_path.mkdir(parents=True, exist_ok=True)
                     aux_sql_files = list(aux_sql_dir.glob("*.sql"))
@@ -990,6 +1053,8 @@ async def read_parquet(request: ParquetReadRequest):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     file_path = Path(request.file_path)
+    if not _is_allowed(file_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {request.file_path}")
     try:
@@ -1040,6 +1105,8 @@ async def get_parquet_unique_values(file_path: str = Query(...), column: str = Q
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     path = Path(file_path)
+    if not _is_allowed(path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not path.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
@@ -1063,6 +1130,8 @@ async def write_parquet_cell(request: ParquetWriteRequest):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     file_path = Path(request.file_path)
+    if not _is_allowed(file_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
@@ -1102,6 +1171,8 @@ async def add_parquet_row(request: ParquetAddRowRequest):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     file_path = Path(request.file_path)
+    if not _is_allowed(file_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
@@ -1121,6 +1192,8 @@ async def add_parquet_column(request: ParquetAddColumnRequest):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     file_path = Path(request.file_path)
+    if not _is_allowed(file_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
@@ -1153,6 +1226,9 @@ async def merge_parquet_files(request: ParquetMergeRequest):
         path_a = Path(request.file_a)
         path_b = Path(request.file_b)
         
+        if not _is_allowed(path_a) or not _is_allowed(path_b):
+            raise HTTPException(status_code=403, detail="Acesso a um dos caminhos não permitido")
+
         if not path_a.exists() or not path_b.exists():
             raise HTTPException(status_code=404, detail="Um ou ambos os arquivos não existem.")
             
@@ -1174,6 +1250,8 @@ async def merge_parquet_files(request: ParquetMergeRequest):
         
         # Salvar resultado
         out_dir = Path(request.output_dir) if request.output_dir else _CRUZAMENTOS_DIR
+        if not _is_allowed(out_dir):
+            raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
         out_dir.mkdir(parents=True, exist_ok=True)
         
         output_path = out_dir / (request.output_name if request.output_name.endswith(".parquet") else f"{request.output_name}.parquet")
@@ -1198,6 +1276,8 @@ async def list_parquet_files(directory: str = Query(...)):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     dir_path = Path(directory)
+    if not _is_allowed(dir_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not dir_path.exists():
         raise HTTPException(status_code=404, detail="Diretório não encontrado")
     files: list[dict[str, Any]] = []
@@ -1237,6 +1317,8 @@ async def browse_filesystem(path: str = Query("")):
     """Navega pelo sistema de arquivos (apenas diretórios permitidos)."""
     try:
         current_path = path.strip()
+        if current_path and not _is_allowed(Path(current_path)):
+             raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
         entries: list[dict[str, Any]] = []
         parent: Optional[str] = None
 
@@ -1291,6 +1373,8 @@ async def list_sql_queries(path: str = Query("")):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     target_path = Path(path)
+    if not _is_allowed(target_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not target_path.exists():
         return {"queries": []}
     try:
@@ -1329,6 +1413,8 @@ async def list_auxiliary_queries(path: str = Query("")):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     target_path = Path(path)
+    if not _is_allowed(target_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not target_path.exists() or not target_path.is_dir():
         return {"queries": [], "count": 0}
     try:
@@ -1372,6 +1458,8 @@ async def export_to_excel(request: ExcelExportRequest):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     output_path = Path(request.output_dir)
+    if not _is_allowed(output_path):
+        raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
     output_path.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
     for source in request.source_files:
@@ -1380,6 +1468,9 @@ async def export_to_excel(request: ExcelExportRequest):
             continue
 
         source_path = Path(source)
+        if not _is_allowed(source_path):
+            results.append({"file": source, "status": "error", "message": "Acesso ao caminho não permitido"})
+            continue
         if not source_path.exists():
             results.append({"file": source, "status": "error", "message": "Arquivo não encontrado"})
             continue
@@ -1410,6 +1501,8 @@ async def export_excel_download(file_path: str = Query(...)):
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     source = Path(file_path)
+    if not _is_allowed(source):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not source.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
@@ -1636,6 +1729,8 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
 
     try:
         base = Path(req.input_dir)
+        if not _is_allowed(base):
+            raise HTTPException(status_code=403, detail="Acesso ao diretório de entrada não permitido")
         if not base.exists():
             raise HTTPException(status_code=404, detail="Diretório de entrada não encontrado")
 
@@ -1677,8 +1772,11 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
             .sort("ano_mes")
         )
 
-        Path(req.output_dir).mkdir(parents=True, exist_ok=True)
-        out_path = Path(req.output_dir) / "analise_faturamento_periodo.parquet"
+        output_dir = Path(req.output_dir)
+        if not _is_allowed(output_dir):
+            raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        out_path = output_dir / "analise_faturamento_periodo.parquet"
         out.write_parquet(str(out_path))
 
         return {
@@ -1827,6 +1925,8 @@ async def upload_parquet(file: UploadFile = File(...), directory: str = Query(..
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     dir_path = Path(directory)
+    if not _is_allowed(dir_path):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     dir_path.mkdir(parents=True, exist_ok=True)
     file_path = dir_path / file.filename
     content = await file.read()
