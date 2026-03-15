@@ -1,0 +1,1 @@
+module.exports = { apps: [{ name: "sefin-node", script: "pnpm", args: "dev" }, { name: "sefin-py", script: "python", args: "-m uvicorn api:app --host 0.0.0.0 --port 8001", cwd: "./server/python" }] };

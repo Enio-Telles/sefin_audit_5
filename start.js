@@ -119,6 +119,7 @@ function startServers(pythonCmd) {
 
   pythonServer.stdout.on("data", data => process.stdout.write(`\x1b[32m[Python API]\x1b[0m ${data}`));
   pythonServer.stderr.on("data", data => process.stderr.write(`\x1b[31m[Python API ERR]\x1b[0m ${data}`));
+  pythonServer.on("error", (e) => err(`Python Spawn Error: ${e.message}`));
 
   const nodeServer = spawn("pnpm", ["dev"], {
     cwd: ROOT_DIR,
@@ -128,6 +129,7 @@ function startServers(pythonCmd) {
 
   nodeServer.stdout.on("data", data => process.stdout.write(`\x1b[34m[Node App]\x1b[0m ${data}`));
   nodeServer.stderr.on("data", data => process.stderr.write(`\x1b[31m[Node App ERR]\x1b[0m ${data}`));
+  nodeServer.on("error", (e) => err(`Node Spawn Error: ${e.message}`));
 
   // Optionally ensure frontend build for non-dev setup
   // info("Building frontend...");
@@ -155,4 +157,5 @@ function main() {
   startServers(pythonCmd);
 }
 
+process.on('uncaughtException', (e) => err(`Global Err: ${e.message}`));
 main();
