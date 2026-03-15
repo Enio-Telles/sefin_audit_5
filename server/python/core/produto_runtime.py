@@ -781,6 +781,10 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
     if not non_empty:
         return pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
     df = pl.concat(non_empty, how="diagonal_relaxed")
+    def expr_canon(col_name: str, default_empty: str = "(VAZIO)") -> pl.Expr:
+        expr = pl.col(col_name).fill_null("").cast(pl.Utf8).str.strip_chars().str.to_uppercase()
+        return pl.when(expr == "").then(pl.lit(default_empty)).otherwise(expr)
+
     return df.with_columns(
         [
             pl.col("fonte").cast(pl.Utf8),
@@ -797,17 +801,16 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
             pl.col("tipo_item_original").cast(pl.Utf8).fill_null(""),
         ]
     ).with_columns(
-        pl.struct(["fonte", "codigo_original", "descricao_original", "tipo_item_original"]).map_elements(
-            lambda item: hashlib.sha1(
-                "|".join(
-                    [
-                        _canon_text(item["fonte"], ""),
-                        _canon_text(item["codigo_original"], ""),
-                        _canon_text(item["descricao_original"]),
-                        _canon_text(item["tipo_item_original"]),
-                    ]
-                ).encode("utf-8")
-            ).hexdigest(),
+        pl.concat_str(
+            [
+                expr_canon("fonte", ""),
+                expr_canon("codigo_original", ""),
+                expr_canon("descricao_original", "(VAZIO)"),
+                expr_canon("tipo_item_original", "(VAZIO)"),
+            ],
+            separator="|",
+        ).map_elements(
+            lambda x: hashlib.sha1(x.encode("utf-8")).hexdigest(),
             return_dtype=pl.Utf8,
         ).alias("hash_manual_key")
     )
@@ -846,12 +849,19 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
 
     unions = _resolve_description_unions(mapa_descricoes_path)
     if unions:
-        df_base = df_base.with_columns(
-            pl.col("descricao").map_elements(
-                lambda value: unions.get(_canon_text(value, ""), _clean_value(value)),
-                return_dtype=pl.Utf8,
+        canon_expr = pl.col("descricao").fill_null("").cast(pl.Utf8).str.strip_chars().str.to_uppercase()
+        canon_expr = pl.when(canon_expr == "").then(pl.lit("")).otherwise(canon_expr)
+        clean_expr = pl.col("descricao").fill_null("").cast(pl.Utf8).str.strip_chars()
+
+        try:
+            df_base = df_base.with_columns(
+                canon_expr.replace_strict(unions, default=clean_expr).alias("descricao")
             )
-        )
+        except AttributeError:
+            # Fallback for older Polars versions
+            df_base = df_base.with_columns(
+                canon_expr.replace(unions, default=clean_expr).alias("descricao")
+            )
 
     if mapa_manual_path.exists():
         mapa = pl.read_parquet(str(mapa_manual_path))
