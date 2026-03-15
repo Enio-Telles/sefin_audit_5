@@ -928,55 +928,74 @@ def _build_produtos_agregados(df_base: pl.DataFrame) -> pl.DataFrame:
             }
         )
 
-    rows: list[dict[str, Any]] = []
-    for idx, row in enumerate(
-        df_base.group_by("descricao").agg(
-            [
-                pl.col("codigo").drop_nulls().cast(pl.Utf8).alias("__codigos"),
-                pl.col("ncm").drop_nulls().cast(pl.Utf8).alias("__ncm"),
-                pl.col("cest").drop_nulls().cast(pl.Utf8).alias("__cest"),
-                pl.col("gtin").drop_nulls().cast(pl.Utf8).alias("__gtin"),
-                pl.col("tipo_item").drop_nulls().cast(pl.Utf8).alias("__tipo_item"),
-                pl.col("unid").drop_nulls().cast(pl.Utf8).alias("__unid"),
-            ]
-        ).sort("descricao").to_dicts(),
-        start=1,
-    ):
-        codigos = [item for item in row.get("__codigos", []) if _clean_value(item)]
-        ncm_values = [item for item in row.get("__ncm", []) if _clean_value(item)]
-        cest_values = [item for item in row.get("__cest", []) if _clean_value(item)]
-        gtin_values = [item for item in row.get("__gtin", []) if _clean_value(item)]
-        tipo_values = [item for item in row.get("__tipo_item", []) if _clean_value(item)]
-        unid_values = [item for item in row.get("__unid", []) if _clean_value(item)]
-        conflicts = []
-        if len(set(codigos)) > 1:
-            conflicts.append("CODIGO")
-        if len(set(ncm_values)) > 1:
-            conflicts.append("NCM")
-        if len(set(cest_values)) > 1:
-            conflicts.append("CEST")
-        if len(set(gtin_values)) > 1:
-            conflicts.append("GTIN")
-        if len(set(tipo_values)) > 1:
-            conflicts.append("TIPO_ITEM")
-        rows.append(
-            {
-                "chave_produto": f"ID_{idx:04d}",
-                "descricao": _clean_value(row.get("descricao")),
-                "lista_descricao": _clean_value(row.get("descricao")),
-                "qtd_descricoes": 1,
-                "qtd_codigos": len(set(codigos)),
-                "ncm_consenso": _consensus(ncm_values),
-                "cest_consenso": _consensus(cest_values),
-                "gtin_consenso": _consensus(gtin_values),
-                "tipo_item_consenso": _consensus(tipo_values),
-                "codigo_consenso": _consensus(codigos),
-                "lista_unid": _join_unique(unid_values),
-                "descricoes_conflitantes": ", ".join(conflicts),
-                "requer_revisao_manual": bool(conflicts),
-            }
+    clean_exprs = []
+    for col in ["codigo", "ncm", "cest", "gtin", "tipo_item", "unid", "descricao"]:
+        if col in df_base.columns:
+            clean_exprs.append(
+                pl.col(col).fill_null("").cast(pl.Utf8).str.strip_chars().alias(col)
+            )
+
+    df_cleaned = df_base.with_columns(clean_exprs)
+
+    aggs = [
+        pl.col("codigo").drop_nulls().filter(pl.col("codigo") != "").alias("__codigos"),
+        pl.col("ncm").drop_nulls().filter(pl.col("ncm") != "").alias("__ncm"),
+        pl.col("cest").drop_nulls().filter(pl.col("cest") != "").alias("__cest"),
+        pl.col("gtin").drop_nulls().filter(pl.col("gtin") != "").alias("__gtin"),
+        pl.col("tipo_item").drop_nulls().filter(pl.col("tipo_item") != "").alias("__tipo_item"),
+        pl.col("unid").drop_nulls().filter(pl.col("unid") != "").alias("__unid"),
+    ]
+
+    grouped = df_cleaned.group_by("descricao").agg(aggs).sort("descricao")
+
+    def consensus_expr(col_name: str) -> pl.Expr:
+        return (
+            pl.col(col_name)
+            .list.eval(pl.element().mode().sort().first())
+            .list.first()
+            .fill_null("")
         )
-    return pl.DataFrame(rows)
+
+    def unique_count_expr(col_name: str) -> pl.Expr:
+        return pl.col(col_name).list.unique().list.len()
+
+    res = grouped.with_columns(
+        pl.format("ID_{}", pl.arange(1, pl.len() + 1).cast(pl.Utf8).str.pad_start(4, '0')).alias("chave_produto"),
+        pl.col("descricao").alias("lista_descricao"),
+        pl.lit(1).cast(pl.Int64).alias("qtd_descricoes"),
+        unique_count_expr("__codigos").alias("qtd_codigos"),
+        consensus_expr("__ncm").alias("ncm_consenso"),
+        consensus_expr("__cest").alias("cest_consenso"),
+        consensus_expr("__gtin").alias("gtin_consenso"),
+        consensus_expr("__tipo_item").alias("tipo_item_consenso"),
+        consensus_expr("__codigos").alias("codigo_consenso"),
+        pl.col("__unid").list.unique().list.sort().list.join(", ").alias("lista_unid"),
+        pl.concat_list(
+            pl.when(unique_count_expr("__codigos") > 1).then(pl.lit("CODIGO")).otherwise(pl.lit(None)),
+            pl.when(unique_count_expr("__ncm") > 1).then(pl.lit("NCM")).otherwise(pl.lit(None)),
+            pl.when(unique_count_expr("__cest") > 1).then(pl.lit("CEST")).otherwise(pl.lit(None)),
+            pl.when(unique_count_expr("__gtin") > 1).then(pl.lit("GTIN")).otherwise(pl.lit(None)),
+            pl.when(unique_count_expr("__tipo_item") > 1).then(pl.lit("TIPO_ITEM")).otherwise(pl.lit(None)),
+        ).list.drop_nulls().list.join(", ").alias("descricoes_conflitantes")
+    ).with_columns(
+        (pl.col("descricoes_conflitantes") != "").alias("requer_revisao_manual")
+    )
+
+    return res.drop(["__codigos", "__ncm", "__cest", "__gtin", "__tipo_item", "__unid"]).select(
+        "chave_produto",
+        "descricao",
+        "lista_descricao",
+        "qtd_descricoes",
+        "qtd_codigos",
+        "ncm_consenso",
+        "cest_consenso",
+        "gtin_consenso",
+        "tipo_item_consenso",
+        "codigo_consenso",
+        "lista_unid",
+        "descricoes_conflitantes",
+        "requer_revisao_manual",
+    )
 
 
 def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame) -> pl.DataFrame:
