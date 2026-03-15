@@ -866,10 +866,13 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
             df_base = df_base.with_columns(
                 canon_expr.replace_strict(unions, default=clean_expr).alias("descricao")
             )
-        except AttributeError:
+        except (AttributeError, TypeError, Exception):
             # Fallback for older Polars versions
             df_base = df_base.with_columns(
-                canon_expr.replace(unions, default=clean_expr).alias("descricao")
+                pl.col("descricao").map_elements(
+                    lambda value: unions.get(_canon_text(value, ""), _clean_value(value)),
+                    return_dtype=pl.Utf8
+                ).alias("descricao")
             )
 
     if mapa_manual_path.exists():
