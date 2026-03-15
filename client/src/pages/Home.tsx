@@ -30,36 +30,36 @@ export default function Home() {
       description: "Inicie a extração e análise completa para uma única empresa.",
       icon: Shield,
       href: "/auditar",
-      color: "text-emerald-500",
-      bg: "bg-emerald-500/10",
-      border: "border-emerald-500/20",
+      color: "text-primary",
+      bg: "bg-transparent",
+      border: "border-none",
     },
     {
       title: "Processamento em Lote",
       description: "Audite múltiplos CNPJs de uma só vez para maior eficiência.",
       icon: Layers,
       href: "/lote",
-      color: "text-blue-500",
-      bg: "bg-blue-500/10",
-      border: "border-blue-500/20",
+      color: "text-primary",
+      bg: "bg-transparent",
+      border: "border-none",
     },
     {
       title: "Ver Tabelas",
       description: "Acesse e analise os dados das empresas já processadas.",
       icon: Table2,
       href: "/tabelas",
-      color: "text-amber-500",
-      bg: "bg-amber-500/10",
-      border: "border-amber-500/20",
+      color: "text-primary",
+      bg: "bg-transparent",
+      border: "border-none",
     },
     {
       title: "Ver Relatórios",
       description: "Gere e consulte relatórios em Word das auditorias concluídas.",
       icon: FileText,
       href: "/relatorios",
-      color: "text-purple-500",
-      bg: "bg-purple-500/10",
-      border: "border-purple-500/20",
+      color: "text-primary",
+      bg: "bg-transparent",
+      border: "border-none",
     },
   ];
 
@@ -75,8 +75,8 @@ export default function Home() {
             Bem-vindo ao Sistema de Auditoria e Análise Fiscal — SEFIN/RO
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground glass-card px-4 py-2 rounded-full">
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px]">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground px-4 py-2 rounded-full border border-border/50">
+          <Badge variant="outline" className="text-primary border-primary/20 bg-transparent text-[10px]">
             CONECTADO
           </Badge>
           <span>Produção Oracle</span>
@@ -96,7 +96,7 @@ export default function Home() {
                 className="h-full"
               >
                 <Link href={action.href}>
-                  <Card className="glass-card h-full overflow-hidden group hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300 cursor-pointer flex flex-col justify-between">
+                  <Card className="h-full overflow-hidden group hover:border-primary/50 transition-all duration-300 cursor-pointer flex flex-col justify-between border-border/50 bg-card">
                     <CardContent className="p-6">
                       <div className="flex flex-col gap-4">
                         <div className={`p-3 rounded-xl w-fit ${action.bg} ${action.border} border group-hover:scale-110 transition-transform duration-300`}>
@@ -122,7 +122,7 @@ export default function Home() {
           </div>
 
           {/* Dica / Info */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 to-emerald-500/5 border border-primary/5 flex items-start gap-4 shadow-sm">
+          <div className="p-5 rounded-2xl bg-transparent border border-border/50 flex items-start gap-4">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
               <BarChart3 className="h-5 w-5 text-primary" />
             </div>
@@ -137,7 +137,7 @@ export default function Home() {
 
         {/* Auditorias Recentes - List */}
         <div className="lg:col-span-12 xl:col-span-6">
-          <Card className="glass-card h-full">
+          <Card className="h-full border-border/50 bg-card">
             <CardHeader className="flex flex-row items-center justify-between">
               <div className="space-y-1">
                 <CardTitle className="text-lg">Auditorias Recentes</CardTitle>
@@ -156,7 +156,7 @@ export default function Home() {
               <div className="space-y-1">
                 {loadingHistory ? (
                   Array(5).fill(0).map((_, i) => (
-                    <div key={i} className="h-14 w-full animate-pulse bg-muted/40 rounded-xl mb-2" />
+                    <div key={i} className="h-14 w-full animate-pulse bg-accent/10 rounded-none mb-2 border-b border-white/5" />
                   ))
                 ) : history && history.length > 0 ? (
                   history.slice(0, 7).map((audit, idx) => (
@@ -165,7 +165,7 @@ export default function Home() {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.05 }}
-                      className="flex items-center justify-between p-3 rounded-xl hover:bg-muted/30 transition-colors group cursor-pointer"
+                      className="flex items-center justify-between p-3 rounded-none hover:bg-accent/10 transition-colors group cursor-pointer border-b border-white/5"
                     >
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 rounded-lg bg-background border flex items-center justify-center shadow-sm group-hover:border-primary/30 transition-colors">

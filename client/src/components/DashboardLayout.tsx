@@ -286,7 +286,7 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 sticky top-0 z-30 bg-background/80 backdrop-blur-md">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-background px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 sticky top-0 z-30">
           <div className="flex items-center gap-2">
             {!isMobile && <SidebarTrigger className="-ml-1" />}
             <div className="flex items-center gap-2 px-2">
