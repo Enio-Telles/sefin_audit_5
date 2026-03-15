@@ -314,7 +314,7 @@ export default function AgregacaoSelecao() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.history.back()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.history.back()} aria-label="Voltar" title="Voltar">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-2xl font-bold tracking-tight text-slate-800">Consolidacao por Selecao</h1>
@@ -373,7 +373,7 @@ export default function AgregacaoSelecao() {
              <Boxes className="h-4 w-4" />
              Consolidar Selecionados ({selectedCodigos.size})
            </Button>
-           <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => loadData()}>
+           <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => loadData()} aria-label="Atualizar dados" title="Atualizar dados">
              <Loader2 className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
            </Button>
         </div>
