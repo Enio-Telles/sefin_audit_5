@@ -1,0 +1,11 @@
+polars
+oracledb
+fastapi
+uvicorn
+python-docx
+openpyxl
+xlsxwriter
+pydantic
+python-dotenv
+keyring
+python-multipart
