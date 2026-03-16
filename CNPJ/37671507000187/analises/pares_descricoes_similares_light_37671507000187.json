@@ -1,0 +1,10 @@
+{
+  "metodo": "light",
+  "modelo_vetorizacao": "CHAR_NGRAM_TFIDF_V1",
+  "engine": "light",
+  "input_base_hash": "d7664250541ccf31ea276a775333e48a74cd6e27",
+  "top_k": 8,
+  "min_semantic_score": 0.72,
+  "batch_size": 0,
+  "generated_at_utc": "2026-03-16T16:46:28.165698+00:00"
+}

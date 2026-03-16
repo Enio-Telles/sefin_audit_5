@@ -1,0 +1,32 @@
+﻿ M client/src/App.tsx
+ M client/src/components/DashboardLayout.tsx
+ M client/src/components/auditoria/AuditResultView.tsx
+ M client/src/lib/pythonApi.ts
+ D client/src/pages/AgregacaoSelecao.tsx
+ M client/src/pages/MultiUnificarProdutoPage.tsx
+ D client/src/pages/RevisaoManual.tsx
+ D client/src/pages/RevisaoParesGrupos.tsx
+ M client/src/pages/Tabelas.tsx
+ M documentacao/PRODUTOS/OVERVIEW.md
+ M main.py
+ M server/python/core/models.py
+ M server/python/core/produto_runtime.py
+ M server/python/routers/analysis.py
+ M server/python/routers/filesystem.py
+ M server/python/routers/produto_unid.py
+ M server/python/tests/test_produto_runtime.py
+?? CNPJ/
+?? client/src/pages/AnaliseProdutos.tsx
+?? client/src/pages/RevisaoFatores.tsx
+?? client/src/pages/RevisaoFinalProdutos.tsx
+?? "documentacao/Fluxo de Consolida\303\247\303\243o de Produtos.md"
+?? documentacao/PRODUTOS/ANALISE_VERSAO_11_AGREGACAO_CONVERSAO.md
+?? documentacao/PRODUTOS/ESPECIFICACAO_UNIFICACAO_LOTE.md
+?? documentacao/PRODUTOS/PROPOSTA_VETORIZACAO_OPCIONAL.md
+?? documentacao/PRODUTOS/image/
+?? documentacao/image/
+?? full_status.txt
+?? server/python/core/factor_diagnostics.py
+?? server/python/core/produto_batch_lote.py
+?? server/python/core/produto_classification.py
+?? server/python/tests/test_factor_diagnostics.py

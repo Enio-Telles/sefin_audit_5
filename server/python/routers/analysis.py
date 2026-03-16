@@ -11,6 +11,7 @@ from core.models import (
     AnaliseFaturamentoRequest, 
     AuditPipelineRequest
 )
+from core.factor_diagnostics import diagnosticar_fatores_conversao
 from core.produto_runtime import produto_pipeline_em_modo_compatibilidade, unificar_produtos_unidades
 from core.utils import validar_cnpj, ler_sql, normalizar_colunas, extrair_parametros_sql
 
@@ -227,21 +228,11 @@ async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_
                         cnpj_limpo,
                     )
             
-            # Lista de arquivos esperados na pasta de análises para a seção de produtos
+            # Lista de arquivos do fluxo atual de produtos para a seção de produtos
             targets = [
-                (f"produtos_agregados_{cnpj_limpo}.parquet", "Tabela Visão"),
+                (f"produtos_agregados_{cnpj_limpo}.parquet", "Tabela Final"),
                 (f"base_detalhes_produtos_{cnpj_limpo}.parquet", "Base Detalhes"),
-                (f"produtos_indexados_{cnpj_limpo}.parquet", "Produtos Indexados"),
-                (f"codigos_multidescricao_{cnpj_limpo}.parquet", "Códigos Multidescrição"),
                 (f"status_analise_produtos_{cnpj_limpo}.parquet", "Status de Analise"),
-                (f"pares_descricoes_similares_{cnpj_limpo}.parquet", "Pares Similares"),
-                (f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet", "Pares Similares Semanticos"),
-                (f"pares_descricoes_similares_hibridos_{cnpj_limpo}.parquet", "Pares Similares Hibridos"),
-                (f"variacoes_produtos_{cnpj_limpo}.parquet", "Variações Encontradas"),
-                (f"mapa_manual_descricoes_{cnpj_limpo}.parquet", "Mapa Manual de Descrições"),
-                (f"mapa_auditoria_descricoes_{cnpj_limpo}.parquet", "Auditoria de Descrições"),
-                (f"mapa_auditoria_descricoes_aplicadas_{cnpj_limpo}.parquet", "Descrições Aplicadas"),
-                (f"mapa_auditoria_descricoes_bloqueadas_{cnpj_limpo}.parquet", "Descrições Bloqueadas"),
                 (f"mapa_auditoria_agregados_{cnpj_limpo}.parquet", "Mapa de Agregados"),
                 (f"mapa_auditoria_desagregados_{cnpj_limpo}.parquet", "Mapa de Desagregados"),
             ]
@@ -401,3 +392,57 @@ async def importar_fatores_excel(
     except Exception as e:
         logger.error("[importar_fatores_excel] Erro: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro ao importar fatores: {e}")
+
+
+@router.get("/fatores/diagnostico")
+async def diagnostico_fatores_excel(cnpj: str = Query(...)):
+    """Gera um diagnostico de fragilidades dos fatores de conversao."""
+    cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+
+    try:
+        import importlib.util
+
+        _spec = importlib.util.spec_from_file_location("sefin_config", str(_PROJETO_DIR / "config.py"))
+        _config = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_config)
+        _, dir_analises, _ = _config.obter_diretorios_cnpj(cnpj_limpo)
+        fatores_path = dir_analises / f"fatores_conversao_{cnpj_limpo}.parquet"
+
+        if not fatores_path.exists():
+            return {
+                "success": True,
+                "available": False,
+                "cnpj": cnpj_limpo,
+                "file": "",
+                "stats": {
+                    "total_registros": 0,
+                    "produtos_unicos": 0,
+                    "anos_unicos": 0,
+                    "unidades_unicas": 0,
+                    "editados_manual": 0,
+                    "fatores_invalidos": 0,
+                    "fatores_extremos_altos": 0,
+                    "fatores_extremos_baixos": 0,
+                    "grupos_muitas_unidades": 0,
+                    "grupos_alta_variacao": 0,
+                },
+                "issues": [],
+                "message": "Arquivo de fatores nao encontrado.",
+            }
+
+        fatores = pl.read_parquet(fatores_path)
+        diagnostico = diagnosticar_fatores_conversao(fatores)
+        return {
+            "success": True,
+            "available": True,
+            "cnpj": cnpj_limpo,
+            "file": str(fatores_path),
+            **diagnostico,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[diagnostico_fatores_excel] Erro: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erro ao diagnosticar fatores: {e}")

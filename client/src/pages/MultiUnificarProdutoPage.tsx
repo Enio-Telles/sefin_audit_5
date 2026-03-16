@@ -37,7 +37,7 @@ export default function MultiUnificarProdutoPage() {
                         <Boxes className="h-6 w-6 text-blue-600" />
                         <div>
                             <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">
-                                Agregação Manual: {codigos.length} Itens
+                                Consolidação Manual: {codigos.length} Itens
                             </h1>
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
                                 Unificação de múltiplos registros em um único cadastro oficial • CNPJ {cnpj}
@@ -48,7 +48,7 @@ export default function MultiUnificarProdutoPage() {
                 
                 <div className="flex items-center gap-2">
                     <Badge variant="outline" className="px-3 py-1 bg-blue-50 text-blue-700 border-blue-100 text-[10px] font-black uppercase tracking-widest">
-                        Agregação por Seleção
+                        Revisão Final
                     </Badge>
                 </div>
             </header>

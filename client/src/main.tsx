@@ -21,10 +21,19 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   window.location.href = getLoginUrl();
 };
 
+const shouldIgnoreQueryConsoleError = (error: unknown) => {
+  const anyError = error as { path?: string; message?: string; name?: string } | null;
+  if (!anyError) return false;
+  if (anyError.name === "AbortError") return true;
+  if (anyError.path === "/parquet/read" && (anyError.message || "").includes("Failed to fetch")) return true;
+  return false;
+};
+
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
     redirectToLoginIfUnauthorized(error);
+    if (shouldIgnoreQueryConsoleError(error)) return;
     console.error("[API Query Error]", error);
   }
 });

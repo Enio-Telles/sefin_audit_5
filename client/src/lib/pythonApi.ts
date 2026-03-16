@@ -6,18 +6,27 @@
 const BASE = "/api/python";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+  } catch (error: any) {
+    const err: any = error instanceof Error ? error : new Error(String(error));
+    err.path = path;
+    err.isNetworkError = true;
+    throw err;
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     const err: any = new Error(error.detail || `API Error: ${res.status}`);
     err.status = res.status;
+    err.path = path;
     throw err;
   }
 
@@ -475,6 +484,42 @@ export async function calcularFatoresConversao(cnpj: string) {
   });
 }
 
+export type FatorDiagnosticoItem = {
+  tipo: string;
+  severidade: string;
+  chave_produto: string;
+  ano_referencia?: number | null;
+  unidade_origem: string;
+  fator?: number | null;
+  detalhes: string;
+  sugestao: string;
+};
+
+export type FatoresDiagnosticoResponse = {
+  success: boolean;
+  available: boolean;
+  cnpj: string;
+  file: string;
+  message?: string;
+  stats: {
+    total_registros: number;
+    produtos_unicos: number;
+    anos_unicos: number;
+    unidades_unicas: number;
+    editados_manual: number;
+    fatores_invalidos: number;
+    fatores_extremos_altos: number;
+    fatores_extremos_baixos: number;
+    grupos_muitas_unidades: number;
+    grupos_alta_variacao: number;
+  };
+  issues: FatorDiagnosticoItem[];
+};
+
+export async function diagnosticarFatoresConversao(cnpj: string) {
+  return request<FatoresDiagnosticoResponse>(`/fatores/diagnostico?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
 export type AplicarAgrupamentoResult = {
   arquivo: string;
   linhas: number;
@@ -637,6 +682,130 @@ export interface ProdutosRevisaoManualResponse {
   data: Record<string, unknown>[];
 }
 
+export interface ProdutosRevisaoFinalResponse {
+  success: boolean;
+  available: boolean;
+  file_path: string;
+  summary: {
+    total_grupos: number;
+    grupos_revisao_manual: number;
+    grupos_com_gtin: number;
+    grupos_com_cest: number;
+  };
+}
+
+export type BatchRuleId =
+  | "R1_HIGH_CONFIDENCE_FULL_FISCAL"
+  | "R2_NCM_CEST"
+  | "R3_GTIN_NCM"
+  | "R6_MANTER_SEPARADO";
+
+export type FiscalRelationState = "EQUAL_FILLED" | "EQUAL_NULL" | "CONFLICT" | "INCOMPLETE";
+
+export interface UnificacaoLotePreviewRequest {
+  cnpj: string;
+  source_context?: string;
+  filters?: {
+    descricao_contains?: string;
+    ncm_contains?: string;
+    cest_contains?: string;
+    show_verified?: boolean;
+  };
+  grouping_mode?: string;
+  similarity_source?: {
+    engine?: "DOCUMENTAL" | "LIGHT" | "FAISS";
+    use_cache?: boolean;
+    top_k?: number;
+    min_score?: number;
+  };
+  rule_ids?: BatchRuleId[];
+  options?: {
+    only_visible?: boolean;
+    require_all_pairs_compatible?: boolean;
+    max_component_size?: number;
+  };
+}
+
+export interface UnificacaoLoteProposalItem {
+  proposal_id: string;
+  rule_id: BatchRuleId;
+  button_label: string;
+  confidence_band: "HIGH" | "MEDIUM_HIGH" | "MEDIUM" | "LOW";
+  status: "ELEGIVEL";
+  source_method: string;
+  component_size: number;
+  chaves_produto: string[];
+  descricao_canonica_sugerida: string;
+  lista_descricoes: string[];
+  fiscal_signature: {
+    ncm_values: string[];
+    cest_values: string[];
+    gtin_values: string[];
+  };
+  relation_summary: {
+    ncm: FiscalRelationState;
+    cest: FiscalRelationState;
+    gtin: FiscalRelationState;
+  };
+  metrics: {
+    score_descricao_min: number;
+    score_descricao_avg: number;
+    score_descr_compl_avg: number;
+    filled_evidence_count: number;
+    score_final_regra: number;
+  };
+  blocked: boolean;
+  blocked_reason: string | null;
+}
+
+export interface UnificacaoLotePreviewResponse {
+  success: boolean;
+  cnpj: string;
+  source_context: string;
+  similarity_source: {
+    engine: string;
+    use_cache: boolean;
+    top_k: number;
+    min_score: number;
+  };
+  rule_ids: BatchRuleId[];
+  dataset_hash?: string | null;
+  generated_at_utc: string;
+  resumo: {
+    total_rows_considered: number;
+    total_candidate_pairs: number;
+    total_components: number;
+    total_proposals: number;
+    by_rule: Array<{
+      rule_id: BatchRuleId;
+      button_label: string;
+      proposal_count: number;
+      group_count: number;
+    }>;
+  };
+  proposals: UnificacaoLoteProposalItem[];
+}
+
+export interface UnificacaoLoteApplyRequest extends UnificacaoLotePreviewRequest {
+  action: "UNIFICAR" | "MANTER_SEPARADO";
+  rule_id: BatchRuleId;
+  proposal_ids: string[];
+}
+
+export interface UnificacaoLoteApplyResponse {
+  success: boolean;
+  cnpj: string;
+  action: "UNIFICAR" | "MANTER_SEPARADO";
+  rule_id: BatchRuleId;
+  applied_count: number;
+  affected_groups_count: number;
+  skipped_count: number;
+  skipped: Array<{ proposal_id: string; reason: string }>;
+  status_updates_count: number;
+  mapa_manual_path?: string;
+  status_path?: string;
+}
+
 export interface ParesGruposSimilaresItem {
   chave_produto_a: string;
   descricao_a: string;
@@ -670,7 +839,7 @@ export interface ParesGruposSimilaresItem {
 export interface ParesGruposSimilaresResponse {
   success: boolean;
   available?: boolean;
-  metodo?: "lexical" | "semantic" | "hybrid";
+  metodo?: "lexical" | "light" | "faiss" | "semantic" | "hybrid";
   message?: string;
   cache_metadata?: {
     metodo?: string;
@@ -686,6 +855,8 @@ export interface ParesGruposSimilaresResponse {
   data: ParesGruposSimilaresItem[];
   page: number;
   page_size: number;
+  total_file?: number;
+  total_filtered?: number;
   total: number;
   total_pages: number;
   quick_filter_counts?: {
@@ -807,12 +978,31 @@ export async function getProdutosRevisaoManual(cnpj: string) {
   return request<ProdutosRevisaoManualResponse>(`/produtos/revisao-manual?cnpj=${encodeURIComponent(cnpj)}`);
 }
 
+export async function getProdutosRevisaoFinal(cnpj: string) {
+  return request<ProdutosRevisaoFinalResponse>(`/produtos/revisao-final?cnpj=${encodeURIComponent(cnpj)}`);
+}
+
+export async function previewUnificacaoLote(req: UnificacaoLotePreviewRequest) {
+  return request<UnificacaoLotePreviewResponse>("/produtos/unificacao-lote/propostas", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function applyUnificacaoLote(req: UnificacaoLoteApplyRequest) {
+  return request<UnificacaoLoteApplyResponse>("/produtos/unificacao-lote/aplicar", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
 export async function getParesGruposSimilares(
   cnpj: string,
-  metodo: "lexical" | "semantic" | "hybrid" = "lexical",
+  metodo: "lexical" | "light" | "faiss" | "semantic" | "hybrid" = "lexical",
   forcarRecalculo = false,
   options?: {
     topK?: number;
+    minScore?: number;
     minSemanticScore?: number;
     page?: number;
     pageSize?: number;
@@ -823,6 +1013,7 @@ export async function getParesGruposSimilares(
   }
 ) {
   const topK = options?.topK ?? 8;
+  const minScore = options?.minScore ?? options?.minSemanticScore ?? 0.72;
   const minSemanticScore = options?.minSemanticScore ?? 0.32;
   const page = options?.page ?? 1;
   const pageSize = options?.pageSize ?? 50;
@@ -831,7 +1022,7 @@ export async function getParesGruposSimilares(
   const sortKey = options?.sortKey ?? "PRIORIDADE";
   const showAnalyzed = options?.showAnalyzed ?? false;
   return request<ParesGruposSimilaresResponse>(
-    `/produtos/pares-grupos-similares?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}&forcar_recalculo=${forcarRecalculo ? "true" : "false"}&top_k=${encodeURIComponent(String(topK))}&min_semantic_score=${encodeURIComponent(String(minSemanticScore))}&page=${encodeURIComponent(String(page))}&page_size=${encodeURIComponent(String(pageSize))}&search=${encodeURIComponent(search)}&quick_filter=${encodeURIComponent(quickFilter)}&sort_key=${encodeURIComponent(sortKey)}&show_analyzed=${showAnalyzed ? "true" : "false"}`
+    `/produtos/pares-grupos-similares?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}&forcar_recalculo=${forcarRecalculo ? "true" : "false"}&top_k=${encodeURIComponent(String(topK))}&min_score=${encodeURIComponent(String(minScore))}&min_semantic_score=${encodeURIComponent(String(minSemanticScore))}&page=${encodeURIComponent(String(page))}&page_size=${encodeURIComponent(String(pageSize))}&search=${encodeURIComponent(search)}&quick_filter=${encodeURIComponent(quickFilter)}&sort_key=${encodeURIComponent(sortKey)}&show_analyzed=${showAnalyzed ? "true" : "false"}`
   );
 }
 
@@ -840,11 +1031,20 @@ export interface VectorizacaoStatusResponse {
   current_base_hash?: string | null;
   status: {
     available: boolean;
+    light_available?: boolean;
     message: string;
     model_name?: string;
     engine?: string | null;
+    modes?: {
+      faiss?: { available: boolean; message: string; model_name?: string; engine?: string | null };
+      light?: { available: boolean; message: string; model_name?: string; engine?: string | null };
+      semantic?: { available: boolean; message: string; model_name?: string; engine?: string | null };
+      hybrid?: { available: boolean; message: string; model_name?: string; engine?: string | null };
+    };
   };
   caches: {
+    faiss?: Record<string, unknown> & { stale?: boolean };
+    light?: Record<string, unknown> & { stale?: boolean };
     semantic?: Record<string, unknown> & { stale?: boolean };
     hybrid?: Record<string, unknown> & { stale?: boolean };
   };
@@ -878,7 +1078,7 @@ export async function rebuildRuntimeProdutos(cnpj: string) {
   );
 }
 
-export async function clearVectorizacaoCache(cnpj: string, metodo: "semantic" | "hybrid" | "all" = "all") {
+export async function clearVectorizacaoCache(cnpj: string, metodo: "faiss" | "light" | "semantic" | "hybrid" | "all" = "all") {
   return request<{ success: boolean; message: string; removed: string[] }>(
     `/produtos/vectorizacao-clear-cache?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}`,
     { method: "POST" }

@@ -1,0 +1,10 @@
+{
+  "metodo": "faiss",
+  "modelo_vetorizacao": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "engine": "faiss",
+  "input_base_hash": "d7664250541ccf31ea276a775333e48a74cd6e27",
+  "top_k": 8,
+  "min_semantic_score": 0.72,
+  "batch_size": 32,
+  "generated_at_utc": "2026-03-16T16:47:36.596767+00:00"
+}

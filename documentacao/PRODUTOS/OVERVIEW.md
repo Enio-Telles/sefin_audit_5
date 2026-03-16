@@ -19,6 +19,25 @@ Objetivo: Consolidar códigos, descrições e atributos de produtos de fontes di
 NFe/NFCe + SPED 0200 → Mapas por fonte → Unificação Master → Revisão Manual → Aplicar Unificações → Mapas/Auditoria
 ```
 
+## Mapeamento de Campos por Fonte
+
+Tabela baseada no runtime atual em `server/python/core/produto_runtime.py`, funcao `_carregar_base_detalhes`, que normaliza cada origem para a base canonica de detalhes.
+
+| Campo canonico | NFe | NFCe | C170 | Bloco H | Observacao |
+|------|------|------|------|------|------|
+| `Codigo` | `prod_cprod` | `prod_cprod` | `cod_item` | `codigo_produto` | Campo minimo obrigatorio para a linha entrar na base de detalhes. |
+| `Descricao` | `prod_xprod` | `prod_xprod` | `descr_item` | `descricao_produto` | Campo minimo obrigatorio para a linha entrar na base de detalhes. |
+| `Descr_compl` | `(vazio)` | `(vazio)` | `descr_compl` | `(vazio)` | Quando a fonte nao fornece a coluna, o runtime grava string vazia. |
+| `Tipo_item` | `(vazio)` | `(vazio)` | `tipo_item` | `tipo_item` | NFe/NFCe nao populam `tipo_item` no mapeamento atual. |
+| `NCM` | `prod_ncm` | `prod_ncm` | `cod_ncm` | `cod_ncm` | Normalizado como texto. |
+| `CEST` | `prod_cest` | `prod_cest` | `cest` | `cest` | Normalizado como texto. |
+| `GTIN` | `prod_cean` | `prod_cean` | `cod_barra` | `cod_barra` | Passa por saneamento via `_clean_gtin`. |
+
+Observacoes tecnicas:
+- `NFe` e `NFCe` usam o mesmo layout de mapeamento no runtime atual.
+- Se `Codigo` ou `Descricao` vierem vazios, a linha e descartada antes de entrar em `base_detalhes_produtos_{cnpj}.parquet`.
+- O fluxo novo parte apenas de `NFe`, `NFCe`, `C170` e `Bloco H`, como definido em `documentacao/Fluxo de Consolidação de Produtos.md`.
+
 ### Campos da Tabela Master de Produtos (produtos_agregados_{cnpj}.parquet)
 
 Campos gerados por `cruzamentos/produtos/produto_unid.py` (função `UnificadorProdutos.construir_plano_mestre`):
@@ -52,5 +71,6 @@ Observações técnicas:
 ## Leitura Recomendada
 - [DADOS_REFERENCIAIS.md](./DADOS_REFERENCIAIS.md)
 - [PIPELINE_PRODUTOS.md](./PIPELINE_PRODUTOS.md)
+![1773606332780](image/OVERVIEW/1773606332780.png)- [PROPOSTA_VETORIZACAO_OPCIONAL.md](./PROPOSTA_VETORIZACAO_OPCIONAL.md)
 - [API_SCRIPTS.md](./API_SCRIPTS.md)
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)

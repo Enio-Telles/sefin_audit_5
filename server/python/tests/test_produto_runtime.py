@@ -4,7 +4,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import numpy as np
 import polars as pl
 
 
@@ -14,11 +16,15 @@ if str(SERVER_PYTHON_DIR) not in sys.path:
 
 from core.produto_runtime import (  # noqa: E402
     _DETAIL_COLUMNS,
+    _aplicar_desagregacao_codigos,
     _aplicar_mapas_manuais,
     _build_codigos_multidescricao,
     _build_produtos_agregados,
     _build_produtos_indexados,
     _build_variacoes_produtos,
+    _classificar_par,
+    construir_tabela_pares_descricoes_faiss,
+    construir_tabela_pares_descricoes_light,
 )
 
 
@@ -164,6 +170,54 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
         self.assertEqual(row["qtd_codigos"], 2)
         self.assertEqual(row["qtd_gtin"], 2)
 
+    def test_aplicar_desagregacao_codigos_elimina_codigo_repetido_entre_descricoes(self) -> None:
+        df_base = pl.DataFrame(
+            [
+                {
+                    "fonte": "NFE",
+                    "codigo": "777",
+                    "descricao": "BISCOITO CHOCOLATE",
+                    "descr_compl": "",
+                    "tipo_item": "",
+                    "ncm": "19053100",
+                    "cest": "1704700",
+                    "gtin": "7890000007771",
+                    "unid": "UN",
+                    "codigo_original": "777",
+                    "descricao_original": "BISCOITO CHOCOLATE",
+                    "tipo_item_original": "",
+                    "hash_manual_key": "h1",
+                },
+                {
+                    "fonte": "NFE",
+                    "codigo": "777",
+                    "descricao": "BISCOITO MORANGO",
+                    "descr_compl": "",
+                    "tipo_item": "",
+                    "ncm": "19053100",
+                    "cest": "1704700",
+                    "gtin": "7890000007772",
+                    "unid": "UN",
+                    "codigo_original": "777",
+                    "descricao_original": "BISCOITO MORANGO",
+                    "tipo_item_original": "",
+                    "hash_manual_key": "h2",
+                },
+            ]
+        ).select(_DETAIL_COLUMNS)
+
+        desagregado = _aplicar_desagregacao_codigos(df_base)
+        produtos = _build_produtos_agregados(desagregado)
+
+        self.assertEqual(produtos.height, 2)
+        lista_codigos = produtos.get_column("lista_codigos").to_list()
+        self.assertEqual(len(set(lista_codigos)), 2)
+        self.assertTrue(all("777_SEPARADO_" in codigo for codigo in lista_codigos))
+        self.assertEqual(
+            set(desagregado.get_column("codigo").to_list()),
+            {"777_SEPARADO_01", "777_SEPARADO_02"},
+        )
+
     def test_aplicar_mapas_manuais_unifies_descriptions_and_overrides_item(self) -> None:
         df_base = _base_df()
         with tempfile.TemporaryDirectory() as tmp:
@@ -212,6 +266,135 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
         self.assertEqual(manual_row["gtin"], "789000000555")
         self.assertEqual(manual_row["tipo_item"], "01")
         self.assertEqual(other_row["descricao"], "FEIJAO CANONICO")
+
+    def test_classificar_par_uses_golden_key_when_gtin_ncm_cest_match(self) -> None:
+        result = _classificar_par(
+            score_descricao=0.05,
+            score_ncm=1.0,
+            score_cest=1.0,
+            score_gtin=1.0,
+            a={"gtin": "789000000555", "ncm": "22083020", "cest": "0201600"},
+            b={"gtin": "789000000555", "ncm": "22083020", "cest": "0201600"},
+        )
+
+        self.assertEqual(result["recomendacao"], "UNIR_AUTOMATICO_ELEGIVEL")
+        self.assertTrue(result["uniao_automatica_elegivel"])
+        self.assertEqual(result["motivo_recomendacao"], "GTIN valido coincide com NCM/CEST compativeis.")
+        self.assertGreaterEqual(result["score_final"], 0.99)
+
+    def test_construir_tabela_pares_descricoes_light_prioritizes_close_descriptions(self) -> None:
+        df_agregados = pl.DataFrame(
+            [
+                {
+                    "chave_produto": "ID_0001",
+                    "descricao": "ARROZ TIPO 1 5KG",
+                    "descricao_normalizada": "ARROZ TIPO 1 5KG",
+                    "lista_descricao": "ARROZ TIPO 1 5KG",
+                    "lista_descr_compl": "PACOTE 5KG",
+                    "lista_codigos": "001",
+                    "ncm_consenso": "10063021",
+                    "cest_consenso": "",
+                    "gtin_consenso": "7890000000011",
+                    "descricoes_conflitantes": "",
+                },
+                {
+                    "chave_produto": "ID_0002",
+                    "descricao": "ARROZ TIPO 1 5 KG",
+                    "descricao_normalizada": "ARROZ TIPO 1 5 KG",
+                    "lista_descricao": "ARROZ TIPO 1 5 KG",
+                    "lista_descr_compl": "PACOTE 5KG",
+                    "lista_codigos": "002",
+                    "ncm_consenso": "10063021",
+                    "cest_consenso": "",
+                    "gtin_consenso": "",
+                    "descricoes_conflitantes": "",
+                },
+                {
+                    "chave_produto": "ID_0003",
+                    "descricao": "REFRIGERANTE UVA 2L",
+                    "descricao_normalizada": "REFRIGERANTE UVA 2L",
+                    "lista_descricao": "REFRIGERANTE UVA 2L",
+                    "lista_descr_compl": "",
+                    "lista_codigos": "003",
+                    "ncm_consenso": "22021000",
+                    "cest_consenso": "",
+                    "gtin_consenso": "",
+                    "descricoes_conflitantes": "",
+                },
+            ]
+        )
+
+        df_pairs = construir_tabela_pares_descricoes_light(df_agregados, top_k=5, min_score=0.70)
+
+        self.assertEqual(df_pairs.height, 1)
+        row = df_pairs.to_dicts()[0]
+        self.assertEqual({row["chave_produto_a"], row["chave_produto_b"]}, {"ID_0001", "ID_0002"})
+        self.assertGreaterEqual(row["score_descricao"], 0.60)
+        self.assertEqual(row["metodo_similaridade"], "LIGHT_VECTOR")
+        self.assertEqual(row["modelo_vetorizacao"], "CHAR_NGRAM_TFIDF_V1")
+
+    def test_construir_tabela_pares_descricoes_faiss_prioritizes_semantic_neighbors(self) -> None:
+        df_agregados = pl.DataFrame(
+            [
+                {
+                    "chave_produto": "ID_0001",
+                    "descricao": "WHISKY RED LABEL 1L",
+                    "descricao_normalizada": "WHISKY RED LABEL 1L",
+                    "lista_descricao": "WHISKY RED LABEL 1L",
+                    "lista_descr_compl": "GARRAFA 1L",
+                    "lista_codigos": "001",
+                    "ncm_consenso": "22083020",
+                    "cest_consenso": "0201600",
+                    "gtin_consenso": "",
+                    "descricoes_conflitantes": "",
+                },
+                {
+                    "chave_produto": "ID_0002",
+                    "descricao": "WHISKY JW RED LABEL 1000ML",
+                    "descricao_normalizada": "WHISKY JW RED LABEL 1000ML",
+                    "lista_descricao": "WHISKY JW RED LABEL 1000ML",
+                    "lista_descr_compl": "GARRAFA 1L",
+                    "lista_codigos": "002",
+                    "ncm_consenso": "22083020",
+                    "cest_consenso": "0201600",
+                    "gtin_consenso": "",
+                    "descricoes_conflitantes": "",
+                },
+                {
+                    "chave_produto": "ID_0003",
+                    "descricao": "SABAO EM PO 800G",
+                    "descricao_normalizada": "SABAO EM PO 800G",
+                    "lista_descricao": "SABAO EM PO 800G",
+                    "lista_descr_compl": "",
+                    "lista_codigos": "003",
+                    "ncm_consenso": "34025000",
+                    "cest_consenso": "",
+                    "gtin_consenso": "",
+                    "descricoes_conflitantes": "",
+                },
+            ]
+        )
+
+        mock_vectors = np.asarray(
+            [
+                [1.0, 0.0, 0.0],
+                [0.96, 0.04, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            dtype="float32",
+        )
+
+        with patch("core.produto_runtime._semantic_runtime_available", return_value=True), patch(
+            "core.produto_runtime._encode_faiss_rows", return_value=mock_vectors
+        ):
+            df_pairs = construir_tabela_pares_descricoes_faiss(df_agregados, top_k=4, min_score=0.80)
+
+        self.assertEqual(df_pairs.height, 1)
+        row = df_pairs.to_dicts()[0]
+        self.assertEqual({row["chave_produto_a"], row["chave_produto_b"]}, {"ID_0001", "ID_0002"})
+        self.assertEqual(row["metodo_similaridade"], "FAISS_VECTOR")
+        self.assertEqual(row["origem_par_hibrido"], "faiss_cosine")
+        self.assertGreaterEqual(float(row["score_semantico"]), 0.90)
 
 
 if __name__ == "__main__":

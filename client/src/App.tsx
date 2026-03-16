@@ -15,9 +15,8 @@ import Configuracoes from "./pages/Configuracoes";
 import AnaliseFaturamentoPeriodo from "./pages/AnaliseFaturamentoPeriodo";
 import AuditarCNPJ from "./pages/AuditarCNPJ";
 import LoteAuditoria from "./pages/LoteAuditoria";
-import RevisaoManual from "./pages/RevisaoManual";
-import RevisaoParesGrupos from "./pages/RevisaoParesGrupos";
-import AgregacaoSelecao from "./pages/AgregacaoSelecao";
+import AnaliseProdutos from "./pages/AnaliseProdutos";
+import RevisaoFatores from "./pages/RevisaoFatores";
 import UnificarProdutoPage from "./pages/UnificarProdutoPage";
 import MultiUnificarProdutoPage from "./pages/MultiUnificarProdutoPage";
 import DesagregarProdutoPage from "./pages/DesagregarProdutoPage";
@@ -37,9 +36,11 @@ function Router() {
             <Route path="/extracao" component={Extracao} />
             <Route path="/tabelas" component={Tabelas} />
             <Route path="/tabelas/view" component={Tabelas} />
-            <Route path="/revisao-manual" component={RevisaoManual} />
-            <Route path="/revisao-pares-grupos" component={RevisaoParesGrupos} />
-            <Route path="/agregacao-selecao" component={AgregacaoSelecao} />
+            <Route path="/analise-produtos" component={AnaliseProdutos} />
+            <Route path="/revisao-manual" component={AnaliseProdutos} />
+            <Route path="/revisao-pares-grupos" component={AnaliseProdutos} />
+            <Route path="/agregacao-selecao" component={AnaliseProdutos} />
+            <Route path="/revisao-fatores" component={RevisaoFatores} />
             <Route path="/exportar" component={Exportar} />
             <Route path="/relatorios" component={Relatorios} />
             <Route path="/analises" component={Analises} />

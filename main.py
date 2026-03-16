@@ -8,6 +8,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -51,6 +53,20 @@ def wait_for_port(port: int, host: str = "127.0.0.1", timeout_s: float = 20.0) -
     while time.time() - start < timeout_s:
         if is_port_open(port, host):
             return True
+        time.sleep(0.5)
+    return False
+
+
+def wait_for_http(url: str, timeout_s: float = 30.0) -> bool:
+    start = time.time()
+    while time.time() - start < timeout_s:
+        try:
+            with urllib.request.urlopen(url, timeout=2.0) as response:
+                status = getattr(response, "status", 200)
+                if 200 <= status < 500:
+                    return True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            pass
         time.sleep(0.5)
     return False
 

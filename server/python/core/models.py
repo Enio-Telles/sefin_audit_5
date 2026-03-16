@@ -198,3 +198,45 @@ class ProdutoAnaliseStatusRequest(BaseModel):
     ref_id_aux: Optional[str] = None
     descricao_ref: Optional[str] = None
     contexto_tela: Optional[str] = None
+
+
+class UnificacaoLoteFiltersRequest(BaseModel):
+    descricao_contains: Optional[str] = ""
+    ncm_contains: Optional[str] = ""
+    cest_contains: Optional[str] = ""
+    show_verified: bool = False
+
+
+class UnificacaoLoteSimilaritySourceRequest(BaseModel):
+    engine: Optional[str] = "DOCUMENTAL"
+    use_cache: bool = True
+    top_k: int = 8
+    min_score: float = 0.72
+
+
+class UnificacaoLoteOptionsRequest(BaseModel):
+    only_visible: bool = True
+    require_all_pairs_compatible: bool = True
+    max_component_size: int = 12
+
+
+class UnificacaoLotePreviewRequest(BaseModel):
+    cnpj: str
+    source_context: Optional[str] = "REVISAO_FINAL"
+    filters: Optional[UnificacaoLoteFiltersRequest] = None
+    grouping_mode: Optional[str] = "flat"
+    similarity_source: Optional[UnificacaoLoteSimilaritySourceRequest] = None
+    rule_ids: Optional[list[str]] = None
+    options: Optional[UnificacaoLoteOptionsRequest] = None
+
+
+class UnificacaoLoteApplyRequest(BaseModel):
+    cnpj: str
+    source_context: Optional[str] = "REVISAO_FINAL"
+    action: str
+    rule_id: str
+    proposal_ids: list[str]
+    filters: Optional[UnificacaoLoteFiltersRequest] = None
+    grouping_mode: Optional[str] = "flat"
+    similarity_source: Optional[UnificacaoLoteSimilaritySourceRequest] = None
+    options: Optional[UnificacaoLoteOptionsRequest] = None

@@ -23,12 +23,23 @@ from core.models import (
     ResolverManualUnificarRequest,
     ResolverManualDesagregarRequest,
     ResolverManualMultiDetalhesRequest,
+    UnificacaoLoteApplyRequest,
+    UnificacaoLotePreviewRequest,
+)
+from core.produto_batch_lote import (
+    RULE_CONFIG as BATCH_RULE_CONFIG,
+    RULE_PRIORITY as BATCH_RULE_PRIORITY,
+    construir_preview_unificacao_lote,
+    filtrar_tabela_final_para_lote,
+    ocultar_grupos_verificados,
 )
 from core.produto_runtime import (
     _normalize_mapa_descricoes_manual,
     build_vector_cache_metadata,
     cache_metadata_matches,
     compute_file_sha1,
+    construir_tabela_pares_descricoes_faiss,
+    construir_tabela_pares_descricoes_light,
     construir_tabela_pares_descricoes_hibridos,
     construir_tabela_pares_descricoes_semanticos,
     construir_tabela_pares_descricoes_similares,
@@ -638,12 +649,365 @@ async def get_produtos_revisao_manual(cnpj: str = Query(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/produtos/revisao-final")
+async def get_produtos_revisao_final(cnpj: str = Query(...)):
+    """Retorna metadados da tabela final de produtos ja desagregada para a tela unica de revisao."""
+    cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    try:
+        _, dir_analises, _ = _load_cnpj_dirs(cnpj_limpo)
+        agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
+
+        if not agregados_path.exists():
+            return {
+                "success": True,
+                "available": False,
+                "file_path": str(agregados_path),
+                "summary": {
+                    "total_grupos": 0,
+                    "grupos_revisao_manual": 0,
+                    "grupos_com_gtin": 0,
+                    "grupos_com_cest": 0,
+                },
+            }
+
+        df = pl.read_parquet(str(agregados_path))
+        expected_columns = {
+            "lista_codigos",
+            "lista_ncm",
+            "lista_cest",
+            "lista_gtin",
+            "codigo_padrao",
+            "lista_descr_compl",
+        }
+        if not expected_columns.issubset(set(df.columns)):
+            logger.info(
+                "[get_produtos_revisao_final] parquet com schema antigo detectado para %s; regenerando tabela final.",
+                cnpj_limpo,
+            )
+            df = unificar_produtos_unidades(cnpj_limpo, projeto_dir=_PROJETO_DIR)
+
+        return {
+            "success": True,
+            "available": True,
+            "file_path": str(agregados_path),
+            "summary": {
+                "total_grupos": int(df.height),
+                "grupos_revisao_manual": int(df.filter(pl.col("requer_revisao_manual") == True).height)
+                if "requer_revisao_manual" in df.columns
+                else 0,
+                "grupos_com_gtin": int(df.filter(pl.col("gtin_consenso").cast(pl.Utf8) != "").height)
+                if "gtin_consenso" in df.columns
+                else 0,
+                "grupos_com_cest": int(df.filter(pl.col("cest_consenso").cast(pl.Utf8) != "").height)
+                if "cest_consenso" in df.columns
+                else 0,
+            },
+        }
+    except Exception as e:
+        logger.error("[get_produtos_revisao_final] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _carregar_pares_preview_lote(
+    cnpj_limpo: str,
+    dir_analises: Path,
+    df_agregados_filtrados: pl.DataFrame,
+    engine: str,
+    use_cache: bool,
+    top_k: int,
+    min_score: float,
+) -> tuple[pl.DataFrame, str]:
+    engine_norm = str(engine or "DOCUMENTAL").strip().upper()
+    visible_keys = set(df_agregados_filtrados.get_column("chave_produto").cast(pl.Utf8).to_list()) if "chave_produto" in df_agregados_filtrados.columns else set()
+
+    if engine_norm == "FAISS":
+        pares_path = dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.parquet"
+        if use_cache and pares_path.exists():
+            df_pairs = pl.read_parquet(str(pares_path))
+        else:
+            df_pairs = construir_tabela_pares_descricoes_faiss(
+                df_agregados_filtrados,
+                top_k=max(2, min(int(top_k), 20)),
+                min_score=max(0.30, min(float(min_score), 0.98)),
+                batch_size=32,
+            )
+    elif engine_norm == "LIGHT":
+        pares_path = dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.parquet"
+        if use_cache and pares_path.exists():
+            df_pairs = pl.read_parquet(str(pares_path))
+        else:
+            df_pairs = construir_tabela_pares_descricoes_light(
+                df_agregados_filtrados,
+                top_k=max(2, min(int(top_k), 20)),
+                min_score=max(0.30, min(float(min_score), 0.98)),
+            )
+    else:
+        df_pairs = construir_tabela_pares_descricoes_similares(df_agregados_filtrados)
+        engine_norm = "DOCUMENTAL"
+
+    if visible_keys and not df_pairs.is_empty():
+        df_pairs = df_pairs.filter(
+            pl.col("chave_produto_a").cast(pl.Utf8).is_in(sorted(visible_keys))
+            & pl.col("chave_produto_b").cast(pl.Utf8).is_in(sorted(visible_keys))
+        )
+    return df_pairs, engine_norm
+
+
+def _empty_batch_filters():
+    return type("Filters", (), {"descricao_contains": "", "ncm_contains": "", "cest_contains": "", "show_verified": False})()
+
+
+def _empty_batch_options():
+    return type("Options", (), {"only_visible": True, "require_all_pairs_compatible": True, "max_component_size": 12})()
+
+
+def _empty_batch_similarity():
+    return type("Similarity", (), {"engine": "DOCUMENTAL", "use_cache": True, "top_k": 8, "min_score": 0.72})()
+
+
+def _run_preview_unificacao_lote(req: UnificacaoLotePreviewRequest) -> dict[str, Any]:
+    cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
+    _, dir_analises, _ = _load_cnpj_dirs(cnpj_limpo)
+    agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
+    if not agregados_path.exists():
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "source_context": str(req.source_context or "REVISAO_FINAL"),
+            "similarity_source": {"engine": "DOCUMENTAL", "use_cache": True, "top_k": 8, "min_score": 0.72},
+            "rule_ids": list(BATCH_RULE_PRIORITY),
+            "dataset_hash": None,
+            "generated_at_utc": datetime.now(UTC).isoformat(),
+            "resumo": {
+                "total_rows_considered": 0,
+                "total_candidate_pairs": 0,
+                "total_components": 0,
+                "total_proposals": 0,
+                "by_rule": [],
+            },
+            "proposals": [],
+        }
+
+    filters = req.filters or _empty_batch_filters()
+    options = req.options or _empty_batch_options()
+    similarity = req.similarity_source or _empty_batch_similarity()
+    requested_rules = [str(rule or "").strip() for rule in (req.rule_ids or list(BATCH_RULE_PRIORITY))]
+    rule_ids = [rule for rule in BATCH_RULE_PRIORITY if rule in requested_rules]
+    if not rule_ids:
+        raise HTTPException(status_code=400, detail="Nenhuma regra de lote suportada foi informada.")
+
+    df_agregados = pl.read_parquet(str(agregados_path))
+    df_agregados = filtrar_tabela_final_para_lote(
+        df_agregados,
+        descricao_contains=str(filters.descricao_contains or ""),
+        ncm_contains=str(filters.ncm_contains or ""),
+        cest_contains=str(filters.cest_contains or ""),
+    )
+    if bool(options.only_visible):
+        status_path = _gravar_status_analise(dir_analises, cnpj_limpo)
+        df_status = pl.read_parquet(str(status_path)) if status_path.exists() else None
+        df_agregados = ocultar_grupos_verificados(df_agregados, df_status, bool(filters.show_verified))
+
+    if df_agregados.is_empty():
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "source_context": str(req.source_context or "REVISAO_FINAL"),
+            "similarity_source": {
+                "engine": str(similarity.engine or "DOCUMENTAL").strip().upper(),
+                "use_cache": bool(similarity.use_cache),
+                "top_k": int(similarity.top_k or 8),
+                "min_score": float(similarity.min_score or 0.72),
+            },
+            "rule_ids": rule_ids,
+            "dataset_hash": compute_file_sha1(agregados_path),
+            "generated_at_utc": datetime.now(UTC).isoformat(),
+            "resumo": {
+                "total_rows_considered": 0,
+                "total_candidate_pairs": 0,
+                "total_components": 0,
+                "total_proposals": 0,
+                "by_rule": [
+                    {"rule_id": rule_id, "button_label": BATCH_RULE_CONFIG[rule_id]["button_label"], "proposal_count": 0, "group_count": 0}
+                    for rule_id in rule_ids
+                ],
+            },
+            "proposals": [],
+        }
+
+    df_pairs, engine_used = _carregar_pares_preview_lote(
+        cnpj_limpo,
+        dir_analises,
+        df_agregados,
+        engine=str(similarity.engine or "DOCUMENTAL"),
+        use_cache=bool(similarity.use_cache),
+        top_k=int(similarity.top_k or 8),
+        min_score=float(similarity.min_score or 0.72),
+    )
+    preview = construir_preview_unificacao_lote(
+        df_agregados,
+        df_pairs,
+        rule_ids=rule_ids,
+        source_method=engine_used,
+        require_all_pairs_compatible=bool(options.require_all_pairs_compatible),
+        max_component_size=max(2, min(int(options.max_component_size or 12), 50)),
+    )
+    return {
+        "success": True,
+        "cnpj": cnpj_limpo,
+        "source_context": str(req.source_context or "REVISAO_FINAL"),
+        "similarity_source": {
+            "engine": engine_used,
+            "use_cache": bool(similarity.use_cache),
+            "top_k": int(similarity.top_k or 8),
+            "min_score": float(similarity.min_score or 0.72),
+        },
+        "rule_ids": rule_ids,
+        "dataset_hash": compute_file_sha1(agregados_path),
+        **preview,
+    }
+
+
+@router.post("/produtos/unificacao-lote/propostas")
+async def preview_unificacao_lote(req: UnificacaoLotePreviewRequest):
+    cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    try:
+        return _run_preview_unificacao_lote(req)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[preview_unificacao_lote] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/produtos/unificacao-lote/aplicar")
+async def aplicar_unificacao_lote(req: UnificacaoLoteApplyRequest):
+    cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ invalido")
+    action = _normalize_status_text(req.action)
+    rule_id = _normalize_status_text(req.rule_id)
+    if action not in {"UNIFICAR", "MANTER_SEPARADO"}:
+        raise HTTPException(status_code=400, detail="Acao de lote nao suportada.")
+    if not req.proposal_ids:
+        raise HTTPException(status_code=400, detail="Nenhuma proposta foi informada.")
+    try:
+        preview_req = UnificacaoLotePreviewRequest(
+            cnpj=req.cnpj,
+            source_context=req.source_context,
+            filters=req.filters,
+            grouping_mode=req.grouping_mode,
+            similarity_source=req.similarity_source,
+            rule_ids=[rule_id],
+            options=req.options,
+        )
+        preview = _run_preview_unificacao_lote(preview_req)
+        proposals = {str(item.get("proposal_id")): item for item in preview.get("proposals", []) if str(item.get("rule_id")) == rule_id}
+        selected_ids = [str(item).strip() for item in req.proposal_ids if str(item).strip()]
+        selected_proposals = [proposals[item] for item in selected_ids if item in proposals]
+        skipped = [{"proposal_id": item, "reason": "proposta nao encontrada ou nao elegivel com os filtros atuais"} for item in selected_ids if item not in proposals]
+
+        _, dir_analises, _ = _load_cnpj_dirs(cnpj_limpo)
+        mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
+        regras: list[dict[str, Any]] = []
+
+        if action == "UNIFICAR":
+            for proposal in selected_proposals:
+                canonical = _canon_text(proposal.get("descricao_canonica_sugerida"), "")
+                if not canonical:
+                    skipped.append({"proposal_id": proposal.get("proposal_id", ""), "reason": "descricao canonica ausente"})
+                    continue
+                for descricao in [str(item or "").strip() for item in proposal.get("lista_descricoes", [])]:
+                    origem = _canon_text(descricao, "")
+                    if not origem or origem == canonical:
+                        continue
+                    regras.append(
+                        {
+                            "tipo_regra": "UNIR_GRUPOS",
+                            "descricao_origem": origem,
+                            "descricao_destino": canonical,
+                            "descricao_par": "",
+                            "chave_grupo_a": "",
+                            "chave_grupo_b": "",
+                            "score_origem": str(proposal.get("metrics", {}).get("score_final_regra", "")),
+                            "acao_manual": "AGREGAR",
+                        }
+                    )
+            if regras:
+                merge_mapa_descricoes_manual(str(mapa_descricoes_path), pl.DataFrame(regras), default_acao="AGREGAR")
+                _reprocessar_produtos(dir_analises, cnpj_limpo)
+            else:
+                _gravar_status_analise(dir_analises, cnpj_limpo)
+        else:
+            for proposal in selected_proposals:
+                descricoes = [str(item or "").strip() for item in proposal.get("lista_descricoes", []) if str(item or "").strip()]
+                for index, origem in enumerate(descricoes):
+                    for destino in descricoes[index + 1 :]:
+                        origem_norm = _canon_text(origem, "")
+                        destino_norm = _canon_text(destino, "")
+                        if not origem_norm or not destino_norm or origem_norm == destino_norm:
+                            continue
+                        regras.append(
+                            {
+                                "tipo_regra": "MANTER_SEPARADO",
+                                "descricao_origem": origem_norm,
+                                "descricao_destino": "",
+                                "descricao_par": destino_norm,
+                                "chave_grupo_a": "",
+                                "chave_grupo_b": "",
+                                "score_origem": str(proposal.get("metrics", {}).get("score_final_regra", "")),
+                                "acao_manual": "MANTER_SEPARADO",
+                            }
+                        )
+            if regras:
+                merge_mapa_descricoes_manual(str(mapa_descricoes_path), pl.DataFrame(regras), default_acao="MANTER_SEPARADO")
+            status_path = _gravar_status_analise(dir_analises, cnpj_limpo)
+            return {
+                "success": True,
+                "cnpj": cnpj_limpo,
+                "action": action,
+                "rule_id": rule_id,
+                "applied_count": len(selected_proposals),
+                "affected_groups_count": len({group for proposal in selected_proposals for group in proposal.get("chaves_produto", [])}),
+                "skipped_count": len(skipped),
+                "skipped": skipped,
+                "status_updates_count": len({group for proposal in selected_proposals for group in proposal.get("chaves_produto", [])}),
+                "mapa_manual_path": str(mapa_descricoes_path),
+                "status_path": str(status_path),
+            }
+
+        status_path = _gravar_status_analise(dir_analises, cnpj_limpo)
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "action": action,
+            "rule_id": rule_id,
+            "applied_count": len(selected_proposals),
+            "affected_groups_count": len({group for proposal in selected_proposals for group in proposal.get("chaves_produto", [])}),
+            "skipped_count": len(skipped),
+            "skipped": skipped,
+            "status_updates_count": len({group for proposal in selected_proposals for group in proposal.get("chaves_produto", [])}),
+            "mapa_manual_path": str(mapa_descricoes_path),
+            "status_path": str(status_path),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[aplicar_unificacao_lote] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/produtos/pares-grupos-similares")
 async def get_pares_grupos_similares(
     cnpj: str = Query(...),
     metodo: str = Query("lexical"),
     forcar_recalculo: bool = Query(False),
     top_k: int = Query(8),
+    min_score: float | None = Query(None),
     min_semantic_score: float = Query(0.32),
     page: int = Query(1),
     page_size: int = Query(50),
@@ -673,25 +1037,168 @@ async def get_pares_grupos_similares(
                 "modelo_vetorizacao": None,
             }
 
+        params_top_k = max(2, min(int(top_k), 20))
+        params_threshold = max(0.05, min(float(min_score if min_score is not None else min_semantic_score), 0.98))
+
         base_hash = None
         if agregados_path.exists():
             base_hash = compute_file_sha1(agregados_path)
 
-        if metodo_norm == "semantic":
+        if metodo_norm == "faiss":
             status_vector = obter_status_vectorizacao()
-            pares_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet"
-            metadata_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json"
-            if not status_vector["available"]:
+            faiss_mode = (status_vector.get("modes") or {}).get("faiss") or {}
+            pares_path = dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.parquet"
+            metadata_path = dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.json"
+            if not faiss_mode.get("available"):
                 return {
                     "success": False,
                     "available": False,
-                    "metodo": "semantic",
-                    "message": status_vector["message"],
+                    "metodo": "faiss",
+                    "message": faiss_mode.get("message") or status_vector["message"],
                     "file_path": str(pares_path),
                     "cache_metadata": read_vector_cache_metadata(metadata_path),
                     "data": [],
                     "page": page_norm,
                     "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
+                    "total": 0,
+                    "total_pages": 1,
+                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
+                }
+
+            metadata = read_vector_cache_metadata(metadata_path)
+            cache_ok = pares_path.exists() and cache_metadata_matches(
+                metadata,
+                metodo="faiss",
+                input_base_hash=base_hash,
+                top_k=params_top_k,
+                min_semantic_score=params_threshold,
+                model_name=str(faiss_mode.get("model_name") or "faiss"),
+            )
+
+            if (forcar_recalculo or not cache_ok) and agregados_path.exists():
+                df_agregados = pl.read_parquet(str(agregados_path))
+                construir_tabela_pares_descricoes_faiss(
+                    df_agregados,
+                    top_k=params_top_k,
+                    min_score=params_threshold,
+                    batch_size=32,
+                ).write_parquet(str(pares_path))
+                write_vector_cache_metadata(
+                    metadata_path,
+                    build_vector_cache_metadata(
+                        metodo="faiss",
+                        model_name=str(faiss_mode.get("model_name") or "faiss"),
+                        engine=faiss_mode.get("engine") or "faiss",
+                        input_base_hash=base_hash,
+                        top_k=params_top_k,
+                        min_semantic_score=params_threshold,
+                        batch_size=32,
+                    ),
+                )
+                metadata = read_vector_cache_metadata(metadata_path)
+
+            if not pares_path.exists():
+                return {
+                    "success": True,
+                    "available": True,
+                    "metodo": "faiss",
+                    "message": "Nenhum par FAISS gerado.",
+                    "file_path": str(pares_path),
+                    "cache_metadata": metadata,
+                    "data": [],
+                    "page": page_norm,
+                    "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
+                    "total": 0,
+                    "total_pages": 1,
+                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
+                }
+
+            df = pl.read_parquet(str(pares_path))
+            selected_path = pares_path
+            selected_metadata = metadata
+            selected_message = "Pares FAISS carregados."
+            selected_available = True
+            selected_method = "faiss"
+        elif metodo_norm == "light":
+            light_path = dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.parquet"
+            metadata_path = dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.json"
+            metadata = read_vector_cache_metadata(metadata_path)
+            cache_ok = light_path.exists() and cache_metadata_matches(
+                metadata,
+                metodo="light",
+                input_base_hash=base_hash,
+                top_k=params_top_k,
+                min_semantic_score=params_threshold,
+                model_name="CHAR_NGRAM_TFIDF_V1",
+            )
+
+            if (forcar_recalculo or not cache_ok) and agregados_path.exists():
+                df_agregados = pl.read_parquet(str(agregados_path))
+                construir_tabela_pares_descricoes_light(
+                    df_agregados,
+                    top_k=params_top_k,
+                    min_score=params_threshold,
+                ).write_parquet(str(light_path))
+                write_vector_cache_metadata(
+                    metadata_path,
+                    build_vector_cache_metadata(
+                        metodo="light",
+                        model_name="CHAR_NGRAM_TFIDF_V1",
+                        engine="light",
+                        input_base_hash=base_hash,
+                        top_k=params_top_k,
+                        min_semantic_score=params_threshold,
+                        batch_size=0,
+                    ),
+                )
+                metadata = read_vector_cache_metadata(metadata_path)
+
+            if not light_path.exists():
+                return {
+                    "success": True,
+                    "available": True,
+                    "metodo": "light",
+                    "message": "Nenhuma sugestao leve gerada.",
+                    "file_path": str(light_path),
+                    "cache_metadata": metadata,
+                    "data": [],
+                    "page": page_norm,
+                    "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
+                    "total": 0,
+                    "total_pages": 1,
+                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
+                }
+
+            df = pl.read_parquet(str(light_path))
+            selected_path = light_path
+            selected_metadata = metadata
+            selected_message = "Sugestoes leves carregadas."
+            selected_available = True
+            selected_method = "light"
+        elif metodo_norm == "semantic":
+            status_vector = obter_status_vectorizacao()
+            semantic_mode = (status_vector.get("modes") or {}).get("semantic") or {}
+            pares_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet"
+            metadata_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json"
+            if not semantic_mode.get("available"):
+                return {
+                    "success": False,
+                    "available": False,
+                    "metodo": "semantic",
+                    "message": semantic_mode.get("message") or status_vector["message"],
+                    "file_path": str(pares_path),
+                    "cache_metadata": read_vector_cache_metadata(metadata_path),
+                    "data": [],
+                    "page": page_norm,
+                    "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
                     "total": 0,
                     "total_pages": 1,
                     "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
@@ -702,27 +1209,27 @@ async def get_pares_grupos_similares(
                 metadata,
                 metodo="semantic",
                 input_base_hash=base_hash,
-                top_k=max(2, min(int(top_k), 20)),
-                min_semantic_score=max(0.05, min(float(min_semantic_score), 0.95)),
-                model_name=status_vector.get("model_name") or "semantic",
+                top_k=params_top_k,
+                min_semantic_score=params_threshold,
+                model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
             )
 
             if (forcar_recalculo or not cache_ok) and agregados_path.exists():
                 df_agregados = pl.read_parquet(str(agregados_path))
                 construir_tabela_pares_descricoes_semanticos(
                     df_agregados,
-                    top_k=max(2, min(int(top_k), 20)),
-                    min_semantic_score=max(0.05, min(float(min_semantic_score), 0.95)),
+                    top_k=params_top_k,
+                    min_semantic_score=params_threshold,
                 ).write_parquet(str(pares_path))
                 write_vector_cache_metadata(
                     metadata_path,
                     build_vector_cache_metadata(
                         metodo="semantic",
-                        model_name=status_vector.get("model_name") or "semantic",
-                        engine=status_vector.get("engine"),
+                        model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
+                        engine=semantic_mode.get("engine") or status_vector.get("engine"),
                         input_base_hash=base_hash,
-                        top_k=max(2, min(int(top_k), 20)),
-                        min_semantic_score=max(0.05, min(float(min_semantic_score), 0.95)),
+                        top_k=params_top_k,
+                        min_semantic_score=params_threshold,
                         batch_size=32,
                     ),
                 )
@@ -739,6 +1246,8 @@ async def get_pares_grupos_similares(
                     "data": [],
                     "page": page_norm,
                     "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
                     "total": 0,
                     "total_pages": 1,
                     "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
@@ -752,21 +1261,25 @@ async def get_pares_grupos_similares(
             selected_method = "semantic"
         elif metodo_norm == "hybrid":
             status_vector = obter_status_vectorizacao()
+            hybrid_mode = (status_vector.get("modes") or {}).get("hybrid") or {}
+            semantic_mode = (status_vector.get("modes") or {}).get("semantic") or {}
             lexical_path = dir_analises / f"pares_descricoes_similares_{cnpj_limpo}.parquet"
             semantic_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet"
             hybrid_path = dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.parquet"
             metadata_path = dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.json"
-            if not status_vector["available"]:
+            if not hybrid_mode.get("available"):
                 return {
                     "success": False,
                     "available": False,
                     "metodo": "hybrid",
-                    "message": status_vector["message"],
+                    "message": hybrid_mode.get("message") or status_vector["message"],
                     "file_path": str(hybrid_path),
                     "cache_metadata": read_vector_cache_metadata(metadata_path),
                     "data": [],
                     "page": page_norm,
                     "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
                     "total": 0,
                     "total_pages": 1,
                     "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
@@ -775,8 +1288,6 @@ async def get_pares_grupos_similares(
             hybrid_metadata = read_vector_cache_metadata(metadata_path)
             semantic_metadata_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json"
             semantic_metadata = read_vector_cache_metadata(semantic_metadata_path)
-            params_top_k = max(2, min(int(top_k), 20))
-            params_threshold = max(0.05, min(float(min_semantic_score), 0.95))
 
             if (forcar_recalculo or not lexical_path.exists()) and agregados_path.exists():
                 df_agregados = pl.read_parquet(str(agregados_path))
@@ -788,7 +1299,7 @@ async def get_pares_grupos_similares(
                 input_base_hash=base_hash,
                 top_k=params_top_k,
                 min_semantic_score=params_threshold,
-                model_name=status_vector.get("model_name") or "semantic",
+                model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
             )
             if (forcar_recalculo or not semantic_cache_ok) and agregados_path.exists():
                 df_agregados = pl.read_parquet(str(agregados_path))
@@ -801,8 +1312,8 @@ async def get_pares_grupos_similares(
                     semantic_metadata_path,
                     build_vector_cache_metadata(
                         metodo="semantic",
-                        model_name=status_vector.get("model_name") or "semantic",
-                        engine=status_vector.get("engine"),
+                        model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
+                        engine=semantic_mode.get("engine") or status_vector.get("engine"),
                         input_base_hash=base_hash,
                         top_k=params_top_k,
                         min_semantic_score=params_threshold,
@@ -817,7 +1328,7 @@ async def get_pares_grupos_similares(
                 input_base_hash=base_hash,
                 top_k=params_top_k,
                 min_semantic_score=params_threshold,
-                model_name=status_vector.get("model_name") or "semantic",
+                model_name=str(hybrid_mode.get("model_name") or semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
             )
             if (forcar_recalculo or not hybrid_cache_ok) and lexical_path.exists() and semantic_path.exists():
                 df_lexical = pl.read_parquet(str(lexical_path))
@@ -827,8 +1338,8 @@ async def get_pares_grupos_similares(
                     metadata_path,
                     build_vector_cache_metadata(
                         metodo="hybrid",
-                        model_name=status_vector.get("model_name") or "semantic",
-                        engine=status_vector.get("engine"),
+                        model_name=str(hybrid_mode.get("model_name") or semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
+                        engine=hybrid_mode.get("engine") or status_vector.get("engine"),
                         input_base_hash=base_hash,
                         top_k=params_top_k,
                         min_semantic_score=params_threshold,
@@ -848,6 +1359,8 @@ async def get_pares_grupos_similares(
                     "data": [],
                     "page": page_norm,
                     "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
                     "total": 0,
                     "total_pages": 1,
                     "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
@@ -877,6 +1390,8 @@ async def get_pares_grupos_similares(
                     "data": [],
                     "page": page_norm,
                     "page_size": page_size_norm,
+                    "total_file": 0,
+                    "total_filtered": 0,
                     "total": 0,
                     "total_pages": 1,
                     "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
@@ -888,6 +1403,8 @@ async def get_pares_grupos_similares(
             selected_message = "Pares lexicais carregados."
             selected_available = True
             selected_method = "lexical"
+
+        total_file = int(df.height)
 
         if not show_analyzed:
             status_path = _gravar_status_analise(dir_analises, cnpj_limpo)
@@ -969,6 +1486,7 @@ async def get_pares_grupos_similares(
                 .alias("__prioridade")
             ).sort(["__prioridade", "score_final", "score_descricao", "descricao_a"], descending=[True, True, True, False]).drop("__prioridade")
 
+        total_filtered = int(df.height)
         paged_df, total, total_pages = _paginate_frame(df, page_norm, page_size_norm)
 
         return {
@@ -981,6 +1499,8 @@ async def get_pares_grupos_similares(
             "data": paged_df.to_dicts(),
             "page": min(page_norm, total_pages),
             "page_size": page_size_norm,
+            "total_file": total_file,
+            "total_filtered": total_filtered,
             "total": total,
             "total_pages": total_pages,
             "quick_filter_counts": quick_filter_counts,
@@ -1006,6 +1526,8 @@ async def get_vectorizacao_status(cnpj: str = Query(...)):
         _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
         agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
         current_base_hash = compute_file_sha1(agregados_path) if agregados_path.exists() else None
+        faiss_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.json")
+        light_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.json")
         semantic_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json")
         hybrid_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.json")
         return {
@@ -1013,6 +1535,14 @@ async def get_vectorizacao_status(cnpj: str = Query(...)):
             "status": obter_status_vectorizacao(),
             "current_base_hash": current_base_hash,
             "caches": {
+                "faiss": {
+                    **faiss_cache,
+                    "stale": bool(current_base_hash and faiss_cache and faiss_cache.get("input_base_hash") != current_base_hash),
+                },
+                "light": {
+                    **light_cache,
+                    "stale": bool(current_base_hash and light_cache and light_cache.get("input_base_hash") != current_base_hash),
+                },
                 "semantic": {
                     **semantic_cache,
                     "stale": bool(current_base_hash and semantic_cache and semantic_cache.get("input_base_hash") != current_base_hash),
@@ -1085,7 +1615,7 @@ async def clear_vectorizacao_cache(cnpj: str = Query(...), metodo: str = Query("
     metodo_norm = str(metodo or "all").strip().lower()
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
-    if metodo_norm not in {"semantic", "hybrid", "all"}:
+    if metodo_norm not in {"faiss", "light", "semantic", "hybrid", "all"}:
         raise HTTPException(status_code=400, detail="Metodo invalido")
     try:
         import importlib.util
@@ -1097,6 +1627,20 @@ async def clear_vectorizacao_cache(cnpj: str = Query(...), metodo: str = Query("
 
         _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
         targets: list[Path] = []
+        if metodo_norm in {"faiss", "all"}:
+            targets.extend(
+                [
+                    dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.parquet",
+                    dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.json",
+                ]
+            )
+        if metodo_norm in {"light", "all"}:
+            targets.extend(
+                [
+                    dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.parquet",
+                    dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.json",
+                ]
+            )
         if metodo_norm in {"semantic", "all"}:
             targets.extend(
                 [
@@ -1378,6 +1922,8 @@ def _build_auto_separate_plan_backend(codigo: str, grupos: list[dict[str, Any]],
     if len(ordered) < 2:
         return {"eligible": False, "reason": "O codigo nao possui descricoes suficientes para auto-separacao."}
 
+    all_cest_empty = all(not _primary_value(grupo.get("lista_cest")) for grupo in ordered)
+
     for i in range(len(ordered)):
         for j in range(i + 1, len(ordered)):
             grupo_a = ordered[i]
@@ -1390,12 +1936,13 @@ def _build_auto_separate_plan_backend(codigo: str, grupos: list[dict[str, Any]],
             gtin_a = _primary_value(grupo_a.get("lista_gtin"))
             gtin_b = _primary_value(grupo_b.get("lista_gtin"))
             ncm_distinct = bool(ncm_a and ncm_b and ncm_a != ncm_b)
-            cest_distinct = bool(cest_a and cest_b and cest_a != cest_b)
+            cest_distinct = bool((cest_a or cest_b) and cest_a != cest_b)
+            cest_compatible = all_cest_empty or cest_distinct
             gtin_distinct = bool(gtin_a and gtin_b and gtin_a != gtin_b)
             very_dissimilar = score <= 0.2
 
             criteria_matched = (
-                very_dissimilar and ncm_distinct and cest_distinct and gtin_distinct
+                very_dissimilar and ncm_distinct and cest_compatible and gtin_distinct
                 if modo == "NCM_CEST_GTIN"
                 else very_dissimilar and ncm_distinct and gtin_distinct
                 if modo == "NCM_GTIN"
@@ -1408,7 +1955,7 @@ def _build_auto_separate_plan_backend(codigo: str, grupos: list[dict[str, Any]],
                 reason = (
                     "As descricoes ainda tem similaridade relevante entre si."
                     if not very_dissimilar
-                    else "Nem todos os pares possuem NCM, CEST e GTIN distintos e preenchidos."
+                    else "Nem todos os pares possuem NCM e GTIN distintos e o CEST e distinto quando informado."
                     if modo == "NCM_CEST_GTIN"
                     else "Nem todos os pares possuem NCM e GTIN distintos e preenchidos."
                     if modo == "NCM_GTIN"

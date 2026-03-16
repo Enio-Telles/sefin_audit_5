@@ -48,6 +48,8 @@ import { UnificarProdutosDialog } from "@/components/agrupamento/UnificarProduto
 import { DesagregarProdutosDialog } from "@/components/agrupamento/DesagregarProdutosDialog";
 import {
   listParquetFiles,
+  getParesGruposSimilares,
+  getVectorizacaoStatus,
   readParquet,
   writeParquetCell,
   addParquetRow,
@@ -96,6 +98,12 @@ export default function Tabelas() {
   const [isLoadingTable, setIsLoadingTable] = useState(false);
   const [localRows, setLocalRows] = useState<Record<string, unknown>[]>([]);
   const [localColumns, setLocalColumns] = useState<string[]>([]);
+  const [suggestionSummary, setSuggestionSummary] = useState<{
+    metodo: "lexical" | "light" | "faiss" | "semantic" | "hybrid";
+    totalFile: number;
+    totalVisible: number;
+  } | null>(null);
+  const [isLoadingSuggestionSummary, setIsLoadingSuggestionSummary] = useState(false);
 
   // Filters and sort
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -181,6 +189,21 @@ export default function Tabelas() {
     const url = `/tabelas/view?file_path=${encodeURIComponent(filePath)}`;
     window.open(url, "_blank");
   };
+
+  const inferSuggestionContext = useCallback((filePath: string) => {
+    const normalized = String(filePath || "").replace(/\\/g, "/");
+    let match = normalized.match(/pares_descricoes_similares_light_(\d{14})\.parquet$/i);
+    if (match) return { metodo: "light" as const, cnpj: match[1] };
+    match = normalized.match(/pares_descricoes_similares_faiss_(\d{14})\.parquet$/i);
+    if (match) return { metodo: "faiss" as const, cnpj: match[1] };
+    match = normalized.match(/pares_descricoes_similares_semanticos_(\d{14})\.parquet$/i);
+    if (match) return { metodo: "semantic" as const, cnpj: match[1] };
+    match = normalized.match(/pares_descricoes_similares_hibridos_(\d{14})\.parquet$/i);
+    if (match) return { metodo: "hybrid" as const, cnpj: match[1] };
+    match = normalized.match(/pares_descricoes_similares_(\d{14})\.parquet$/i);
+    if (match) return { metodo: "lexical" as const, cnpj: match[1] };
+    return null;
+  }, []);
 
   const saveRecentFolder = useCallback((folderPath: string) => {
     if (!folderPath) return;
@@ -334,6 +357,70 @@ export default function Tabelas() {
       }
     }
   }, [handleOpenFile, searchString, selectedFile]);
+
+  useEffect(() => {
+    const filePath = String(selectedFile?.path || "");
+    const suggestionContext = inferSuggestionContext(filePath);
+    if (!suggestionContext) {
+      setSuggestionSummary(null);
+      setIsLoadingSuggestionSummary(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSuggestionSummary(true);
+    setSuggestionSummary(null);
+
+    const loadSummary = async () => {
+      try {
+        let topK = 8;
+        let minScore = 0.72;
+        let minSemanticScore = 0.32;
+
+        if (suggestionContext.metodo !== "lexical") {
+          const status = await getVectorizacaoStatus(suggestionContext.cnpj);
+          const cache = suggestionContext.metodo === "light"
+            ? status.caches?.light
+            : suggestionContext.metodo === "faiss"
+              ? status.caches?.faiss
+              : suggestionContext.metodo === "semantic"
+                ? status.caches?.semantic
+                : status.caches?.hybrid;
+          topK = Number(cache?.top_k ?? topK);
+          if (suggestionContext.metodo === "light" || suggestionContext.metodo === "faiss") {
+            minScore = Number(cache?.min_semantic_score ?? minScore);
+          } else {
+            minSemanticScore = Number(cache?.min_semantic_score ?? minSemanticScore);
+          }
+        }
+
+        const response = await getParesGruposSimilares(suggestionContext.cnpj, suggestionContext.metodo, false, {
+          topK: Number.isFinite(topK) ? topK : 8,
+          minScore: Number.isFinite(minScore) ? minScore : 0.72,
+          minSemanticScore: Number.isFinite(minSemanticScore) ? minSemanticScore : 0.32,
+          page: 1,
+          pageSize: 1,
+          showAnalyzed: false,
+        });
+
+        if (cancelled) return;
+        setSuggestionSummary({
+          metodo: suggestionContext.metodo,
+          totalFile: Number(response.total_file ?? response.total ?? 0),
+          totalVisible: Number(response.total_filtered ?? response.total ?? 0),
+        });
+      } catch {
+        if (!cancelled) setSuggestionSummary(null);
+      } finally {
+        if (!cancelled) setIsLoadingSuggestionSummary(false);
+      }
+    };
+
+    void loadSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [inferSuggestionContext, selectedFile]);
 
   // filteredRows is now just localRows since filtering is server-side
   const filteredRows = localRows;
@@ -575,11 +662,21 @@ export default function Tabelas() {
           <Card className="border shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
             <CardContent className="p-3 border-b bg-muted/30 shrink-0">
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="font-mono text-xs">{selectedFile?.name || "Tabela"}</Badge>
                   <Badge variant="secondary" className="text-xs">
-                    {tableData?.filtered_rows ?? 0} {tableData?.filtered_rows !== tableData?.total_rows ? `de ${tableData?.total_rows}` : ""} registros
+                    Visualizacao atual: {tableData?.filtered_rows ?? 0} de {tableData?.total_rows ?? 0} no arquivo
                   </Badge>
+                  {suggestionSummary ? (
+                    <>
+                      <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-xs text-blue-300">
+                        Fila operacional: {suggestionSummary.totalVisible} visiveis
+                      </Badge>
+                      <Badge variant="outline" className="border-border/70 bg-background/70 text-xs text-muted-foreground">
+                        Arquivo bruto: {suggestionSummary.totalFile}
+                      </Badge>
+                    </>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <DropdownMenu>
@@ -604,6 +701,20 @@ export default function Tabelas() {
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setFilters({}); setSortColumn(null); setPage(1); }}><X className="h-3 w-3 mr-1" /> Limpar</Button>
                 </div>
               </div>
+              {suggestionSummary ? (
+                <div className="mt-3 rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                  <div>
+                    Este arquivo pertence a sugestoes de similaridade no modo <strong className="text-foreground">{suggestionSummary.metodo}</strong>.
+                  </div>
+                  <div className="mt-1">
+                    A fila operacional considera <strong className="text-foreground">{suggestionSummary.totalVisible}</strong> pares visiveis agora, enquanto o parquet contem <strong className="text-foreground">{suggestionSummary.totalFile}</strong> pares brutos.
+                  </div>
+                  <div className="mt-1">
+                    A visualizacao atual desta tela usa os filtros e a paginacao locais sobre o arquivo bruto.
+                    {isLoadingSuggestionSummary ? " Atualizando resumo operacional..." : ""}
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
 
             <div
@@ -764,7 +875,11 @@ export default function Tabelas() {
 
             <div className="flex items-center justify-between px-4 py-2 border-t bg-muted/30 shrink-0">
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <p>Mostrando {localRows.length} registros (Página {page} de {tableData?.total_pages || 1})</p>
+                <p>
+                  {suggestionSummary
+                    ? `Página atual: ${localRows.length} linhas, de ${tableData?.total_rows ?? 0} no arquivo bruto e ${suggestionSummary.totalVisible} visíveis na fila operacional (Página ${page} de ${tableData?.total_pages || 1})`
+                    : `Mostrando ${localRows.length} registros (Página ${page} de ${tableData?.total_pages || 1})`}
+                </p>
                 <div className="flex items-center gap-1">
                     <span>Linhas por página:</span>
                     <select 
