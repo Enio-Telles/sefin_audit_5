@@ -638,17 +638,23 @@ async def resolver_manual_unificar(req: ResolverManualUnificarRequest):
         
         # Mapear os produtos de entrada para o código oficial selecionado
         decisoes = []
+        # req.decisao contém os atributos unificados escolhidos pelo usuário
+        codigo_novo = req.decisao.get("codigo", "")
+        descricao_nova = req.decisao.get("descricao", "")
+        ncm_novo = req.decisao.get("ncm", "")
+        cest_novo = req.decisao.get("cest", "")
+        gtin_novo = req.decisao.get("gtin", "")
+
         for item in req.itens:
-            # req.decisao contém os atributos unificados escolhidos pelo usuário
             decisao = {
                 "fonte": item.get("fonte", ""),
                 "codigo_original": item.get("codigo_original", item.get("codigo", "")),
                 "descricao_original": item.get("descricao_original", item.get("descricao", "")),
-                "codigo_novo": req.decisao.get("codigo", ""),
-                "descricao_nova": req.decisao.get("descricao", ""),
-                "ncm_novo": req.decisao.get("ncm", ""),
-                "cest_novo": req.decisao.get("cest", ""),
-                "gtin_novo": req.decisao.get("gtin", "")
+                "codigo_novo": codigo_novo,
+                "descricao_nova": descricao_nova,
+                "ncm_novo": ncm_novo,
+                "cest_novo": cest_novo,
+                "gtin_novo": gtin_novo
             }
             decisoes.append(decisao)
             
