@@ -1166,11 +1166,12 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
     if df_base.is_empty():
         return df_base
 
-    work = df_base.with_columns(
+    unique_desc = df_base.select("descricao").unique().with_columns(
         pl.col("descricao")
         .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
         .alias("descricao_normalizada")
     )
+    work = df_base.join(unique_desc, on="descricao", how="left")
 
     code_groups = (
         work.group_by("codigo")
@@ -1187,16 +1188,26 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
         for index, descricao_norm in enumerate(groups, start=1):
             replacements[f"{codigo}|{descricao_norm}"] = f"{codigo}_SEPARADO_{index:02d}"
 
-    return (
-        work.with_columns(
-            pl.concat_str(["codigo", "descricao_normalizada"], separator="|").alias("__desagregacao_key")
+    work = work.with_columns(
+        pl.concat_str(["codigo", "descricao_normalizada"], separator="|").alias("__desagregacao_key")
+    )
+
+    try:
+        work = work.with_columns(
+            pl.col("__desagregacao_key")
+            .replace_strict(replacements, default="")
+            .alias("__codigo_desagregado")
         )
-        .with_columns(
+    except (AttributeError, TypeError, Exception):
+        unique_keys = work.select("__desagregacao_key").unique().with_columns(
             pl.col("__desagregacao_key")
             .map_elements(lambda key: replacements.get(str(key), ""), return_dtype=pl.Utf8)
             .alias("__codigo_desagregado")
         )
-        .with_columns(
+        work = work.join(unique_keys, on="__desagregacao_key", how="left")
+
+    return (
+        work.with_columns(
             pl.when(pl.col("__codigo_desagregado") != "")
             .then(pl.col("__codigo_desagregado"))
             .otherwise(pl.col("codigo"))
@@ -1437,11 +1448,12 @@ def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame)
                 "qtd_linhas": pl.Int64,
             }
         )
-    joined = df_base.with_columns(
+    unique_desc = df_base.select("descricao").unique().with_columns(
         pl.col("descricao")
         .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
         .alias("descricao_normalizada")
-    ).join(
+    )
+    joined = df_base.join(unique_desc, on="descricao", how="left").join(
         df_agregados.select(["descricao_normalizada", "chave_produto"]),
         on="descricao_normalizada",
         how="left",
@@ -1483,19 +1495,30 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
                 "lista_descr_compl": pl.Utf8,
             }
         )
-    descricao_norm_expr = (
-        pl.col("descricao")
-        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-    )
     if "descricao_normalizada" not in df_indexados.columns:
-        df_indexados = df_indexados.with_columns(descricao_norm_expr.alias("descricao_normalizada"))
-    else:
-        df_indexados = df_indexados.with_columns(
-            pl.when(pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == ""))
-            .then(descricao_norm_expr)
-            .otherwise(pl.col("descricao_normalizada").cast(pl.Utf8))
+        unique_desc = df_indexados.select("descricao").unique().with_columns(
+            pl.col("descricao")
+            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
             .alias("descricao_normalizada")
         )
+        df_indexados = df_indexados.join(unique_desc, on="descricao", how="left")
+    else:
+        # We need to fill null or empty 'descricao_normalizada'
+        null_or_empty = df_indexados.filter(
+            pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == "")
+        )
+        if not null_or_empty.is_empty():
+            unique_desc = null_or_empty.select("descricao").unique().with_columns(
+                pl.col("descricao")
+                .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+                .alias("__descricao_normalizada_new")
+            )
+            df_indexados = df_indexados.join(unique_desc, on="descricao", how="left").with_columns(
+                pl.when(pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == ""))
+                .then(pl.col("__descricao_normalizada_new"))
+                .otherwise(pl.col("descricao_normalizada").cast(pl.Utf8))
+                .alias("descricao_normalizada")
+            ).drop("__descricao_normalizada_new")
     grouped = (
         df_indexados.group_by("codigo")
         .agg(
@@ -1538,12 +1561,15 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
 def _build_variacoes_produtos(df_base: pl.DataFrame) -> pl.DataFrame:
     if df_base.is_empty():
         return pl.DataFrame(schema={"descricao": pl.Utf8, "qtd_codigos": pl.Int64, "qtd_ncm": pl.Int64, "qtd_gtin": pl.Int64})
+
+    unique_desc = df_base.select("descricao").unique().with_columns(
+        pl.col("descricao")
+        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+        .alias("descricao_normalizada")
+    )
+
     return (
-        df_base.with_columns(
-            pl.col("descricao")
-            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-            .alias("descricao_normalizada")
-        )
+        df_base.join(unique_desc, on="descricao", how="left")
         .group_by("descricao_normalizada")
         .agg(
             [
