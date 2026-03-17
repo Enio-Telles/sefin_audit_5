@@ -592,7 +592,7 @@ export default function Tabelas() {
                 className="font-mono text-sm"
                 onKeyDown={(e) => e.key === "Enter" && handleLoadFiles()}
               />
-              <Button onClick={() => handleLoadFiles()} disabled={isLoadingFiles}>
+              <Button onClick={() => handleLoadFiles()} disabled={isLoadingFiles} aria-label="Buscar arquivos" title="Buscar arquivos">
                 {isLoadingFiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </Button>
               <Button
@@ -619,7 +619,12 @@ export default function Tabelas() {
                   >
                     <FolderOpen className="h-3 w-3 mr-1.5 opacity-50" />
                     <span className="truncate max-w-[120px]">{folder.name}</span>
-                    <button className="ml-1.5 opacity-0 group-hover:opacity-100 p-0.5" onClick={(e) => removeRecentFolder(folder.path, e)}>
+                    <button
+                      className="ml-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none p-0.5 rounded"
+                      onClick={(e) => removeRecentFolder(folder.path, e)}
+                      aria-label="Remover pasta recente"
+                      title="Remover pasta recente"
+                    >
                       <X className="h-2.5 w-2.5" />
                     </button>
                   </Badge>
@@ -643,7 +648,12 @@ export default function Tabelas() {
                       <div className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
                         <span>{file.size_human}</span>
                         <span>{file.rows} linhas</span>
-                        <button className="opacity-0 group-hover:opacity-100 p-1" onClick={(e) => { e.stopPropagation(); openParquetInNewTab(file.path); }}>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none p-1 rounded"
+                          onClick={(e) => { e.stopPropagation(); openParquetInNewTab(file.path); }}
+                          aria-label="Abrir em nova guia"
+                          title="Abrir em nova guia"
+                        >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -733,12 +743,22 @@ export default function Tabelas() {
                           style={{ color: columnStyles[col]?.headerColor, backgroundColor: columnStyles[col]?.headerBg, width: '200px' }}
                         >
                           <div className="flex items-center gap-1.5 justify-between">
-                            <button className="hover:text-foreground flex items-center gap-1.5 truncate" onClick={() => handleSort(col)}>
+                            <button
+                              className="hover:text-foreground flex items-center gap-1.5 truncate focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1 -ml-1"
+                              onClick={() => handleSort(col)}
+                              aria-label={`Ordenar coluna ${col}`}
+                            >
                               {col} {sortColumn === col && <ArrowUpDown className="h-3 w-3" />}
                             </button>
                             <DropdownMenu onOpenChange={(open) => { if (open) handleFetchUniqueValues(col); }}>
                               <DropdownMenuTrigger asChild>
-                                <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-background/50"><MoreVertical className="h-3 w-3" /></button>
+                                <button
+                                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none p-0.5 rounded hover:bg-background/50"
+                                  aria-label={`Opções da coluna ${col}`}
+                                  title={`Opções da coluna ${col}`}
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" className="w-56">
                                 <DropdownMenuItem onClick={() => openColorDialog("column", col)}><Paintbrush className="h-3.5 w-3.5 mr-2" /> Cores da Coluna</DropdownMenuItem>
@@ -855,7 +875,13 @@ export default function Tabelas() {
                           <td className="px-1 py-1.5 border-b border-r shrink-0 w-10 sticky right-0 bg-background/95 z-10">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-opacity"><MoreVertical className="h-3 w-3" /></button>
+                                <button
+                                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none p-0.5 rounded hover:bg-muted transition-opacity"
+                                  aria-label={`Opções da linha ${rowIdx + 1}`}
+                                  title={`Opções da linha ${rowIdx + 1}`}
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56">
                                 <DropdownMenuItem onClick={() => openColorDialog("row", rowIdx)}><Paintbrush className="h-3 w-3 mr-2" /> Cores da Linha</DropdownMenuItem>
@@ -902,6 +928,8 @@ export default function Tabelas() {
                     className="h-7 w-7" 
                     disabled={page === 1 || isLoadingTable}
                     onClick={() => setPage(p => Math.max(1, p - 1))}
+                    aria-label="Página anterior"
+                    title="Página anterior"
                 >
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -913,6 +941,7 @@ export default function Tabelas() {
                             if (!isNaN(val)) setPage(val);
                         }}
                         className="h-7 w-12 text-center p-0 text-xs"
+                        aria-label="Ir para a página"
                     />
                     <span className="text-xs text-muted-foreground">/ {tableData?.total_pages || 1}</span>
                 </div>
@@ -922,6 +951,8 @@ export default function Tabelas() {
                     className="h-7 w-7" 
                     disabled={page >= (tableData?.total_pages || 1) || isLoadingTable}
                     onClick={() => setPage(p => p + 1)}
+                    aria-label="Próxima página"
+                    title="Próxima página"
                 >
                     <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -938,6 +969,7 @@ export default function Tabelas() {
           size="icon"
           onClick={() => tableContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
           title="Ir para o topo"
+          aria-label="Ir para o topo"
         >
           <ChevronLeft className="h-4 w-4 rotate-90" />
         </Button>
