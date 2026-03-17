@@ -134,9 +134,11 @@ def _normalize_similarity_text(value: str) -> str:
     )
 
 @lru_cache(maxsize=10000)
-def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
+def _normalize_similarity_tokens(value: str) -> frozenset[str]:
     clean_text = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
-    return tuple(
+    # ⚡ Bolt Optimization: returning a frozenset maintains cache immutability
+    # while avoiding the O(N) tuple->set casting inside the downstream _jaccard calculation.
+    return frozenset(
         token for token in clean_text.split()
         if len(token) > 1 and token not in _STOP_WORDS
     )
@@ -186,12 +188,11 @@ def _char_ngram_cosine(a: str, b: str, size: int = 3) -> float:
     return dot / (norm_a * norm_b)
 
 @lru_cache(maxsize=10000)
-def _jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
-    set_a, set_b = set(a), set(b)
-    if not set_a and not set_b:
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    if not a and not b:
         return 1.0
-    intersection = len(set_a & set_b)
-    union = len(set_a | set_b)
+    intersection = len(a & b)
+    union = len(a | b)
     return 0.0 if union == 0 else intersection / union
 
 @lru_cache(maxsize=10000)
