@@ -333,7 +333,7 @@ export default function RevisaoFatores() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.history.back()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.history.back()} aria-label="Voltar" title="Voltar">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Revisao operacional de fatores</h1>

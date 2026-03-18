@@ -856,7 +856,7 @@ export function RevisaoFinalProdutosView({
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => (onBack ? onBack() : window.history.back())}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => (onBack ? onBack() : window.history.back())} aria-label="Voltar" title="Voltar">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">Revisao final de produtos</h1>
