@@ -1166,11 +1166,13 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
     if df_base.is_empty():
         return df_base
 
-    work = df_base.with_columns(
+    # ⚡ Bolt Optimization: map_elements boundary crossing over unique items only
+    unique_desc = df_base.select("descricao").unique().with_columns(
         pl.col("descricao")
         .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
         .alias("descricao_normalizada")
     )
+    work = df_base.join(unique_desc, on="descricao", how="left")
 
     code_groups = (
         work.group_by("codigo")
@@ -1437,11 +1439,13 @@ def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame)
                 "qtd_linhas": pl.Int64,
             }
         )
-    joined = df_base.with_columns(
+    # ⚡ Bolt Optimization: map_elements boundary crossing over unique items only
+    unique_desc = df_base.select("descricao").unique().with_columns(
         pl.col("descricao")
         .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
         .alias("descricao_normalizada")
-    ).join(
+    )
+    joined = df_base.join(unique_desc, on="descricao", how="left").join(
         df_agregados.select(["descricao_normalizada", "chave_produto"]),
         on="descricao_normalizada",
         how="left",
@@ -1483,19 +1487,21 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
                 "lista_descr_compl": pl.Utf8,
             }
         )
-    descricao_norm_expr = (
+    # ⚡ Bolt Optimization: map_elements boundary crossing over unique items only
+    unique_desc = df_indexados.select("descricao").unique().with_columns(
         pl.col("descricao")
         .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+        .alias("__descricao_normalizada_new")
     )
     if "descricao_normalizada" not in df_indexados.columns:
-        df_indexados = df_indexados.with_columns(descricao_norm_expr.alias("descricao_normalizada"))
+        df_indexados = df_indexados.join(unique_desc, on="descricao", how="left").rename({"__descricao_normalizada_new": "descricao_normalizada"})
     else:
-        df_indexados = df_indexados.with_columns(
+        df_indexados = df_indexados.join(unique_desc, on="descricao", how="left").with_columns(
             pl.when(pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == ""))
-            .then(descricao_norm_expr)
+            .then(pl.col("__descricao_normalizada_new"))
             .otherwise(pl.col("descricao_normalizada").cast(pl.Utf8))
             .alias("descricao_normalizada")
-        )
+        ).drop("__descricao_normalizada_new")
     grouped = (
         df_indexados.group_by("codigo")
         .agg(
@@ -1538,12 +1544,15 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
 def _build_variacoes_produtos(df_base: pl.DataFrame) -> pl.DataFrame:
     if df_base.is_empty():
         return pl.DataFrame(schema={"descricao": pl.Utf8, "qtd_codigos": pl.Int64, "qtd_ncm": pl.Int64, "qtd_gtin": pl.Int64})
+
+    # ⚡ Bolt Optimization: map_elements boundary crossing over unique items only
+    unique_desc = df_base.select("descricao").unique().with_columns(
+        pl.col("descricao")
+        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+        .alias("descricao_normalizada")
+    )
     return (
-        df_base.with_columns(
-            pl.col("descricao")
-            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-            .alias("descricao_normalizada")
-        )
+        df_base.join(unique_desc, on="descricao", how="left")
         .group_by("descricao_normalizada")
         .agg(
             [
