@@ -1,3 +1,3 @@
-## 2024-03-24 - [Polars Python FFI Bottlenecks]
-**Learning:** `map_elements` with Python lambdas (like `hashlib.sha1`) triggers massive FFI overhead per row. Native hashing isn't always viable if exact SHA-1 is expected for backwards compatibility.
-**Action:** When a Python lambda MUST be used in Polars, map the elements ONLY over `.unique()` values, then `join(..., how='left')` back into the main DataFrame. This provides near-native performance (~3x to 5x faster) on datasets with repeated string permutations.
+## 2024-05-24 - [Avoid `to_dicts` for Polars iteration]
+**Learning:** Polars' `to_dicts()` method can be slow and memory-intensive for large DataFrames because it creates a new dictionary for every single row. Replacing this with iterating over zipped column lists (`zip(*[df[col].to_list() ...])`) is an excellent and common optimization in Python for Polars. However, when doing so, it's critical to dynamically extract all columns (e.g., `keys = df.columns; cols = [df[k].to_list() for k in keys]`) to avoid silently dropping any original data if downstream code relies on the complete row structure.
+**Action:** When iterating over Polars DataFrames in Python, use `to_list()` on columns and `zip()` to iterate over them. Always ensure all columns are preserved if the row dictionary is passed downstream.
