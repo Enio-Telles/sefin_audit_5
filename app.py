@@ -10,12 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Diretório onde reside o pacote fiscal_app
-SISTEMA_MONITORAMENTO = Path(
-    r"C:\Users\03002693901\OneDrive - SECRETARIA DE ESTADO DE FINANCAS"
-    r"\Desenvolvimento\sistema_monitoramento"
-)
-
+# Diretório atual (c:\funcoes) já contém o pacote fiscal_app
+SISTEMA_MONITORAMENTO = Path(__file__).parent
 if str(SISTEMA_MONITORAMENTO) not in sys.path:
     sys.path.insert(0, str(SISTEMA_MONITORAMENTO))
 
