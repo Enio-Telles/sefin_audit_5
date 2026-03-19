@@ -321,11 +321,11 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     ano_base = ""
     arq_dir = pasta_cnpj / "arquivos_parquet"
     
+    dirs_validos = [d for d in (arq_dir, pasta_cnpj) if d.exists()]
     def resolver_local(prefixo):
-        for d in (arq_dir, pasta_cnpj):
-            if d.exists():
-                a = encontrar_arquivo(d, prefixo, cnpj)
-                if a: return a
+        for d in dirs_validos:
+            a = encontrar_arquivo(d, prefixo, cnpj)
+            if a: return a
         return None
         
     reg_0000_path = resolver_local("reg_0000")
