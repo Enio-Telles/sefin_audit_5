@@ -5,7 +5,7 @@ from rich import print as rprint
 def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame | None = None, print_status: bool = False) -> pl.DataFrame | None:
     """Lê NFe ou NFCe, filtra pelo CNPJ emitente e mapeia colunas."""
     if path is None or not path.exists():
-        rprint(f"[yellow]  ⚠️  {fonte} não encontrado.[/yellow]")
+        print(f"  [!] {fonte} nao encontrado.")
         return None
 
     colunas_necesssarias = ["co_emitente", "prod_cprod", "prod_xprod",
@@ -87,7 +87,7 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
     ])
 
     if print_status:
-        rprint(f"[green]  {fonte}: {len(df):,} linhas (emitente, saídas X)[/green]")
+        print(f"  {fonte}: {len(df):,} linhas (emitente, saidas X)")
 
     return df
 
@@ -95,7 +95,7 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
 def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao: str = "", print_status: bool = False) -> pl.DataFrame | None:
     """Lê c170_simplificada (ou c170) e mapeia colunas."""
     if path is None or not path.exists():
-        rprint("[yellow]  ⚠️  C170 não encontrado.[/yellow]")
+        print("  [!] C170 nao encontrado.")
         return None
 
     schema = pl.read_parquet(path, n_rows=0).schema
@@ -143,6 +143,6 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
     ])
 
     if print_status:
-        rprint(f"[green]  C170: {len(df):,} linhas (entradas X)[/green]")
+        print(f"  C170: {len(df):,} linhas (entradas X)")
 
     return df

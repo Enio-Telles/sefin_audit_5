@@ -1,6 +1,6 @@
 import polars as pl
 from pathlib import Path
-from rich import print as rprint
+# from rich import print as rprint
 
 def salvar_para_parquet(df, caminho_saida: Path, nome_arquivo: str = None, metadata: dict = None) -> bool:
     """
@@ -25,7 +25,7 @@ def salvar_para_parquet(df, caminho_saida: Path, nome_arquivo: str = None, metad
         else:
             arquivo = caminho_saida
             
-        rprint(f"   [debug] Salvando em: {arquivo}")
+        print(f"   [debug] Salvando em: {arquivo}")
             
         # Garante que o diretório pai existe
         arquivo.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,7 @@ def salvar_para_parquet(df, caminho_saida: Path, nome_arquivo: str = None, metad
             
         # Se estiver vazio, avisa mas salva mesmo assim (dependendo da necessidade do sistema)
         if df.is_empty():
-            rprint(f"[yellow]⚠️ Aviso: O DataFrame a ser salvo em {arquivo.name} está vazio.[/yellow]")
+            print(f"   [!] Aviso: O DataFrame a ser salvo em {arquivo.name} esta vazio.")
             
         if metadata:
             # Converte para pyarrow para aplicar metadados de campo (field-level metadata)
@@ -71,9 +71,9 @@ def salvar_para_parquet(df, caminho_saida: Path, nome_arquivo: str = None, metad
         else:
             df.write_parquet(arquivo)
             
-        rprint(f"   [green]Parquet salvo com sucesso em: {arquivo}[/green]")
+        print(f"   Parquet salvo com sucesso em: {arquivo}")
         return True
         
     except Exception as e:
-        rprint(f"   [red]❌ Erro ao salvar arquivo Parquet {arquivo}: {e}[/red]")
+        print(f"   Erro ao salvar arquivo Parquet {arquivo}: {e}")
         return False

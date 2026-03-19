@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from collections import Counter
 
-import polars as pl
 from rich import print as rprint
 
 FUNCOES_DIR = Path(r"c:\funcoes")
@@ -35,24 +34,57 @@ except ImportError as e:
 CAMPOS_CHAVE = ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"]
 
 
-def _md5_row(values: list) -> str:
-    """Gera um hash MD5 a partir de uma lista de valores (normalizados)."""
-    import hashlib
-    partes = [str(v).strip().upper() if v is not None else "" for v in values]
-    return hashlib.md5("|".join(partes).encode("utf-8")).hexdigest()
-
-
 def _normalizar(df: pl.DataFrame) -> pl.DataFrame:
-    """Garante que todos os campos chave existam no DataFrame (preenche com null se ausentes)."""
+    """Garante que todos os campos chave existam no DataFrame."""
     for col in CAMPOS_CHAVE + ["unidade", "fonte"]:
         if col not in df.columns:
             df = df.with_columns(pl.lit(None, dtype=pl.String).alias(col))
     return df
 
 
+def _aplicar_normalizacao(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Retorna uma cópia do DataFrame com campos de texto normalizados.
+    Lógica idêntica à de tabela_itens_caracteristicas.py para garantir chaves iguais.
+    """
+    import unicodedata
+
+    def _norm(v):
+        if v is None: return None
+        v = unicodedata.normalize("NFD", str(v))
+        v = "".join(c for c in v if unicodedata.category(c) != "Mn")
+        return v.upper().strip()
+
+    def _norm_codigo(v):
+        if v is None: return None
+        v = _norm(v)
+        return v.lstrip("0") or "0"
+
+    def _remove_pontos(v):
+        if v is None: return None
+        return _norm(v).replace(".", "")
+
+    COLS_TEXTO  = ["descricao", "descr_compl", "tipo_item"]
+    COLS_PONTOS = ["ncm", "cest", "gtin"]
+
+    exprs = []
+    for col in COLS_TEXTO:
+        if col in df.columns:
+            exprs.append(pl.col(col).map_elements(_norm, return_dtype=pl.String).alias(col))
+    if "codigo" in df.columns:
+        exprs.append(pl.col("codigo").map_elements(_norm_codigo, return_dtype=pl.String).alias("codigo"))
+    for col in COLS_PONTOS:
+        if col in df.columns:
+            exprs.append(pl.col(col).map_elements(_remove_pontos, return_dtype=pl.String).alias(col))
+
+    if exprs:
+        df = df.with_columns(exprs)
+    return df
+
+
 def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
-    """Adiciona a coluna chave_item_individualizado (MD5 dos campos chave)."""
-    # Normaliza cada campo chave para string uppercase sem espaços laterais
+    """Adiciona a coluna chave_item_individualizado (Hash dos campos chave)."""
+    # Lógica idêntica à de tabela_itens_caracteristicas.py
     exprs_norm = [
         pl.when(pl.col(c).is_null())
           .then(pl.lit(""))
@@ -66,7 +98,9 @@ def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.with_columns(
         pl.concat_str(key_cols, separator="|")
-          .map_elements(_md5_row, return_dtype=pl.String)
+          .hash(seed=42)
+          .cast(pl.String)
+          .str.encode("hex")
           .alias("chave_item_individualizado")
     ).drop(key_cols)
 
@@ -83,10 +117,10 @@ def gerar_template_fatores_manuais(pasta_saida: Path) -> bool:
     arquivo_saida = pasta_saida / "template_fatores_manuais.xlsx"
     try:
         df_template.write_excel(arquivo_saida)
-        rprint(f"[green]Template para fatores manuais gerado em: {arquivo_saida}[/green]")
+        print(f"Template para fatores manuais gerado em: {arquivo_saida}")
         return True
     except Exception as e:
-        rprint(f"[red]Erro ao gerar template Excel: {e}[/red]")
+        print(f"Erro ao gerar template Excel: {e}")
         return False
 
 
@@ -100,7 +134,7 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
         cols_essenciais = ["chave_produto", "unidade", "ano", "fator_conversao_manual"]
         for col in cols_essenciais:
             if col not in df_manual.columns:
-                rprint(f"[red]Planilha manual não contém a coluna obrigatória: {col}[/red]")
+                print(f"Planilha manual não contém a coluna obrigatória: {col}")
                 return None
 
         # Tipar e filtrar nulos
@@ -113,7 +147,7 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
 
         return df_manual
     except Exception as e:
-        rprint(f"[red]Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}[/red]")
+        print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
 
 def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -196,19 +230,50 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     # ou reconstruir a partir das fontes com a mesma lógica)
     
     if not arq_descricoes.exists():
-        rprint(f"[red]Erro: Tabela descrições não encontrada: {arq_descricoes}[/red]")
+        print(f"Erro: Tabela descricoes nao encontrada: {arq_descricoes}")
         return False
 
     rprint(f"\n[bold cyan]Calculando fator_conversao para CNPJ: {cnpj}[/bold cyan]")
 
-    # 1. Carregar mapeamento de itens para chave_produto e unidade padrão escolhida
-    df_desc = pl.read_parquet(arq_descricoes)
+    # 1. Carregar mapeamento: Hash -> item_N (da tabela_itens_caracteristicas)
+    arq_caract = pasta_produtos.parent.parent / f"tabela_itens_caracteristicas_{cnpj}.parquet"
+    if not arq_caract.exists():
+        # Tenta no local alternativo (analises/produtos)
+        arq_caract = pasta_produtos / f"tabela_itens_caracteristicas_{cnpj}.parquet"
+
+    if not arq_caract.exists():
+        print(f"Erro: Tabela de caracteristicas nao encontrada: {arq_caract}")
+        return False
     
-    # Mapeamento do item para chave_produto e unid_padrao do produto
+    df_c = pl.read_parquet(arq_caract)
+    # Precisamos recalcular a hash em cima dos dados REAIS (codigo, descricao, etc.)
+    # porque tabela_itens_caracteristicas.py sobrescreveu a coluna chave_item_individualizado com "item_N"
+    df_c_map = (
+        _normalizar(df_c)
+        .pipe(_aplicar_normalizacao)
+        .pipe(_gerar_chave) # Recria o hash MD5 original em "_temp_hash" se eu mudar o nome, mas vou manter o nome
+        .select([
+            pl.col("chave_item_individualizado").alias("_hash_item"),
+            pl.col("item_ID_original") if "item_ID_original" in df_c.columns else pl.lit(None).alias("item_ID_original")
+        ])
+    )
+    # Wait! Se eu nao tenho o ID sequencial guardado antes de sobrescrever, eu tenho que pegar o "item_N" atual.
+    df_c_map = (
+        df_c.select(["chave_item_individualizado", "codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"])
+        .pipe(_normalizar)
+        .pipe(_aplicar_normalizacao)
+        .pipe(_gerar_chave) # Gera o Hash
+        .rename({"chave_item_individualizado": "_hash_item"})
+        .with_columns(df_c["chave_item_individualizado"].alias("item_N")) # Pega o "item_N" real da tabela
+        .select(["_hash_item", "item_N"])
+    )
+
+    # 2. Carregar mapeamento: item_N -> chave_produto (da tabela_descricoes)
+    df_desc = pl.read_parquet(arq_descricoes)
     df_item_prod = (
         df_desc.select(["chave_produto", "unid_padrao", "lista_chave_item_individualizado"])
         .explode("lista_chave_item_individualizado")
-        .rename({"lista_chave_item_individualizado": "chave_item_individualizado", "unid_padrao": "unid_padrao_escolhida"})
+        .rename({"lista_chave_item_individualizado": "item_N", "unid_padrao": "unid_padrao_escolhida"})
     )
 
     # 2. Precisamos dos itens originais com (chave_item, unidade, valor, qtd, ano)
@@ -253,16 +318,18 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             df_src = df_src.select([c for c in cols if c in df_src.columns])
             fragmentos.append(df_src)
 
-    if not fragmentos:
-        rprint("[red]❌ Nenhuma fonte de valores encontrada p/ fator conversão.[/red]")
-        return False
-
     df_total = pl.concat(fragmentos, how="diagonal_relaxed")
-    df_total = _gerar_chave(df_total) # chave_item_individualizado
+    df_total = _normalizar(df_total)
+    df_total = _aplicar_normalizacao(df_total)
+    df_total = _gerar_chave(df_total) # Gera o Hash
+    # 4. Join: Transacoes(hash) -> Map(hash->item_N) -> Produtos(item_N->produto)
+    df_vols = (
+        df_total
+        .rename({"chave_item_individualizado": "_hash_item"})
+        .join(df_c_map, on="_hash_item", how="inner")
+        .join(df_item_prod, on="item_N", how="inner")
+    )
     
-    # 4. Join com chave_produto e unid_padrao_escolhida
-    df_vols = df_total.join(df_item_prod, on="chave_item_individualizado", how="inner")
-
     # 5 e 6. Agrupar por produto/ano e definir unidade padrão
     df_aggr, df_fator = _agrupar_por_produto_ano(df_vols)
 
