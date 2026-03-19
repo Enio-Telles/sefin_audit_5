@@ -1100,7 +1100,7 @@ class MainWindow(QMainWindow):
                 "ano": "ano",
                 "codigo_produto_ajustado": "chave_produto",
                 "unid": "unidade",
-                "fator": "fator_conversao"
+                "fator": "fator_de_conversao"
             }
             cols_obrigatorias = list(mapping.keys())
             if not all(c in df_excel.columns for c in cols_obrigatorias):
@@ -1112,7 +1112,7 @@ class MainWindow(QMainWindow):
             # Renomeia para colunas internas e garante tipos
             df_imp = df_excel.select(cols_obrigatorias).rename({c: mapping[c] for c in cols_obrigatorias})
             df_imp = df_imp.with_columns([
-                pl.col("fator_conversao").cast(pl.Float64)
+                pl.col("fator_de_conversao").cast(pl.Float64)
             ])
 
             df_imp.write_parquet(pasta_produtos / nome_saida)

@@ -161,40 +161,56 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
         print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
 
-def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Agrupa por produto, unidade e ano. Eleição da Unid Ref pela maior soma de quantidades."""
-    # 5. Agrupar por produto, unidade e ano
+def _escolher_fator_mais_redondo(fator_ent, fator_sai):
+    """
+    Quando ambos os fatores (entrada e saída) existem,
+    seleciona o mais próximo de um valor 'redondo' (inteiro ou fração simples).
+    """
+    import math
+    if fator_ent is None or fator_ent == 0 or math.isnan(fator_ent) or math.isinf(fator_ent):
+        return fator_sai if (fator_sai is not None and not math.isnan(fator_sai) and not math.isinf(fator_sai)) else None
+    if fator_sai is None or fator_sai == 0 or math.isnan(fator_sai) or math.isinf(fator_sai):
+        return fator_ent
+
+    # Distância ao inteiro mais próximo
+    dist_ent = abs(fator_ent - round(fator_ent))
+    dist_sai = abs(fator_sai - round(fator_sai))
+    return fator_ent if dist_ent <= dist_sai else fator_sai
+
+
+def _agrupar_por_produto(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Agrupa por produto e unidade (período inteiro). Elege Unid Ref pela maior soma de quantidades."""
     df_aggr = (
         df_vols
-        .group_by(["chave_produto", "unidade", "ano", "unid_padrao_escolhida"])
+        .group_by(["chave_produto", "unidade", "unid_padrao_escolhida"])
         .agg([
-            pl.col("valor_entrada").sum().alias("v_ent"),
+            pl.col("valor_entrada").sum().alias("v_entr_total"),
             pl.col("quantidade_entrada").sum().alias("q_ent"),
-            pl.col("valor_saida").sum().alias("v_sai"),
+            pl.col("valor_saida").sum().alias("v_saida_total"),
             pl.col("quantidade_saida").sum().alias("q_sai"),
             pl.len().alias("ocorrencias")
         ])
         .with_columns([
-            (pl.col("v_ent") / pl.col("q_ent")).fill_nan(0).alias("preco_med_ent"),
-            (pl.col("v_sai") / pl.col("q_sai")).fill_nan(0).alias("preco_med_sai"),
+            (pl.col("v_entr_total") / pl.col("q_ent")).fill_nan(0).alias("preco_medio_entrada"),
+            (pl.col("v_saida_total") / pl.col("q_sai")).fill_nan(0).alias("preco_medio_saida"),
             (pl.col("q_ent").abs() + pl.col("q_sai").abs()).alias("volume_total")
         ])
     )
 
-    # 5.1. Pegar a descrição mais longa/comum para cada chave_produto
+    # Descrição mais longa/comum para cada chave_produto
     df_meta = (
         df_vols.group_by("chave_produto")
         .agg(pl.col("descricao").sort_by(pl.col("descricao").str.len_chars(), descending=True).first().alias("descricao"))
     )
 
-    # 6. Unidade de Referência: Maior volume total no ano
+    # Unidade de Referência: Maior volume total
     df_unid_padrao_auto = (
         df_aggr
-        .group_by(["chave_produto", "ano"])
+        .group_by(["chave_produto"])
         .agg(pl.col("unidade").sort_by("volume_total", descending=True).first().alias("unid_padrao_auto"))
     )
 
-    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"]).join(df_meta, on="chave_produto")
+    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto"]).join(df_meta, on="chave_produto")
     df_fator = df_fator_pre.with_columns(
         pl.coalesce(["unid_padrao_escolhida", "unid_padrao_auto"]).alias("unid_padrao")
     )
@@ -203,66 +219,91 @@ def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
 
 def _detectar_erros_conversao(df_final: pl.DataFrame) -> pl.DataFrame:
     """
-    Monitora anomalias conforme documentação:
+    Monitora anomalias:
     - Fator Extremo: < 0.001 ou > 1000
     - Valor Inválido: <= 0
     - Fragmentação: > 5 unidades para o mesmo item
-    - Volatilidade: CV alto (não implementado aqui, mas pode ser via df_aggr)
     """
-    # Fragmentação: conta unidades por (chave_produto, ano)
     df_frag = (
-        df_final.group_by(["chave_produto", "ano"])
+        df_final.group_by(["chave_produto"])
         .agg(pl.len().alias("_num_unid"))
     )
-    
-    df_final = df_final.join(df_frag, on=["chave_produto", "ano"], how="left")
-    
+
+    df_final = df_final.join(df_frag, on=["chave_produto"], how="left")
+
     df_final = df_final.with_columns([
-        pl.when(pl.col("fator_conversao") <= 0)
+        pl.when(pl.col("fator_de_conversao").is_null())
+          .then(pl.lit("Erro: Sem dados suficientes"))
+          .when(pl.col("fator_de_conversao") <= 0)
           .then(pl.lit("Erro: Fator <= 0"))
-          .when((pl.col("fator_conversao") > 1000) | (pl.col("fator_conversao") < 0.001))
+          .when((pl.col("fator_de_conversao") > 1000) | (pl.col("fator_de_conversao") < 0.001))
           .then(pl.lit("Alerta: Fator Extremo"))
           .when(pl.col("_num_unid") > 5)
           .then(pl.lit("Alerta: Fragmentação"))
           .otherwise(pl.lit("OK"))
           .alias("status_qualidade")
     ]).drop("_num_unid")
-    
+
     return df_final
 
 
 def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o fator de conversão: Factor = Price_Unit / Price_Ref."""
-    # 7. Join para calcular fator em relação à unid_padrao
+    """
+    Calcula o fator de conversão: preço_unidade / preço_referência.
+    Se unidade == unid_padrao → fator = 1.
+    Quando ambos (entrada e saída) existem, seleciona o mais próximo de valor redondo.
+    """
+    # Preços da unidade de referência
     df_precos_padrao = (
         df_aggr
-        .select(["chave_produto", "ano", "unidade", "preco_med_ent", "preco_med_sai"])
-        .rename({"unidade": "unid_padrao", "preco_med_ent": "preco_padrao_ent", "preco_med_sai": "preco_padrao_sai"})
+        .select(["chave_produto", "unidade", "preco_medio_entrada", "preco_medio_saida"])
+        .rename({
+            "unidade": "unid_padrao",
+            "preco_medio_entrada": "preco_padrao_ent",
+            "preco_medio_saida": "preco_padrao_sai"
+        })
     )
 
-    df_final = (
-        df_fator.join(df_precos_padrao, on=["chave_produto", "ano", "unid_padrao"], how="left")
-        .with_columns([
-            # Cálculo do fator: Preço Unidade Atual / Preço Unidade Referência
-            pl.when(pl.col("preco_padrao_ent") > 0)
-              .then(pl.col("preco_med_ent") / pl.col("preco_padrao_ent"))
-              .when((pl.col("preco_padrao_ent").is_null() | (pl.col("preco_padrao_ent") == 0)) & (pl.col("preco_padrao_sai") > 0))
-              .then(pl.col("preco_med_sai") / pl.col("preco_padrao_sai"))
-              .otherwise(0.0)
-              .alias("fator_conversao")
-        ])
-        .select([
-            "chave_produto", "descricao", "ano", "unidade", "unid_padrao",
-            "v_ent", "q_ent", "preco_med_ent",
-            "v_sai", "q_sai", "preco_med_sai",
-            "fator_conversao"
-        ])
+    df_final = df_fator.join(df_precos_padrao, on=["chave_produto", "unid_padrao"], how="left")
+
+    # Calcular fator: preço_unidade / preço_referência
+    # Primeiro calcula ambos os fatores (entrada e saída)
+    df_final = df_final.with_columns([
+        pl.when(pl.col("preco_padrao_ent") > 0)
+          .then(pl.col("preco_medio_entrada") / pl.col("preco_padrao_ent"))
+          .otherwise(pl.lit(None))
+          .alias("_fator_ent"),
+        pl.when(pl.col("preco_padrao_sai") > 0)
+          .then(pl.col("preco_medio_saida") / pl.col("preco_padrao_sai"))
+          .otherwise(pl.lit(None))
+          .alias("_fator_sai"),
+    ])
+
+    # Selecionar o fator mais adequado usando map_elements
+    df_final = df_final.with_columns(
+        pl.when(pl.col("unidade") == pl.col("unid_padrao"))
+          .then(pl.lit(1.0))
+          .otherwise(
+              pl.struct(["_fator_ent", "_fator_sai"])
+                .map_elements(
+                    lambda s: _escolher_fator_mais_redondo(s["_fator_ent"], s["_fator_sai"]),
+                    return_dtype=pl.Float64
+                )
+          )
+          .alias("fator_de_conversao")
     )
+
+    df_final = df_final.select([
+        "chave_produto", "descricao", "unidade", "unid_padrao",
+        "v_entr_total", "v_saida_total",
+        "preco_medio_entrada", "preco_medio_saida",
+        "fator_de_conversao"
+    ])
 
     # Aplica detector de erros
     df_final = _detectar_erros_conversao(df_final)
-    
-    return df_final.sort(["chave_produto", "ano", "unidade"])
+
+    return df_final.sort(["chave_produto", "unidade"])
 
 
 def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -379,8 +420,8 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .join(df_item_prod, on="item_N", how="inner")
     )
     
-    # 5 e 6. Agrupar por produto/ano e definir unidade padrão
-    df_aggr, df_fator = _agrupar_por_produto_ano(df_vols)
+    # 5 e 6. Agrupar por produto e definir unidade padrão
+    df_aggr, df_fator = _agrupar_por_produto(df_vols)
 
     # 7. Join para calcular fator em relação à unid_padrao
     df_final = _calcular_fator_final(df_fator, df_aggr)
@@ -392,18 +433,22 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     if df_manual is not None:
         rprint(f"[yellow]Aplicando fatores de conversão manuais encontrados em: {arquivo_manual.name}[/yellow]")
         # Garantir mesmo tipo de dados para join
-        df_manual = df_manual.select(["chave_produto", "unidade", "ano", "fator_conversao_manual"])
-        df_final = df_final.join(df_manual, on=["chave_produto", "unidade", "ano"], how="left")
-        df_final = df_final.with_columns([
-            pl.when(pl.col("fator_conversao_manual").is_not_null())
-              .then(pl.col("fator_conversao_manual"))
-              .otherwise(pl.col("fator_conversao"))
-              .alias("fator_conversao"),
-            pl.when(pl.col("fator_conversao_manual").is_not_null())
-              .then(pl.lit("manual"))
-              .otherwise(pl.lit("automático"))
-              .alias("fonte_fator")
-        ]).drop("fator_conversao_manual")
+        cols_manual = [c for c in ["chave_produto", "unidade", "fator_conversao_manual"] if c in df_manual.columns]
+        if len(cols_manual) >= 3:
+            df_manual = df_manual.select(cols_manual)
+            df_final = df_final.join(df_manual, on=["chave_produto", "unidade"], how="left")
+            df_final = df_final.with_columns([
+                pl.when(pl.col("fator_conversao_manual").is_not_null())
+                  .then(pl.col("fator_conversao_manual"))
+                  .otherwise(pl.col("fator_de_conversao"))
+                  .alias("fator_de_conversao"),
+                pl.when(pl.col("fator_conversao_manual").is_not_null())
+                  .then(pl.lit("manual"))
+                  .otherwise(pl.lit("automático"))
+                  .alias("fonte_fator")
+            ]).drop("fator_conversao_manual")
+        else:
+            df_final = df_final.with_columns(pl.lit("automático").alias("fonte_fator"))
     else:
         # Se não houver, tudo é automático
         df_final = df_final.with_columns(pl.lit("automático").alias("fonte_fator"))

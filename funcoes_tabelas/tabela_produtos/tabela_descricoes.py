@@ -96,20 +96,28 @@ def gerar_tabela_descricoes(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         texto_chaves = "".join(sorted([str(c) for c in lista_chaves]))
         return hashlib.md5(texto_chaves.encode()).hexdigest()
 
+    # Monta expressões condicionais para with_columns
+    with_exprs = [
+        pl.col("lista_ncm").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("ncm_padrao"),
+        pl.col("lista_cest").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("cest_padrao"),
+        pl.col("lista_gtin").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("gtin_padrao"),
+        pl.col("lista_tipo_item").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("tipo_item_padrao"),
+        pl.col("lista_unids").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("unid_padrao"),
+        pl.col("lista_chave_item_individualizado").map_elements(gerar_chave_produto, return_dtype=pl.Utf8).alias("chave_produto"),
+        pl.lit(False).alias("verificado")
+    ]
+
+    # Adiciona colunas co_sefin apenas se existirem nos dados de origem
+    if "co_sefin_inferido" in cols:
+        with_exprs.extend([
+            pl.col("lista_co_sefin_inferido").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("co_sefin_agr"),
+            pl.col("lista_co_sefin_inferido").list.unique().list.len().gt(1).alias("co_sefin_agr_divergente"),
+        ])
+
     df_resultado = (
         df.group_by("descricao")
         .agg(agg_exprs)
-        .with_columns([
-            pl.col("lista_ncm").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("ncm_padrao"),
-            pl.col("lista_cest").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("cest_padrao"),
-            pl.col("lista_gtin").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("gtin_padrao"),
-            pl.col("lista_tipo_item").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("tipo_item_padrao"),
-            pl.col("lista_unids").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("unid_padrao"),
-            pl.col("lista_co_sefin_inferido").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("co_sefin_agr"),
-            pl.col("lista_co_sefin_inferido").list.unique().list.len().gt(1).alias("co_sefin_agr_divergente"),
-            pl.col("lista_chave_item_individualizado").map_elements(gerar_chave_produto, return_dtype=pl.Utf8).alias("chave_produto"),
-            pl.lit(False).alias("verificado")
-        ])
+        .with_columns(with_exprs)
         .sort("descricao")
     )
 

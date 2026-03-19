@@ -93,7 +93,7 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
 
 
 def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao: str = "", print_status: bool = False) -> pl.DataFrame | None:
-    """Lê c170_simplificada (ou c170) e mapeia colunas."""
+    """Lê c170_simplificada (ou c170) e mapeia colunas. Processa entradas E saídas."""
     if path is None or not path.exists():
         print("  [!] C170 nao encontrado.")
         return None
@@ -110,17 +110,16 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
         "cest": "cest",
         "cod_barra": "gtin",
         "unid": "unidade",
-        "valor_item": "valor_entrada",
+        "vl_item": "vl_item",
         "co_cfop": "co_cfop",
         "ind_oper": "ind_oper",
-        "qtd": "quantidade_entrada"
+        "qtd": "qtd"
     }
 
     selecionar = [c for c in col_map.keys() if c in schema]
 
     lf = pl.scan_parquet(path)
-    if "ind_oper" in schema:
-        lf = lf.filter(pl.col("ind_oper") == "0") # Entrada
+    # Não filtra mais por ind_oper — lê entradas E saídas
 
     if cfop_df is not None and "co_cfop" in schema:
         lf = lf.with_columns(pl.col("co_cfop").cast(pl.String))
@@ -134,15 +133,46 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
     def _val(col):
         return pl.col(col).fill_null(0).cast(pl.Float64) if col in df.columns else pl.lit(0.0)
 
-    df = df.with_columns([
-        _val("valor_entrada").alias("valor_entrada"),
-        _val("quantidade_entrada").alias("quantidade_entrada"),
-        pl.lit(0.0).alias("valor_saida"),
-        pl.lit(0.0).alias("quantidade_saida"),
-        pl.lit(ano_padrao).alias("ano")
-    ])
+    # Classificar entradas e saídas pelo ind_oper
+    # ind_oper == "0" → Entrada, ind_oper == "1" → Saída
+    if "ind_oper" in df.columns:
+        df = df.with_columns([
+            pl.when(pl.col("ind_oper").cast(pl.String) == "0")
+              .then(_val("vl_item"))
+              .otherwise(pl.lit(0.0))
+              .alias("valor_entrada"),
+            pl.when(pl.col("ind_oper").cast(pl.String) == "0")
+              .then(_val("qtd"))
+              .otherwise(pl.lit(0.0))
+              .alias("quantidade_entrada"),
+            pl.when(pl.col("ind_oper").cast(pl.String) == "1")
+              .then(_val("vl_item"))
+              .otherwise(pl.lit(0.0))
+              .alias("valor_saida"),
+            pl.when(pl.col("ind_oper").cast(pl.String) == "1")
+              .then(_val("qtd"))
+              .otherwise(pl.lit(0.0))
+              .alias("quantidade_saida"),
+            pl.lit(ano_padrao).alias("ano")
+        ])
+    else:
+        # Sem ind_oper, assume tudo como entrada (compatibilidade)
+        df = df.with_columns([
+            _val("vl_item").alias("valor_entrada"),
+            _val("qtd").alias("quantidade_entrada"),
+            pl.lit(0.0).alias("valor_saida"),
+            pl.lit(0.0).alias("quantidade_saida"),
+            pl.lit(ano_padrao).alias("ano")
+        ])
+
+    # Limpar colunas intermediárias
+    for col_drop in ["vl_item", "qtd", "ind_oper"]:
+        if col_drop in df.columns:
+            df = df.drop(col_drop)
 
     if print_status:
-        print(f"  C170: {len(df):,} linhas (entradas X)")
+        n_ent = df.filter(pl.col("valor_entrada") > 0).height
+        n_sai = df.filter(pl.col("valor_saida") > 0).height
+        print(f"  C170: {len(df):,} linhas ({n_ent:,} entradas, {n_sai:,} saídas)")
 
     return df
