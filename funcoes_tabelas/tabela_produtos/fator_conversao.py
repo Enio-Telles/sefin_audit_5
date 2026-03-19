@@ -161,6 +161,8 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
         print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
 
+def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Agrupa por produto, unidade e ano. Eleição da Unid Ref pela maior soma de quantidades."""
     # 5. Agrupar por produto, unidade e ano
     df_aggr = (
         df_vols

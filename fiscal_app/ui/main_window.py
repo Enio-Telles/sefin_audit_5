@@ -1153,7 +1153,7 @@ class MainWindow(QMainWindow):
         
         self.status.showMessage("Calculando totais de valores...")
         try:
-            ok = self.aggregation_service.recalcular_valores_totais(cnpj)
+            ok = self.servico_agregacao.recalcular_valores_totais(cnpj)
             if ok:
                 self.atualizar_tabelas_agregacao()
                 QMessageBox.information(self, "Sucesso", "Totais de valores recalculados com sucesso.")
@@ -1166,7 +1166,7 @@ class MainWindow(QMainWindow):
 
     def recarregar_historico_agregacao(self, cnpj: str) -> None:
         """Lê o log persistente e preenche o painel de resultados da sessão."""
-        historico = self.aggregation_service.ler_linhas_log(cnpj=cnpj)
+        historico = self.servico_agregacao.ler_linhas_log(cnpj=cnpj)
         # O model espera uma lista de dicts (linhas da tabela)
         self.results_table_model.set_dataframe(pl.DataFrame(historico))
         self.results_table_view.resizeColumnsToContents()
@@ -1176,7 +1176,7 @@ class MainWindow(QMainWindow):
         cnpj = self.state.current_cnpj
         if not cnpj: return
         
-        path = self.aggregation_service.caminho_tabela_editavel(cnpj)
+        path = self.servico_agregacao.caminho_tabela_editavel(cnpj)
         if path.exists():
             df = pl.read_parquet(path)
             self.aggregation_table_model.set_dataframe(df)
