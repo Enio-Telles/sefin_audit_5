@@ -119,9 +119,8 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
     selecionar = [c for c in col_map.keys() if c in schema]
 
     lf = pl.scan_parquet(path)
-    if "ind_oper" in schema:
-        lf = lf.filter(pl.col("ind_oper") == "0") # Entrada
-
+    # Remove o filtro fixo de ind_oper == 0 para permitir saídas internas (ind_oper == 1)
+    
     if cfop_df is not None and "co_cfop" in schema:
         lf = lf.with_columns(pl.col("co_cfop").cast(pl.String))
         lf = lf.join(cfop_df.lazy(), on="co_cfop", how="inner")
@@ -132,17 +131,31 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
         return None
 
     def _val(col):
+        # Nota: co_c170 mapeia valor_item -> valor_entrada e qtd -> quantidade_entrada inicialmente no rename
         return pl.col(col).fill_null(0).cast(pl.Float64) if col in df.columns else pl.lit(0.0)
 
+    # Re-mapeia baseada no ind_oper
     df = df.with_columns([
-        _val("valor_entrada").alias("valor_entrada"),
-        _val("quantidade_entrada").alias("quantidade_entrada"),
-        pl.lit(0.0).alias("valor_saida"),
-        pl.lit(0.0).alias("quantidade_saida"),
+        pl.when(pl.col("ind_oper").cast(pl.String) == "0")
+          .then(_val("valor_entrada"))
+          .otherwise(0.0)
+          .alias("valor_entrada"),
+        pl.when(pl.col("ind_oper").cast(pl.String) == "0")
+          .then(_val("quantidade_entrada"))
+          .otherwise(0.0)
+          .alias("quantidade_entrada"),
+        pl.when(pl.col("ind_oper").cast(pl.String) == "1")
+          .then(_val("valor_entrada")) # Valor do item para saída interna
+          .otherwise(0.0)
+          .alias("valor_saida"),
+        pl.when(pl.col("ind_oper").cast(pl.String) == "1")
+          .then(_val("quantidade_entrada"))
+          .otherwise(0.0)
+          .alias("quantidade_saida"),
         pl.lit(ano_padrao).alias("ano")
     ])
 
     if print_status:
-        print(f"  C170: {len(df):,} linhas (entradas X)")
+        print(f"  C170: {len(df):,} linhas (entradas e saídas internas X)")
 
     return df
