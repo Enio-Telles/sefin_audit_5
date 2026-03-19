@@ -209,6 +209,72 @@ def _ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao
     return df
 
 
+def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Agrupa os volumes por produto, unidade e ano para calcular médias e definir unidade padrão."""
+    # 5. Agrupar por (chave_produto, unidade, ano) para calcular médias
+    df_aggr = (
+        df_vols
+        .group_by(["chave_produto", "unidade", "ano", "unid_padrao_escolhida"])
+        .agg([
+            pl.col("valor_entrada").sum().alias("v_ent"),
+            pl.col("quantidade_entrada").sum().alias("q_ent"),
+            pl.col("valor_saida").sum().alias("v_sai"),
+            pl.col("quantidade_saida").sum().alias("q_sai"),
+            pl.len().alias("ocorrencias")
+        ])
+        .with_columns([
+            (pl.col("v_ent") / pl.col("q_ent")).fill_nan(0).alias("preco_med_ent"),
+            (pl.col("v_sai") / pl.col("q_sai")).fill_nan(0).alias("preco_med_sai"),
+        ])
+    )
+
+    # 6. Unidade Padrão: usar a escolhida na tabela de descrições, ou a moda se vazia
+    df_unid_padrao_auto = (
+        df_aggr
+        .group_by(["chave_produto", "ano"])
+        .agg(pl.col("unidade").sort_by("ocorrencias", descending=True).first().alias("unid_padrao_auto"))
+    )
+
+    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"])
+
+    df_fator = df_fator_pre.with_columns(
+        pl.coalesce(["unid_padrao_escolhida", "unid_padrao_auto"]).alias("unid_padrao")
+    )
+    return df_aggr, df_fator
+
+
+def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.DataFrame:
+    """Calcula o fator de conversão em relação à unidade padrão escolhida/calculada."""
+    # 7. Join para calcular fator em relação à unid_padrao
+    df_precos_padrao = (
+        df_aggr
+        .select(["chave_produto", "ano", "unidade", "preco_med_ent", "preco_med_sai"])
+        .rename({"unidade": "unid_padrao", "preco_med_ent": "preco_padrao_ent", "preco_med_sai": "preco_padrao_sai"})
+    )
+
+    df_final = (
+        df_fator.join(df_precos_padrao, on=["chave_produto", "ano", "unid_padrao"], how="left")
+        .with_columns([
+            # Cálculo do fator
+            pl.when(pl.col("preco_padrao_ent") > 0)
+              .then(pl.col("preco_med_ent") / pl.col("preco_padrao_ent"))
+              .when((pl.col("preco_padrao_ent").is_null() | (pl.col("preco_padrao_ent") == 0)) & (pl.col("preco_padrao_sai") > 0))
+              .then(pl.col("preco_med_sai") / pl.col("preco_padrao_sai"))
+              .otherwise(0.0)
+              .alias("fator_conversao")
+        ])
+        .select([
+            "chave_produto", "ano", "unidade", "unid_padrao",
+            "v_ent", "q_ent", "preco_med_ent",
+            "v_sai", "q_sai", "preco_med_sai",
+            "fator_conversao"
+        ])
+        .sort(["chave_produto", "ano", "unidade"])
+    )
+
+    return df_final
+
+
 def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     import re
     cnpj = re.sub(r"[^0-9]", "", cnpj)
@@ -290,63 +356,11 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     # 4. Join com chave_produto e unid_padrao_escolhida
     df_vols = df_total.join(df_item_prod, on="chave_item_individualizado", how="inner")
 
-    # 5. Agrupar por (chave_produto, unidade, ano) para calcular médias
-    df_aggr = (
-        df_vols
-        .group_by(["chave_produto", "unidade", "ano", "unid_padrao_escolhida"])
-        .agg([
-            pl.col("valor_entrada").sum().alias("v_ent"),
-            pl.col("quantidade_entrada").sum().alias("q_ent"),
-            pl.col("valor_saida").sum().alias("v_sai"),
-            pl.col("quantidade_saida").sum().alias("q_sai"),
-            pl.len().alias("ocorrencias")
-        ])
-        .with_columns([
-            (pl.col("v_ent") / pl.col("q_ent")).fill_nan(0).alias("preco_med_ent"),
-            (pl.col("v_sai") / pl.col("q_sai")).fill_nan(0).alias("preco_med_sai"),
-        ])
-    )
-
-    # 6. Unidade Padrão: usar a escolhida na tabela de descrições, ou a moda se vazia
-    df_unid_padrao_auto = (
-        df_aggr
-        .group_by(["chave_produto", "ano"])
-        .agg(pl.col("unidade").sort_by("ocorrencias", descending=True).first().alias("unid_padrao_auto"))
-    )
-    
-    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"])
-    
-    df_fator = df_fator_pre.with_columns(
-        pl.coalesce(["unid_padrao_escolhida", "unid_padrao_auto"]).alias("unid_padrao")
-    )
+    # 5 e 6. Agrupar por produto/ano e definir unidade padrão
+    df_aggr, df_fator = _agrupar_por_produto_ano(df_vols)
 
     # 7. Join para calcular fator em relação à unid_padrao
-    df_precos_padrao = (
-        df_aggr
-        .select(["chave_produto", "ano", "unidade", "preco_med_ent", "preco_med_sai"])
-        .rename({"unidade": "unid_padrao", "preco_med_ent": "preco_padrao_ent", "preco_med_sai": "preco_padrao_sai"})
-    )
-    
-    df_final = (
-        df_fator.join(df_precos_padrao, on=["chave_produto", "ano", "unid_padrao"], how="left")
-        .with_columns([
-            # Cálculo do fator
-            pl.when(pl.col("preco_padrao_ent") > 0)
-              .then(pl.col("preco_med_ent") / pl.col("preco_padrao_ent"))
-              .when((pl.col("preco_padrao_ent").is_null() | (pl.col("preco_padrao_ent") == 0)) & (pl.col("preco_padrao_sai") > 0))
-              .then(pl.col("preco_med_sai") / pl.col("preco_padrao_sai"))
-              .otherwise(0.0)
-              .alias("fator_conversao")
-        ])
-        .select([
-            "chave_produto", "ano", "unidade", "unid_padrao", 
-            "v_ent", "q_ent", "preco_med_ent",
-            "v_sai", "q_sai", "preco_med_sai", 
-            "fator_conversao"
-        ])
-        .sort(["chave_produto", "ano", "unidade"])
-    )
-
+    df_final = _calcular_fator_final(df_fator, df_aggr)
     # 8. Salvar
     nome_saida = f"fator_conversao_{cnpj}.parquet"
     ok = salvar_para_parquet(df_final, pasta_produtos, nome_saida)
