@@ -1,7 +1,4 @@
-import { AlertTitle } from "@radix-ui/react-alert-dialog";
-import { ExternalLink, FileSpreadsheet } from "lucide-react";
-
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "./KpiCard";
@@ -52,11 +49,9 @@ export function FatoresTab({
 
         <div className="flex flex-wrap gap-2">
           <Button className="gap-2 bg-blue-600 text-white hover:bg-blue-700" onClick={onOpenRevisaoFatores}>
-            <FileSpreadsheet className="h-4 w-4" />
             Abrir revisao de fatores
           </Button>
           <Button variant="outline" className="gap-2" onClick={onOpenFatoresParquet} disabled={!hasFatoresFile}>
-            <ExternalLink className="h-4 w-4" />
             Abrir parquet de fatores
           </Button>
         </div>
