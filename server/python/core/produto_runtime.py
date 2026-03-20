@@ -141,6 +141,11 @@ def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
         if len(token) > 1 and token not in _STOP_WORDS
     )
 
+@lru_cache(maxsize=10000)
+def _normalize_similarity_tokens_set(value: str) -> frozenset[str]:
+    return frozenset(_normalize_similarity_tokens(value))
+
+
 
 @lru_cache(maxsize=10000)
 def _normalize_ngram_text(value: str) -> str:
@@ -186,12 +191,11 @@ def _char_ngram_cosine(a: str, b: str, size: int = 3) -> float:
     return dot / (norm_a * norm_b)
 
 @lru_cache(maxsize=10000)
-def _jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
-    set_a, set_b = set(a), set(b)
-    if not set_a and not set_b:
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    if not a and not b:
         return 1.0
-    intersection = len(set_a & set_b)
-    union = len(set_a | set_b)
+    intersection = len(a & b)
+    union = len(a | b)
     return 0.0 if union == 0 else intersection / union
 
 @lru_cache(maxsize=10000)
@@ -212,7 +216,7 @@ def _similarity_score(a: str, b: str) -> float:
     a_str = str(a)
     b_str = str(b)
 
-    token_score = _jaccard(_normalize_similarity_tokens(a_str), _normalize_similarity_tokens(b_str))
+    token_score = _jaccard(_normalize_similarity_tokens_set(a_str), _normalize_similarity_tokens_set(b_str))
     sequence_score = _sequence_match(a_str, b_str)
 
     return 0.4 * token_score + 0.6 * sequence_score

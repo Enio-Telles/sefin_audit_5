@@ -1,3 +1,3 @@
-## 2024-03-24 - [Polars Python FFI Bottlenecks]
-**Learning:** `map_elements` with Python lambdas (like `hashlib.sha1`) triggers massive FFI overhead per row. Native hashing isn't always viable if exact SHA-1 is expected for backwards compatibility.
-**Action:** When a Python lambda MUST be used in Polars, map the elements ONLY over `.unique()` values, then `join(..., how='left')` back into the main DataFrame. This provides near-native performance (~3x to 5x faster) on datasets with repeated string permutations.
+## 2024-03-20 - [Optimize Text Tokenization for Set Operations]
+**Learning:** When calculating Jaccard similarity across large combinations of strings, converting memoized tuple results into sets on every comparison call incurs significant O(N) allocation overhead. Caching the output as a `frozenset` instead bypasses this conversion cost. However, `frozenset` does not preserve order, which breaks sequence-dependent functions like `difflib.SequenceMatcher`.
+**Action:** When memoizing string tokenization intended for both set operations (like Jaccard) and sequence operations, create two distinct cached functions (e.g., one returning `frozenset` and one returning `tuple`) to maximize performance without sacrificing deterministic ordering where needed.
