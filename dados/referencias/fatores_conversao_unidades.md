@@ -1,0 +1,103 @@
+# **Documentação: Processo de Conversão de Unidades**
+
+Este documento detalha a lógica e os procedimentos do sistema para a normalização de unidades de medida, garantindo a integridade dos cálculos de stock e custo médio (PEPS/Médio Ponderado).
+
+## **1\. Visão Geral e Objetivo**
+
+No contexto de inventários, é comum que um produto seja transacionado em múltiplas unidades (ex: comprado em "Caixa de 24" e vendido em "Unidade").
+
+Para que os cálculos de **Custo Médio** e **Saldo de Stock** sejam precisos, todos os movimentos de um produto num determinado ano fiscal devem ser convertidos para uma única **Unidade de Referência (Ref)**.
+
+## **2\. Metodologia de Cálculo dos Fatores**
+
+O cálculo ocorre no módulo conversao.py através da lógica calculate\_factors.
+
+### **A. Eleição da Unidade de Referência**
+
+O sistema seleciona automaticamente a unidade de referência com base na **frequência de utilização**. A unidade que possuir a maior soma absoluta de quantidades movimentadas no ano é eleita a "Referência".
+
+* **Porquê?** Geralmente, a unidade mais utilizada é a unidade base de venda ou consumo, minimizando arredondamentos.
+
+### **B. Fórmula de Cálculo**
+
+O fator é determinado pela proporção entre o preço médio unitário da unidade atual e o preço médio da unidade de referência:
+
+![][image1]**Exemplo Prático:**
+
+* **Unidade de Referência (UN):** Preço Médio R$ 10,00  
+* **Unidade Caixa (CX 12):** Preço Médio R$ 120,00  
+* **Cálculo:** ![][image2]  
+* **Resultado:** O fator da CX é **12.0** e o da UN é **1.0**.
+
+## **3\. Intervenção Manual e Ajustes (Excel)**
+
+Caso a automação encontre dados inconsistentes (ex: falta de histórico de preços), o utilizador pode intervir através da aba **"Fatores"**:
+
+### **Fluxo de Trabalho:**
+
+1. **Exportação**: Clique em "Exportar Fatores (Excel)".  
+2. **Edição**: No Excel, altere apenas a coluna fator.  
+3. **Importação**: Carregue o ficheiro de volta no sistema.  
+4. **Processamento**: Utilize o botão **"Processar TUDO"** para aplicar as alterações a todo o histórico de movimentos.
+
+### **Estrutura do Ficheiro de Importação**
+
+| Coluna | Descrição | Status |
+| :---- | :---- | :---- |
+| ano | Ano fiscal correspondente. | **Obrigatório** |
+| codigo\_produto\_ajustado | Identificador único do produto. | **Obrigatório** |
+| unid | Unidade de medida original. | **Obrigatório** |
+| fator | Multiplicador para conversão. | **Editável** |
+| unid\_ref | Unidade para a qual o valor será convertido. | Informativo |
+
+\[\!IMPORTANT\]
+
+Se alterar a **Unidade de Referência** na interface antes de exportar, o sistema recalcula os fatores sugeridos automaticamente.
+
+## **4\. Aplicação e Impacto nos Dados**
+
+Uma vez definido o fator, a função apply\_conversion transforma os dados brutos:
+
+* **Quantidade Convertida (![][image3]):** ![][image4]  
+* **Preço Unitário Convertido (![][image5]):** ![][image6]
+
+**Consequência:** Uma compra de "1 CX" com fator 12 torna-se "12 UN" no cálculo de stock, mantendo o valor total da operação inalterado.
+
+## **5\. Controlo de Qualidade: Deteção de Erros**
+
+O ConversionErrorDetector monitoriza automaticamente anomalias que possam comprometer os relatórios:
+
+| Alerta | Descrição | Limite de Tolerância |
+| :---- | :---- | :---- |
+| **Fator Extremo** | Fatores absurdamente altos ou baixos. | ![][image7] ou ![][image8] |
+| **Valor Inválido** | Fatores nulos ou negativos. | ![][image9] |
+| **Fragmentação** | Excesso de unidades diferentes para o mesmo item. | ![][image10] unidades |
+| **Volatilidade** | Mesma unidade com preços muito instáveis. | Coef. Variação ![][image11] |
+
+## **Notas Técnicas e Performance**
+
+* **Motor Polars**: O processamento utiliza a **Lazy API do Polars**, permitindo que milhares de linhas sejam convertidas em milissegundos através de execução paralela.  
+* **Integridade**: O sistema realiza a **deduplicação** de movimentos (baseada na Chave de Acesso e Item) antes da conversão para evitar inflação artificial do stock.  
+* **Recálculo Individual**: Através de recalculate\_single\_product, é possível testar alterações num único produto sem necessidade de reprocessar toda a base de dados.
+
+[image1]: <data:image/png;base64,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>
+
+[image2]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHoAAAAWCAYAAAAPb4jFAAAE60lEQVR4Xu1ZW2hUVxS9IREi1ieN0+Yxd2YSGgKKH1MLFj9EVBT1q4Ii2B8FLdgKFSMGhNYHlGoVXyiSD/0IgRDQn6BYoUVFBEGkoH4FtAiioEJRPwyNXWvuPsmeM3POTMTcNHIXLOaevffZd5+9z+smQZAgQYIECRK8P3K53MxMJvMTWG/rEnxANDc3T02n05tIJDtj69va2mZAtyMMw7MkTH5GnzbbLpvNtkP/q5C2G+nbtrMBfyvBrbac7yWh+w6cVU6v4wL3gp/bdnGjUj4Zo8TKmHcKxxw338Mci59C3lkD224ElQKzE5oU2o9K+WSMEms8hYZiM+K4gt9n4GsSweW1DTpCHHZje/2itbV1Lon2fnAI/MbYod8ytO9wAsgkqIXvPZCfyefzU5RLGzXodwDMsoE+9XjeBd4EXwofhVYiJI6bsF9PH+Lna/AGY9a2cSGsLp9fQX6iqampmcRzj/AlddrWBylyP3OMZq3Ju4y/2E97e/t0GiGYta7AIDsIPoCT+UbGMxWyW+C9xsbGT2UGX0a7S/eVgQxyxWq5BvScSYfxWCeiGomrBj53k2GZQqO9HbwutgYsNpN2ks9KHguqyGcdZH3gn2Y8Mn7yMTjAia7snWBOYT/IHGs5ZF2sRdmd1BMYO/4G/gvHS7Qc7fPGHjNoAZ7/oR9t09DQ8IkM6riWa8DPVtdEcBU6lUpNQ/sqY9D2hNgXJqCtiwuufMpudQF8arZY5kjlqWRCuwC7bvZhXy2Xdz8HO7RcK0sCE9Raq0YX8AECTuF3FfjOU+j+YHTFjuhI9DkKztY6A1eh5Z3cKVyFfoLfnK2LC7588hjjRDVtrLwmErYP066VaMFMdObWUegh/C7Wcq0sG1g5wGa52BfOaOnvK3RJQJAtItGnU8s1XIXmM2WeQnvHEUYXmEJcVXJfYE1UH8aST4xhGwnbFyVnqwO+vLpqoZUVA+MlhwTuwO7bQM5Bl3NPQDxL95EtLS3zlLwI41Xo8cYY8smL2X3hUlvvgievzlpopTcwKfDvwqKg0tGNe9h2rgLqCdTlSLaqUyTPLdWlCK5C8/xF+56n0I/tS0qcqCafmOBfSm46SFvvg5z1A+zvKPQb+F+o5VrpDAyFmRNGh39RUHg+APsciecnvFjpfqYg4EEth916Qy234Sp0EN1e+zlYe6JAdhy8nXac+0Q4wVu3fAZ1I/bPjEzO3cO+uDXC6Guo5NLJGoSuO4ovMH5KQXYRuh/xu84Q7S5wQAJj4nvD0c+awurltgzZoPbJywaCOcYLFWnk5eApNAe0gQPVPsxnHvto27jhy6fsjLxIbbHyySKfC6IJxXyeBO+6dqYwuuM8Ukef+VsC+3UHemIiWdvg/G8oXoHvhC8oA5fRBr9nlM7myG1aBsCV9IMwj/Yf4HYJogApPlfIyISwAf0RieutkO96hnj/Mt/zvL3C5jTkvfQpfg+BfZycts84UCmfsmovKZ1Ns/PVydiGwdVFLxkFi7oT77zGXJu8Q3a9ZHJUCow2SaGrR6V8TlihPzSYfF4ySBR+RbmEI5hOBLPIlr8najDQDHyuIflMmWUzaRFGf59wFboA5DmVjo4Kc3+qtW1iBwKajVr8Us0fBRIUVizvQVlb8b9HxvFfqgSl4CoFv7flkwLp6AY9+WboxIBb8EdzDCUYZ/wHyMFS45W9PnEAAAAASUVORK5CYII=>
+
+[image3]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAYCAYAAACBbx+6AAACvElEQVR4Xu2WT4hNURzH72vQCJmR5+n9uff9Ua95KfSSFFGosWBhoRFTJBFWkslgY1ixU5OEl0SaptjIwmyUBVHsFFtloRRFWTA+33m/M26npxmby6v3rW/nnN/vd8753t8593dvEHTQwayQKhaL68IwfACfR1H0Er6mvxtfl/G/QnsIzufzS0TEjcH7uVwuH/OtwPYG0adETKnY1ORRLpcXI2jCeK1er8/1Y8j6fnzfjet9f2KQOIlUBsV4ZuMoFApr8X8znvD9iYHNd8Gf8Ljo+x24CnX8X0X6Q74/EXDM3Qh4CD8goiz6MQ7EbIeT4j8TrONHwHs4kclkFoh+jAMxF51grsdO358I3DGT6Vu+Lw57KZ9Fds9LpVLGj0kEbSeYjVch4MtMgqPmi/mDB9wn+v7EwOa9CHkBxxnOEbPZ7FLG5/AdUsnjoSIe6G1k9blVjU4UiDmCmE+0m0T6Z/TFo98PBxD+BDZavZDEzSf+GLwER9Lp9ELZROYexnZepL+cNbbSv6sToj1rvKGEBM3fgQHGt1UIiBlUJWpZjezDocmfjU9tskS8C+0fwjI7/S9h867g36ZPN+09CZPN2RVHfy/90/j20B8Jf3/aU4yHGe+gXaN4CdY1pQqtpH9SnBbqQ9kRWXizFlHpYsLNoHlVurAf0MsnKj5svrCPaXvdGs4Wt5uoIeZ30zYY97lTkECNLa5PY9kRXSV2g+jWnhG2+Uc4Dl/Bo55fR3zdjRHUo2skm7NbddGHSRks045Vq9VFyqBl8Q5zVlcqlYJletjW6lcl+qtqxORS1PyoTMJHLrMOJmaUjTcq+2w4aH97o6I90AVtrngbX1Zfp2gn2cB20K6XHuqqhMMt8b1mhbYTLLBoD8e1LPjzT3sqbN7VuH/qhdLRW99hqmzGxkGtVpsXxGIkvFU16iAp/AIzuN+2ku0IbQAAAABJRU5ErkJggg==>
+
+[image4]: <data:image/png;base64,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>
+
+[image5]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACkAAAAYCAYAAABnRtT+AAACXUlEQVR4Xu2Wz0tUURTHHUZhsuzHYhiaX2/mMeNgiJsXtmkVQkYQUUsjQoNa1MYfGKJLQSESrJUI1kI3Sbt2LQJ3tetPiCAoaleLoPTzbc5MlwuB4+I5ol/4cu8759xzv/e8d+99HR1HOKwIgmDMuPIfThjP+mNjw4EQWSqVThsvI+RnsVhckiAxn89XHbHfy+XyoD8+ViBiBP5B5JBrz+VyeRHfJ7iJqdP1xwoELEuIBLl2REcivh/7JrJWq/WICNiCr3ntKdeP7YHxd6FQuOb6YgOT9xm/wRnHlaCCF7F9NU7I5vjjA5PfMG5TxQ+0b0X67xC5xmapif64WBHUv0XxM6JC398WaHuRiDqDuPfGN5lM5rgfs+8I/m0Ycd73twWC+gG+bbzi+31Q+XPEPYNP4CVMSdqbIhttAS6GYdjLRhvQpuP5PnyEf1XkCDuvPA0/tquKJ+aFSP9UczIMwwR9JOiXI/ILXM9ms93NQAe6EhnznKvyGHFz9G/TTpHrnqgYO7Ke0t6ivQtXoijqCuwEwT5dqVROEn9HC8A2rny2wAV9fv68u4XORp2ZayQdaRhJnuN5S5utseEkRBWx/uNi/YrV2CXj3yuXmJTiqGy/+lqUaHO1DkuYYtINEkWyqTqqLLaX6XT6hIi5U5XWraSK4HulK5a4DP1NkTwX7KdFPzDruul0BssuelO3DpJcJ/GMvdLZarUa0s6resZJOEpogrZPldfiJEILtEU+1HenRfG8in+YdkyLFv05W8aBECloUnu1TTR+UOgmHXPSndQR4cYkbNzevsMj7BI7br3CuAOjKdUAAAAASUVORK5CYII=>
+
+[image6]: <data:image/png;base64,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>
+
+[image7]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADQAAAATCAYAAADf0S5lAAAAkUlEQVR4XmNgGAWjYBSMgmEP5OXlnYDYCshkhuIhD5iBHvIG4u1QnCwuLs6NrmgoAkYQVlRU1FNQUFgJxJ1Az0miKxqyQFlZWRbooUlAvFxOTk6LAeLhoQ9UVFT4gJ4qBXpqBzD27ECYYSh7DuYhIN48pD00HJLcsCsUho2Hhlc9BIyJAKAnnBiGUUthFAxWAADHPyCFT+l6+wAAAABJRU5ErkJggg==>
+
+[image8]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADsAAAATCAYAAAAu2nXoAAAAlUlEQVR4XmNgGAWjYBSMglEwtACjnJyclry8fDSQzYwuOSyAsbExK9CTvkBPbgfiZHFxcW50NUMegDwF9GQ+1JPeDMMtNoGekgTibiheo6ioqAcUZkRXN6QB0FPqQM8thnoS5GFJdDXDBsjKyiqPGM/CAFoyXgwqfRmGWzLGBoZ9AYUMRpRnYWBE1LNYwPBvQY2CIQoASGwgM0A8l88AAAAASUVORK5CYII=>
+
+[image9]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAATCAYAAACORR0GAAAA50lEQVR4Xu2UMQrCQBBFd4kWooVNCEJMAmnUNoVgaWtjYW1jYRU9iJ2XCIKdYOktvI//Q4owCJHsJJUPXrM7zM9uJjHmT0fYIAiGVG5o4cVxvIGPJEmOFGs9WaRBu0G8IjQ/wBeab7Ms68saJ9B4Ai/wjoAllqysaYqNomiBxkXpNU3TqSxyBiFnNH/j6WdU7qvCE/AkpQVPaBSv7CscAgSdOGVwjSVP1qjCKeO0IeyJ4H0YhgNZo43l9MEbAnNqNL+jCp0FVWFA6yFu4GXPcR27X0Ttipomo+/7/qj87dSK9zSmskcdH9+TM6QuZqN6AAAAAElFTkSuQmCC>
+
+[image10]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAATCAYAAACORR0GAAAAh0lEQVR4XmNgGAWjYECAvLy8ExBbAZnMUEwzwAy0yBuIt0Nxsri4ODe6ImoCRhBWVFTUU1BQWAnEnUBLJdEVUR0oKyvLAi2aBMTL5eTktBggDqEdUFFR4QNaVgq0bAfQt3YgzEALS2EWAfFmmlhEy6CjW2KguUX0yUdAlwcADXdioEPJMHwAAPpxIIW9OLXwAAAAAElFTkSuQmCC>
+
+[image11]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADEAAAATCAYAAAA5+OUhAAAAk0lEQVR4XmNgGAWjYBSMgkEL5OXlnYDYCshkRpcbSoAZ6AlvIN4OxMkgLC4uzo2uaKgARkVFRT0QVlBQWAnEnUAPSaIrGlJAWVlZFuiJSUC8XE5OTgsoxIiuZsgAFRUVPqBHSoEe2QGMJTuGoegZmCeAePOQ88RQTU7DImMPaU8M/XoCGOIBQIc7MQzxGnsUDDQAAOF7IEXDQy4YAAAAAElFTkSuQmCC>

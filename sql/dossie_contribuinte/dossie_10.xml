@@ -1,0 +1,3866 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<displays>
+<display id="6e628cff-0174-1000-8006-ac16fb8d30fd" type="" style="Table" enable="true">
+	<name><![CDATA[Dossiê Contribuinte - 4.3.10.3]]></name>
+	<description><![CDATA[]]></description>
+	<tooltip><![CDATA[]]></tooltip>
+	<drillclass><![CDATA[]]></drillclass>
+	<CustomValues>
+		<TYPE><![CDATA[horizontal]]></TYPE>
+	</CustomValues>
+	<query>
+		<sql><![CDATA[SELECT
+						  case when co_cnpj_cpf is null then :CNPJ else co_cnpj_cpf end co_cnpj_cpf,
+						  co_cad_icms,
+						  nome,
+						  inicio_ativ
+					  FROM 
+						  dual
+							LEFT JOIN(
+								SELECT
+									  t.co_cnpj_cpf,
+									  t.co_cad_icms,
+									  '<html><b>' || t.no_razao_social nome,
+									  t.da_inicio_atividade            inicio_ativ
+								  FROM
+									  bi.dm_pessoa t
+								 WHERE 
+									  t.co_cnpj_cpf like '%'||regexp_replace(:CNPJ,'\D+', '')||'%'
+								  and t.co_cad_icms like '%'||regexp_replace(:IE,'\D+', '')
+								  and upper(t.no_razao_social) like '%'||regexp_replace(upper(:NOME),'\s', '%')||'%'
+						  )b ON b.co_cnpj_cpf like REGEXP_REPLACE(:CNPJ,'\D+', '')||'%'
+					order by 
+						case when :NOME is not null then nome end]]></sql>
+		<binds>
+			<bind id="CNPJ">
+				<prompt><![CDATA[CNPJ]]></prompt>
+				<tooltip><![CDATA[CNPJ]]></tooltip>
+				<value><![CDATA[]]></value>
+				<bracket><![CDATA[null]]></bracket>
+			</bind>
+			<bind id="IE">
+				<prompt><![CDATA[IE]]></prompt>
+				<tooltip><![CDATA[IE]]></tooltip>
+				<value><![CDATA[NULL_VALUE]]></value>
+				<bracket><![CDATA[null]]></bracket>
+			</bind>
+			<bind id="NOME">
+				<prompt><![CDATA[NOME]]></prompt>
+				<tooltip><![CDATA[NOME]]></tooltip>
+				<value><![CDATA[costa marques]]></value>
+				<bracket><![CDATA[null]]></bracket>
+			</bind>
+		</binds>
+	</query>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Dados cadastrais]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[vertical]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+								  t.co_cnpj_cpf 																		"CNPJ",
+								  t.co_cad_icms 																		"IE",
+								  '<html><b>' || t.no_razao_social														"Nome",
+								  t.DESC_ENDERECO||' '||t.BAIRRO 														"Endereço",
+								  localid.no_municipio																	"Município",
+								  localid.co_uf																			"UF",
+								  t.co_regime_pagto|| ' - '|| rp.no_regime_pagamento									"Regime de Pagamento",
+								  CASE WHEN t.in_situacao = '001' 
+										THEN '<html><p style="color:blue">'||t.in_situacao
+											|| ' - '|| s.desc_situacao
+										ELSE '<html><p style="color:red">'|| t.in_situacao
+											  || ' - '|| convert(s.desc_situacao,'AL32UTF8','WE8MSWIN1252')
+										END																				"Situação da IE",
+								  t.da_inicio_atividade																	"Data de Início da Atividade",
+								  to_date(us.data_ult_sit, 'YYYYMMDD')													"Data da última situação",
+								  to_char(trunc(months_between((CASE WHEN t.in_situacao = '001' 
+																		THEN SYSDATE
+																	ELSE to_date(us.data_ult_sit, 'YYYYMMDD') 
+																END),
+																t.da_inicio_atividade),2))||' meses' 					"Período em atividade",
+								  'https://portalcontribuinte.sefin.ro.gov.br/Publico/parametropublica.jsp?NuDevedor=' || t.co_cad_icms redesim
+							  FROM
+								  bi.dm_pessoa                 t
+									LEFT JOIN bi.dm_localidade localid ON t.co_municipio = localid.co_municipio
+									LEFT JOIN bi.dm_regime_pagto_descricao rp ON t.co_regime_pagto = rp.co_regime_pagamento
+									LEFT JOIN(
+												SELECT
+														CO_SITUACAO_CONTRIBUINTE    CO_SITUACAO,
+														NO_SITUACAO_CONTRIBUINTE    DESC_SITUACAO
+													FROM BI.DM_SITUACAO_CONTRIBUINTE
+										  )	s ON t.in_situacao = s.co_situacao
+									LEFT JOIN(
+												SELECT
+														MAX(u.it_da_transacao) data_ult_sit,
+														u.it_nu_inscricao_estadual
+												  FROM
+														sitafe.sitafe_historico_gr_situacao t
+														LEFT JOIN sitafe.sitafe_historico_situacao    u ON t.tuk = u.tuk
+												 WHERE
+													  t.it_co_situacao_contribuinte NOT IN('030','150','005')
+														 AND u.it_co_usuario NOT IN('INTERNET','P30015AC   ')
+												 GROUP BY
+													  u.it_nu_inscricao_estadual
+										  )	us ON t.co_cad_icms = us.it_nu_inscricao_estadual
+							 WHERE
+								  t.co_cnpj_cpf = :CO_CNPJ_CPF]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Endereços]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select '<html><b>DM_PESSOA/SITAFE' origem,
+                                            'ATUAL' ano_mes,
+                                            t.desc_endereco logradouro,
+                                            null numero,
+                                            null complemento,
+                                            t.bairro bairro,
+                                            null fone,
+                                            t.nu_cep cep,
+                                            localid.no_municipio municipio,
+                                            localid.co_uf uf
+                                    from bi.dm_pessoa t
+                                    LEFT JOIN bi.dm_localidade    localid ON t.co_municipio = localid.co_municipio
+                                    where co_cnpj_cpf = :CO_CNPJ_CPF
+                                    
+                                    union all
+                                    
+                                    select * from (
+                                    SELECT
+                                        'NFE' origem,
+                                        extract(year from dhemi)||'/'||extract(month from dhemi) ano_mes,
+                                        upper(xlgr_dest) logradouro,
+                                        upper(nro_dest) numero,
+                                        upper(xcpl_dest) complemento,
+                                        upper(xbairro_dest) bairro,
+                                        upper(fone_dest) fone,
+                                        upper(cep_dest) cep,
+                                        upper(xmun_dest) muncipio,
+                                        upper(co_uf_dest) uf
+                                    FROM
+                                        bi.fato_nfe_detalhe t
+                                    where t.co_destinatario = :CO_CNPJ_CPF
+                                    group by    upper(xlgr_dest),
+                                        upper(nro_dest),
+                                        upper(xcpl_dest),
+                                        upper(xbairro_dest),
+                                        upper(fone_dest),
+                                        upper(xmun_dest),
+                                        upper(cep_dest),
+                                        upper(co_uf_dest),
+                                        extract(year from dhemi)||'/'||extract(month from dhemi)
+                                    
+                                    order by extract(year from dhemi)||'/'||extract(month from dhemi) desc)]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Historico Situação]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+                                        to_date(u.it_da_transacao, 'YYYYMMDD')        data,
+                                        t.it_co_situacao_contribuinte                 sit,
+                                        CONVERT(cad_sit.it_no_situacao_contribuinte, 'AL32UTF8', 'WE8MSWIN1252')descricao,                                           
+                                        u.it_nu_fac                                   fac,
+                                        u.it_co_usuario                               usuario,
+                                        u.tuk
+                                    FROM
+                                        sitafe.sitafe_historico_gr_situacao    t
+                                        LEFT JOIN sitafe.sitafe_historico_situacao       u ON t.tuk = u.tuk
+                                        LEFT JOIN sitafe.sitafe_tabelas_cadastro         cad_sit ON t.it_co_situacao_contribuinte = cad_sit.it_co_situacao_contribuinte
+                                    WHERE
+                                        u.it_nu_inscricao_estadual = :CO_CAD_ICMS
+                                        AND t.it_co_situacao_contribuinte NOT IN ( '030', '150', '005' )
+                                        AND u.it_co_usuario not in('INTERNET', 'P30015AC   ')
+                                    ORDER BY
+                                        u.it_in_ultima_situacao DESC,
+                                        u.it_da_atualizacao_situacao DESC,
+                                        u.it_ho_transacao DESC,
+                                        t.it_da_situacao_contribuinte DESC]]></sql>
+			<binds>
+				<bind id="CO_CAD_ICMS">
+					<prompt><![CDATA[CO_CAD_ICMS]]></prompt>
+					<tooltip><![CDATA[CO_CAD_ICMS]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Script" enable="true">
+			<name><![CDATA[Observação]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SET PAGESIZE 25;
+                                            SET LINESIZE 110;
+                                            SET NEWPAGE 0;
+                                            SET ECHO OFF;
+                                            SET FEEDBACK OFF;
+                                            SET HEADING OFF;
+                                            
+                                            SELECT
+                                                LISTAGG(CONVERT(t.it_no_ocorrencia, 'AL32UTF8', 'WE8MSWIN1252'), ' ') WITHIN GROUP(
+                                                    ORDER BY
+                                                        t.m_occurs
+                                                ) "Ocorrência"
+                                            FROM
+                                                sitafe.sitafe_historico_sit_no_ocorre t
+                                            WHERE
+                                                t.tuk = :TUK;]]></sql>
+				<binds>
+					<bind id="TUK">
+						<prompt><![CDATA[TUK]]></prompt>
+						<tooltip><![CDATA[TUK]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Histórico Regime de Pagamento]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select
+								co_regime_pagto,
+								desc_reg_pagto,
+								min(da_referencia)  inicio,
+								case when max(da_referencia) = trunc(sysdate,'mm') then 'Atual' else to_char(max(da_referencia)) end fim
+							from BI.dm_regime_pagto_contribuinte
+							where co_cnpj_cpf  = :CO_CNPJ_CPF
+							group by co_cnpj_cpf,
+								co_regime_pagto,
+								desc_reg_pagto
+							order by 3 desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Atividades]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+                                    base.tipo,
+                                    base.co_cnae,
+                                    cnae.no_cnae
+                                FROM
+                                    (
+                                        SELECT
+                                            'SECUND' tipo,
+                                            t.co_cnae_secundaria co_cnae
+                                        FROM
+                                            bi.dm_cnae_secundaria t
+                                        WHERE
+                                            t.co_cnpj_cpf = :CO_CNPJ_CPF
+                                        UNION
+                                        SELECT
+                                            'PRINCIPAL' tipo,
+                                            t.co_cnae co_cnae
+                                        FROM
+                                            bi.dm_pessoa t
+                                        WHERE
+                                            t.co_cnpj_cpf = :CO_CNPJ_CPF
+                                    ) base
+                                    LEFT JOIN bi.dm_cnae cnae ON base.co_cnae = cnae.co_cnae
+                                ORDER BY
+                                    base.tipo ASC,
+                                    base.co_cnae]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Contador]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select
+								case when b.fim_ref is null and b.co_cnpj_cpf_contador = '   -   ' then '<html><b>Atual - sem contador indicado' 
+									 when b.fim_ref is null and b.co_cnpj_cpf_contador != '   -   ' then '<html><b>Atual' 
+									 when b.fim_ref is not null and b.co_cnpj_cpf_contador = '   -   ' then 'Anterior - Período sem indicação de contador' 
+									 else 'Anterior' 
+								end                     situacao,
+								b.co_cnpj_cpf_contador  co_cnpj_cpf_contador,
+								p.no_razao_social       nome,
+								l.no_municipio          municipio,
+								l.co_uf                 uf,
+								b.ini_ref               inicio,
+								b.fim_ref               fim
+								from
+								(
+									select
+										it_nu_inscricao_estadual                   ie,
+										cnpj,
+										case when substr(gr_ident_contador, 2) is null then '   -   '
+											 else substr(gr_ident_contador, 2)
+										end                                        co_cnpj_cpf_contador,
+										to_date(it_da_referencia, 'yyyymmdd')      ini_ref,
+										case
+											when lead(it_da_referencia) over(order by it_nu_fac ) is null then null
+											else to_date(lead(it_da_referencia) over(order by it_nu_fac), 'yyyymmdd')
+										end                                        fim_ref
+									from
+										(
+											select
+												c.it_nu_inscricao_estadual,
+												substr(c.gr_identificacao, 2)        cnpj,
+												c.it_nu_fac,
+												c.it_da_referencia,
+												c.gr_ident_contador,
+												case
+													when row_number() over( order by c.it_nu_fac ) = 1  then 1
+													when c.gr_ident_contador != lag(c.gr_ident_contador) over( order by c.it_nu_fac ) then 1
+													else 0
+												end                                  usar
+											from
+												sitafe.sitafe_historico_contribuinte c
+											where
+												c.it_nu_inscricao_estadual = :CO_CAD_ICMS
+											order by
+												c.it_nu_inscricao_estadual,
+												c.it_nu_fac
+										)
+									where
+										usar = 1
+									order by
+											case
+												when lead(it_da_referencia) over( order by it_nu_fac ) is null then '99999999'
+												else lead(it_da_referencia) over( order by it_nu_fac )
+											end
+										desc
+								)               b
+								left join bi.dm_pessoa    p on b.co_cnpj_cpf_contador = p.co_cnpj_cpf
+								left join bi.dm_localidade l on p.co_municipio = l.co_municipio]]></sql>
+			<binds>
+				<bind id="CO_CAD_ICMS">
+					<prompt><![CDATA[CO_CAD_ICMS]]></prompt>
+					<tooltip><![CDATA[CO_CAD_ICMS]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Empresas do Contador]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+                                               P.CO_CNPJ_CPF                     CNPJ_EMPRESA,
+                                               P.CO_CAD_ICMS                     IE_EMPRESA,
+                                               P.NO_RAZAO_SOCIAL                 RAZÃO_EMPRESA,
+                                               P.DESC_ENDERECO||' - '||P.BAIRRO  ENDEREÇO_EMPRESA,
+                                               LOC.NO_MUNICIPIO                  MUNICÍPIO_EMPRESA,
+                                               CAD.IT_NO_SITUACAO_CONTRIBUINTE   SITUAÇÃO,
+                                               '<html><font color="red">'||lpad(TRIM(to_char(i.inadimplencia, '999G999G999G990D00')), length(MAX(i.inadimplencia)
+                                                                                                         OVER()) + 6)      inadimplencia
+                                        FROM 
+                                               BI.DM_PESSOA P
+                                        
+                                        LEFT JOIN SITAFE.SITAFE_TABELAS_CADASTRO CAD
+                                             ON P.IN_SITUACAO = CAD.IT_CO_SITUACAO_CONTRIBUINTE    
+                                        
+                                        LEFT JOIN BI.DM_LOCALIDADE LOC
+                                             ON P.CO_MUNICIPIO = LOC.CO_MUNICIPIO
+                                        
+                                        LEFT JOIN (
+                                            SELECT t.co_cnpj_cpf,
+                                                   SUM(t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo) inadimplencia
+                                            FROM bi.fato_lanc_arrec_sum t
+                                            WHERE t.da_arrecadacao IS NULL
+                                                  AND t.id_situacao = '01'
+                                                  AND t.vencido = '3'
+                                            GROUP BY t.co_cnpj_cpf
+                                        )               i ON p.co_cnpj_cpf = i.co_cnpj_cpf
+                                        
+                                        WHERE 
+                                               P.CO_CNPJ_CPF_CONTADOR = :CO_CNPJ_CPF_CONTADOR
+                                               
+                                        order by decode(i.inadimplencia, null,0) desc, i.inadimplencia desc]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF_CONTADOR">
+						<prompt><![CDATA[CO_CNPJ_CPF_CONTADOR]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF_CONTADOR]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Histórico FAC]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+                                    t.it_da_transacao da_trans,
+                                    t.it_da_referencia da_ref,
+                                    t.it_nu_fac nu_fac,
+                                    t.it_nu_inscricao_estadual IE,
+                                    sit_pessoa.it_no_pessoa Nome,
+                                    sit_pessoa.it_no_fantasia No_fantasia,
+                                    t.it_co_regime_pagamento rp,
+                                    t.it_va_capital_social c_soc,
+                                    t.it_co_atividade_economica atv_pr,
+                                    tg.it_co_tipo_logradouro tl,
+                                    tg.it_no_logradouro logradouro,
+                                    sit_pessoa.it_ed_numero num,
+                                    localid.no_municipio municipio,
+                                    sit_pessoa.it_sg_uf uf,
+                                    sit_pessoa.it_co_correio_eletronico email,
+                                    sit_pessoa.it_co_correio_eletro_corresp email_corr,
+                                    substr(t.gr_ident_contador, 2, 14)           cpf_contador,
+                                    pessoa.no_razao_social                     no_contador,
+                                    t.it_in_ultima_fac ult_fac
+                                FROM
+                                    sitafe.sitafe_historico_contribuinte    t
+                                    LEFT JOIN sitafe.sitafe_pessoa                    sit_pessoa ON t.it_nu_fac = sit_pessoa.it_nu_fac
+                                    LEFT JOIN sitafe.sitafe_tabelas_cadastro          tg ON sit_pessoa.it_co_logradouro = tg.it_co_logradouro
+                                    LEFT JOIN bi.dm_localidade                        localid ON sit_pessoa.it_co_municipio = localid.co_municipio
+                                    LEFT JOIN bi.dm_pessoa                            pessoa ON substr(t.gr_ident_contador, 2, 14) = pessoa.co_cnpj_cpf
+                                WHERE
+                                    t.it_nu_inscricao_estadual = :CO_CAD_ICMS
+                                ORDER BY
+                                    t.it_da_transacao DESC]]></sql>
+			<binds>
+				<bind id="CO_CAD_ICMS">
+					<prompt><![CDATA[CO_CAD_ICMS]]></prompt>
+					<tooltip><![CDATA[CO_CAD_ICMS]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Vistoria(s)]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[with total as
+							(
+							select
+								  'APP VISTORIA' tipo,
+								  to_char(t.id)                                                             id,
+								  t.status,
+								  t.dt_vistoria,
+								  t.modalidade_id || ' - ' || m.nome                                        modalidade,
+								  t.dsf,
+								  t.processo,
+								  ps.no_razao_social                                                        solicitante,
+								  p.no_razao_social                                                         auditor,
+								  null                                                                      autos
+							  from
+								  vistoria.empresas_vistorias@vistoria_producao t
+							left join vistoria.modalidades@vistoria_producao  m on t.modalidade_id = m.id     
+							left join bi.dm_pessoa p on t.cpf_auditor = p.co_cnpj_cpf
+							left join bi.dm_pessoa ps on t.cpf_solicitante = ps.co_cnpj_cpf
+							left join vistoria.documentos_assinados@vistoria_producao  d on t.id = d.empresa_vistoria_id
+							where t.cnpj_empresa = :CO_CNPJ_CPF
+
+							union
+
+							select
+									'SITAFE VISTORIA' as                                                    tipo,
+									to_char(df.it_nu_diligencia)                                            id,
+									case when df.it_co_situacao_diligencia = 01 then '01 - DOC. REGISTRADO'
+										 when df.it_co_situacao_diligencia = 02 then '02 - DIL. GERADA'
+										 when df.it_co_situacao_diligencia = 03 then '03 - DIL. ENTREGUE'
+										 when df.it_co_situacao_diligencia = 04 then '04 - DIL. CONCLUÍDA'
+										 when df.it_co_situacao_diligencia = 05 then '05 - DIL. EXCLUÍDA'
+									end                                                                     status,
+									to_date(df.it_da_lancamento,'yyyymmdd')                                 dt_vistoria,
+									dft.it_nu_documento_origem                                              modalidade,
+									null                                                                    dsf,
+									dft.it_nu_diligencia                                                    processo,            
+									null                                                                    solicitante,
+									su.it_co_matricula_usuario||' - '||su.it_no_usuario                     auditor,
+									da.autos                                                                autos
+							from sitafe.sitafe_diligencia_fiscal_taref dft
+							left join sitafe.sitafe_diligencia_fiscal df
+								   on df.it_nu_diligencia = substr(dft.it_nu_diligencia,1,5)||'7'||substr(dft.it_nu_diligencia,7)
+							left join sitafe.sitafe_dilig_it_nu_afte afte
+								   on afte.tuk = df.tuk
+								  and afte.m_occurs = 1
+							left join sitafe.sitafe_usuario su
+								   on to_number(su.it_co_matricula_usuario) = to_number(afte.it_nu_afte)
+							left join (select da.it_nu_acao_fiscal,
+											  listagg(da.it_nu_ai,' * ' on overflow truncate) within group (order by da.it_nu_acao_fiscal) autos
+										 from sitafe.sitafe_diligencia_autos da
+									 group by da.it_nu_acao_fiscal) da
+									   on da.it_nu_acao_fiscal = df.it_nu_diligencia
+							where dft.it_nu_identificacao = :CO_CNPJ_CPF--'12238651000101'
+							)
+
+							SELECT
+								t.tipo,
+								t.id,
+								t.status,
+								t.dt_vistoria,
+								t.modalidade,
+								t.dsf,
+								t.processo,
+								t.solicitante,
+								t.auditor,
+								t.autos,
+								d.documento_assinatura relatorio
+							FROM
+								total                                           t
+								LEFT JOIN vistoria.documentos_assinados@vistoria_producao d ON t.tipo || t.id = 'APP VISTORIA' || d.empresa_vistoria_id
+							order by 4 desc
+						 ]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Histórico de Sócios]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[with s_auto as 
+							(
+							select
+								bi.dm_pessoa.co_cnpj_cpf,
+								bi.dm_pessoa.co_cad_icms ie
+							from
+								bi.dm_pessoa
+							where
+								bi.dm_pessoa.co_cnpj_cpf = :CO_CNPJ_CPF
+							), 
+
+							hist_socio as (
+							select
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual,
+								min(shs.it_da_inicio_part_societaria)       da_entrada,
+								max(shs.it_da_fim_part_societaria)          da_saida
+							from
+								s_auto
+							left join sitafe.sitafe_historico_socio shs 
+								   on shs.it_nu_inscricao_estadual = s_auto.ie
+							group by
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+							),
+
+							ult_socio as (
+							select
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+							from
+								s_auto
+								left join sitafe.sitafe_historico_socio shs 
+									   on shs.it_nu_inscricao_estadual = s_auto.ie
+									  and shs.it_in_ultima_fac = '9'
+									  and (shs.it_da_fim_part_societaria = '        ' or shs.it_da_fim_part_societaria > to_char(sysdate, 'yyyymmdd'))
+							group by
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+							), 
+
+							tabela as (
+							select
+								case
+									when ult_socio.gr_identificacao is not null then
+										'<html><b>SÓCIO ATUAL'
+									else
+										'SÓCIO ANTIGO'
+								end  part_atual,
+								substr(p.gr_identificacao, 2)  cpfcnpj,
+								p.it_no_pessoa,
+								case
+									when hist_socio.da_entrada != '         ' then
+										to_date(hist_socio.da_entrada, 'YYYYMMDD')
+								end  it_da_inicio_part_societaria,
+								case
+									when ult_socio.gr_identificacao is not null then
+										'SÓCIO ATUAL'
+									when hist_socio.da_saida = '        ' then
+										'NÃO INFORMADO'
+									else
+										to_char(to_date(hist_socio.da_saida, 'YYYYMMDD'))
+								end  fim_part_societaria_real
+							from
+								hist_socio
+								left join ult_socio on hist_socio.gr_identificacao = ult_socio.gr_identificacao
+													   and hist_socio.it_nu_inscricao_estadual = ult_socio.it_nu_inscricao_estadual
+								left join sitafe.sitafe_pessoa p on p.gr_identificacao = hist_socio.gr_identificacao
+																	and p.it_in_ultima_situacao = '9'
+							)
+										select
+											tabela.part_atual                   situacao,
+											tabela.cpfcnpj                      co_cnpj_cpf_socio,
+											tabela.it_no_pessoa                 nome,
+											tabela.it_da_inicio_part_societaria da_inicio,
+											tabela.fim_part_societaria_real     da_fim,
+											'http://www.portaltransparencia.gov.br/pessoa-fisica/busca/lista?termo='||tabela.cpfcnpj portal_transparencia
+										from
+											tabela
+							order by
+								1,
+								4 desc,
+								5 desc, 
+								3 asc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[DIMP Sócios - Total]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[with 
+						cartao as (
+						select 
+							   row_number() over (order by ano asc, periodo asc)                       ordem,
+							   case
+								when ano is null and periodo is null 
+								  then '<html><b style="color:blue">Σ TOTAL GERAL'
+								when ano is not null and periodo is null 
+								  then '<html><b style="color:green">Σ Total no ano ' || ano
+								when ano is not null and periodo is not null 
+								  then '----Total no período ' || periodo
+							   end                                                                      info,
+							   operacoes,
+							   cartao                                                                   cartao
+						from(
+						select extract(year from mp.dt_op)                                                 ano,
+							   extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0')     periodo,
+							   count(*)                                                                 operacoes,
+							   sum(mp.valor)                                                               cartao
+						from bi.mpg_f_detalhe_operacao mp
+							inner join dimp.reg0000s d
+							on mp.id_reg0000 = d.id and mp.cnpj_declarante = d.cnpj
+						where mp.cnpj_cpf = :CO_CNPJ_CPF_SOCIO
+								and mp.flag_comex = 0
+								and ((mp.cnpj_adquirente =  mp.cnpj_declarante) or  (mp.cnpj_adquirente is null))
+								and mp.id_origem_informacao = 'DIMP'
+								and mp.flag_cancelado = 0
+								and mp.nat_oper not in  ('3', '4', '5', '8', '11')
+						group by grouping sets 
+								( ( ),
+									(extract(year from mp.dt_op)), 
+										(extract(year from mp.dt_op), extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0'))
+								)
+							 )
+						order by ano asc, periodo asc
+						),
+
+						saidas as (
+						select case
+								when ano is null and periodo is null 
+								  then '<html><b style="color:blue">Σ TOTAL GERAL'
+								when ano is not null and periodo is null 
+								  then '<html><b style="color:green">Σ Total no ano ' || ano
+								when ano is not null and periodo is not null 
+								  then '----Total no período ' || periodo
+							   end                                                                                      info,
+							   nfe_nfce                                                                                 nfe_nfce
+						from(
+						select extract(year from da_referencia)                                                 ano,
+							   extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0')     periodo,
+							   sum(prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc)             nfe_nfce
+						from BI.fato_nfe_nfce_sumarizada nf
+                        inner join bi.dm_cfop c on nf.co_cfop = c.co_cfop and c.operacao_mercantil = 'X'
+						where co_emitente = :CO_CNPJ_CPF_SOCIO
+						  and co_tp_nf = 1
+						group by grouping sets 
+								( ( ),
+									(extract(year from da_referencia)), 
+										(extract(year from da_referencia), extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0'))
+								)
+							 )
+						order by ano asc, periodo asc
+						)
+						select nvl(cartao.info,saidas.info)                                                                             info,
+							   cartao.operacoes                                                                                         operacoes_cartao,
+							   lpad(trim(to_char(cartao.cartao, '999G999G999G990D00')), length(max(cartao.cartao) over()) + 7)          valor_cartao,
+							   lpad(trim(to_char(saidas.nfe_nfce , '999G999G999G990D00')), length(max(saidas.nfe_nfce) over()) + 7)     valor_nfe_nfce,
+							   case when substr(nvl(cartao.info,saidas.info),1,6) = '<html>' 
+									 then lpad(trim(to_char('-')),
+											   length(max(cartao.cartao) over()) + 7)
+									when nvl(cartao.cartao,0) - nvl(saidas.nfe_nfce,0) > 0 
+									 then lpad(trim(to_char(nvl(cartao.cartao,0)-nvl(saidas.nfe_nfce,0),'999G999G999G990D00')),
+											   length(max(nvl(cartao.cartao,0)) over()) + 7)
+									else lpad(to_char('-'),
+											  length(max(cartao.cartao) over()) + 7)
+									end                                                                                                 excesso_valor 
+						from cartao
+						left join saidas
+							   on cartao.info = saidas.info
+						order by ordem]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF_SOCIO">
+						<prompt><![CDATA[CO_CNPJ_CPF_SOCIO]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF_SOCIO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="DA_INICIO">
+						<prompt><![CDATA[DA_INICIO]]></prompt>
+						<tooltip><![CDATA[DA_INICIO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="DA_FIM">
+						<prompt><![CDATA[DA_FIM]]></prompt>
+						<tooltip><![CDATA[DA_FIM]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[DIMP Sócios - Mandato]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[with 
+						cartao as (
+						select 
+							   row_number() over (order by ano asc, periodo asc)                       ordem,
+							   case
+								when ano is null and periodo is null 
+								  then '<html><b style="color:blue">Σ TOTAL GERAL'
+								when ano is not null and periodo is null 
+								  then '<html><b style="color:green">Σ Total no ano ' || ano
+								when ano is not null and periodo is not null 
+								  then '----Total no período ' || periodo
+							   end                                                                      info,
+							   operacoes,
+							   cartao                                                                   cartao
+						from(
+						select extract(year from mp.dt_op)                                                 ano,
+							   extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0')     periodo,
+							   count(*)                                                                 operacoes,
+							   sum(mp.valor)                                                               cartao
+						from bi.mpg_f_detalhe_operacao mp
+							inner join dimp.reg0000s d
+							on mp.id_reg0000 = d.id and mp.cnpj_declarante = d.cnpj
+						where mp.cnpj_cpf = :CO_CNPJ_CPF_SOCIO
+						        and mp.dt_op between
+													NVL(TO_DATE(:DA_INICIO DEFAULT NULL ON CONVERSION ERROR, 'DD/MM/YYYY HH24:MI:SS'),SYSDATE)
+													and
+													NVL(TO_DATE(:DA_FIM DEFAULT NULL ON CONVERSION ERROR, 'DD/MM/YYYY HH24:MI:SS'),SYSDATE)
+								and mp.flag_comex = 0
+								and ((mp.cnpj_adquirente =  mp.cnpj_declarante) or  (mp.cnpj_adquirente is null))
+								and mp.id_origem_informacao = 'DIMP'
+								and mp.flag_cancelado = 0
+								and mp.nat_oper not in  ('3', '4', '5', '8', '11')
+						group by grouping sets 
+								( ( ),
+									(extract(year from mp.dt_op)), 
+										(extract(year from mp.dt_op), extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0'))
+								)
+							 )
+						order by ano asc, periodo asc
+						),
+
+						saidas as (
+						select case
+								when ano is null and periodo is null 
+								  then '<html><b style="color:blue">Σ TOTAL GERAL'
+								when ano is not null and periodo is null 
+								  then '<html><b style="color:green">Σ Total no ano ' || ano
+								when ano is not null and periodo is not null 
+								  then '----Total no período ' || periodo
+							   end                                                                                      info,
+							   nfe_nfce                                                                                 nfe_nfce
+						from(
+						select extract(year from da_referencia)                                                 ano,
+							   extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0')     periodo,
+							   sum(prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc)             nfe_nfce
+						from BI.fato_nfe_nfce_sumarizada nf
+                        inner join bi.dm_cfop c on nf.co_cfop = c.co_cfop and c.operacao_mercantil = 'X'
+						where co_emitente = :CO_CNPJ_CPF_SOCIO
+							and da_referencia BETWEEN
+													NVL(TO_DATE(:DA_INICIO DEFAULT NULL ON CONVERSION ERROR, 'DD/MM/YYYY HH24:MI:SS'),SYSDATE)
+													and
+													NVL(TO_DATE(:DA_FIM DEFAULT NULL ON CONVERSION ERROR, 'DD/MM/YYYY HH24:MI:SS'),SYSDATE)
+						  and co_tp_nf = 1
+						group by grouping sets 
+								( ( ),
+									(extract(year from da_referencia)), 
+										(extract(year from da_referencia), extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0'))
+								)
+							 )
+						order by ano asc, periodo asc
+						)
+						select nvl(cartao.info,saidas.info)                                                                             info,
+							   cartao.operacoes                                                                                         operacoes_cartao,
+							   lpad(trim(to_char(cartao.cartao, '999G999G999G990D00')), length(max(cartao.cartao) over()) + 7)          valor_cartao,
+							   lpad(trim(to_char(saidas.nfe_nfce , '999G999G999G990D00')), length(max(saidas.nfe_nfce) over()) + 7)     valor_nfe_nfce,
+							   case when substr(nvl(cartao.info,saidas.info),1,6) = '<html>' 
+									 then lpad(trim(to_char('-')),
+											   length(max(cartao.cartao) over()) + 7)
+									when nvl(cartao.cartao,0) - nvl(saidas.nfe_nfce,0) > 0 
+									 then lpad(trim(to_char(nvl(cartao.cartao,0)-nvl(saidas.nfe_nfce,0),'999G999G999G990D00')),
+											   length(max(nvl(cartao.cartao,0)) over()) + 7)
+									else lpad(to_char('-'),
+											  length(max(cartao.cartao) over()) + 7)
+									end                                                                                                 excesso_valor 
+						from cartao
+						left join saidas
+							   on cartao.info = saidas.info
+						order by ordem]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF_SOCIO">
+						<prompt><![CDATA[CO_CNPJ_CPF_SOCIO]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF_SOCIO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="DA_INICIO">
+						<prompt><![CDATA[DA_INICIO]]></prompt>
+						<tooltip><![CDATA[DA_INICIO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="DA_FIM">
+						<prompt><![CDATA[DA_FIM]]></prompt>
+						<tooltip><![CDATA[DA_FIM]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Empresas dos Sócios]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      info,
+      municipio,
+      inicio_ativ,
+      entrada,
+      saida,
+      situacao_contribuinte,
+      conder,
+      case when municipio is null and entrada is null and saida is null then
+      '<html><b font color="red">'
+      || lpad(
+            TRIM(to_char(
+                  inadimplencia,
+                  '999G999G999G990D00'
+            )),
+            length(
+                         MAX(inadimplencia)
+                         OVER()
+                   )+ 6
+      )
+      else
+            '<html><i font font color="red">'
+      || lpad(
+            TRIM(to_char(
+                  inadimplencia,
+                  '999G999G999G990D00'
+            )),
+            length(
+                         MAX(inadimplencia)
+                         OVER()
+                   )+ 6
+      ) end inadimplencia
+  FROM
+      (
+            SELECT
+                  CASE
+                        WHEN cnpj_cpf IS NULL
+                           AND nome IS NULL
+                           AND entrada IS NULL THEN
+                              '<html><b style="background-color:#79C777;">'
+                              || cpf_cnpj_socio
+                              || ' - '
+                              || nome_socio||':'
+                        ELSE
+                              '         CPF/CNPJ: '
+                              || cnpj_cpf
+                              || ' - IE'
+                              || it_nu_inscricao_estadual
+                              || ' - '
+                              || nome
+                  END                    info,
+                  no_municipio           municipio,
+                  da_inicio_atividade    inicio_ativ,
+                  entrada,
+                  saida,
+                  CASE
+                        WHEN in_situacao = '001'
+                           AND entrada IS NOT NULL THEN
+                              '<html><p style="color:blue">'
+                              || in_situacao
+                              || ' - '
+                              || no_situacao_contribuinte
+                        WHEN in_situacao IN('009',
+                                            '008',
+                                            '010',
+                                            '055',
+                                            '057',
+                                            '060',
+                                            '062',
+                                            '071',
+                                            '098',
+                                            '107',
+                                            '112',
+                                            '162')
+                           AND entrada IS NOT NULL THEN
+                              '<html><p style="color:red">'
+                              || in_situacao
+                              || ' - '
+                              || no_situacao_contribuinte
+                        WHEN entrada IS NULL THEN
+                              NULL
+                        ELSE
+                              in_situacao
+                              || ' - '
+                              || no_situacao_contribuinte
+                  END                    situacao_contribuinte,
+                  in_conder              conder,
+                  SUM(inadimplencia)     inadimplencia
+              FROM
+                  (
+                        SELECT
+                              cpf_cnpj_socio,
+                              nome_socio,
+                              CASE
+                                    WHEN no_razao_social IS NULL
+                                       AND it_nu_inscricao_estadual IS NOT NULL THEN
+                                          cpf_cnpj_socio
+                                    ELSE
+                                          co_cnpj_cpf
+                              END  cnpj_cpf,
+                              it_nu_inscricao_estadual,
+                              CASE
+                                    WHEN no_razao_social IS NULL
+                                       AND it_nu_inscricao_estadual IS NOT NULL THEN
+                                          nome_socio
+                                    ELSE
+                                          no_razao_social
+                              END  nome,
+                              to_date(
+                                    entrada,
+                                    'YYYYMMDD'
+                              )    entrada,
+                              CASE
+                                    WHEN ult_fac = 9 THEN
+                                          NULL
+                                    ELSE
+                                          to_date(
+                                                saida,
+                                                'YYYYMMDD'
+                                          )
+                              END  saida,
+                              ult_fac,
+                              inadimplencia,
+                              no_municipio,
+                              in_situacao,
+                              no_situacao_contribuinte,
+                              in_conder,
+                              da_inicio_atividade
+                          FROM
+                              (
+                                    SELECT
+                                          substr(
+                                                h.gr_identificacao,
+                                                2
+                                          )                                                                            cpf_cnpj_socio,
+                                          pe.no_razao_social                                                           nome_socio,
+                                          p.co_cnpj_cpf,
+                                          t.it_nu_inscricao_estadual,
+                                          p.no_razao_social,
+                                          l.no_municipio,
+                                          p.in_situacao,
+                                          s.no_situacao_contribuinte,
+                                          p.in_conder,
+                                          p.da_inicio_atividade,
+                                          MIN(it_da_referencia)
+                                          OVER(PARTITION BY t.it_nu_inscricao_estadual || t.gr_identificacao)          entrada,
+                                          MAX(t.it_da_referencia)
+                                          OVER(PARTITION BY t.it_nu_inscricao_estadual || t.gr_identificacao)          saida,
+                                          MAX(t.it_in_ultima_fac)
+                                          OVER(PARTITION BY t.it_nu_inscricao_estadual || t.gr_identificacao)          ult_fac,
+                                          a.inadimplencia
+                                      FROM
+                                          sitafe.sitafe_historico_contribuinte    t
+                                            LEFT JOIN sitafe.sitafe_historico_socio           h ON t.it_nu_fac = h.it_nu_fac
+                                            LEFT JOIN bi.dm_pessoa                            p ON t.it_nu_inscricao_estadual = p.co_cad_icms
+                                            LEFT JOIN bi.dm_localidade                        l ON p.co_municipio = l.co_municipio
+                                            LEFT JOIN bi.dm_situacao_contribuinte             s ON p.in_situacao = s.co_situacao_contribuinte
+                                            LEFT JOIN(
+                                                SELECT
+                                                      t.co_cnpj_cpf,
+                                                      SUM(t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)inadimplencia
+                                                  FROM
+                                                      bi.fato_lanc_arrec_sum t
+                                                 WHERE
+                                                      t.da_arrecadacao IS NULL
+                                                         AND t.id_situacao = '01'
+                                                         AND t.vencido = '3'
+                                                 GROUP BY
+                                                      t.co_cnpj_cpf
+                                          )                                       a ON p.co_cnpj_cpf = a.co_cnpj_cpf
+                                            LEFT JOIN bi.dm_pessoa                            pe ON substr(
+                                                h.gr_identificacao,
+                                                2
+                                          )= pe.co_cnpj_cpf
+                                     WHERE
+                                          h.gr_identificacao IN(
+                                                SELECT
+                                                      socio.gr_identificacao
+                                                  FROM
+                                                      sitafe.sitafe_historico_contribuinte    t
+                                                        LEFT JOIN sitafe.sitafe_historico_socio           socio ON t.it_nu_fac = socio.it_nu_fac
+                                                 WHERE
+                                                      t.it_nu_inscricao_estadual = :CO_CAD_ICMS
+                                                 GROUP BY
+                                                      socio.gr_identificacao
+                                          )
+                              )
+                         GROUP BY
+                              co_cnpj_cpf,
+                              cpf_cnpj_socio,
+                              nome_socio,
+                              it_nu_inscricao_estadual,
+                              no_razao_social,
+                              entrada,
+                              saida,
+                              ult_fac,
+                              inadimplencia,
+                              no_municipio,
+                              in_situacao,
+                              in_conder,
+                              da_inicio_atividade,
+                              no_situacao_contribuinte
+                         ORDER BY
+                              nome_socio,
+                              no_razao_social DESC
+                  )
+             GROUP BY
+                  GROUPING SETS((cpf_cnpj_socio,
+                                 nome_socio),(cpf_cnpj_socio,
+                                              nome_socio,
+                                              cnpj_cpf,
+                                              it_nu_inscricao_estadual,
+                                              nome,
+                                              entrada,
+                                              saida,
+                                              ult_fac,
+                                              no_municipio,
+                                              in_situacao,
+                                              in_conder,
+                                              da_inicio_atividade,
+                                              no_situacao_contribuinte))
+             ORDER BY
+                  nome_socio,
+                  saida DESC,
+                  entrada DESC
+      )]]></sql>
+			<binds>
+				<bind id="CO_CAD_ICMS">
+					<prompt><![CDATA[CO_CAD_ICMS]]></prompt>
+					<tooltip><![CDATA[CO_CAD_ICMS]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Conta Corrente]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+      CASE
+            WHEN instr(
+                  :INFO,
+                  ' - '
+            )= 34 THEN
+                  substr(
+                        :INFO,
+                        20,
+                        14
+                  )
+            ELSE
+                  substr(
+                        :INFO,
+                        20,
+                        11
+                  )
+      END CO_CNPJ_CPF,
+      case when id_situacao is null then '<html><b>Σ TOTAL GERAL' 
+      when id_situacao = '01 - Não pago e Vencido' then '<html><b style="color:#CF3434">01 - Não pago e Vencido'
+      when id_situacao = '01 - Não pago a vencer' then '<html><b style="color:#3440CF">01 - Não pago a Vencer'
+      else  '<html><p style="color:#121212">'||id_situacao  end situacao,
+
+      lpad(
+            TRIM(to_char(
+                  SUM(total),
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(SUM(total))
+                   OVER()
+             )+7
+      )    total,
+         lpad(TRIM(to_char(round(RATIO_TO_REPORT(SUM(total))
+                       OVER(PARTITION BY case when id_situacao is null then 1 else 2 end), 4) * 100,
+                 '990.00L',
+                 'NLS_CURRENCY=%')),
+      8)           rr,
+      receitas
+  FROM
+      (
+            SELECT
+                  id_situacao_,
+                  id_situacao,
+                  SUM(valor)     total,
+                  LISTAGG('<html><b>'
+                          || id_receita
+                          || '</b> - '
+                          || '<i style="color:#854607">'||rr||'</i>',
+                          '; ')WITHIN GROUP(
+                         ORDER BY
+                              rr DESC
+                  )              receitas
+              FROM
+                  (
+                        SELECT
+                              id_situacao  id_situacao_,
+                              CASE
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento < sysdate THEN
+                                          '01 - Não pago e Vencido'
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento > sysdate THEN
+                                          '01 - Não pago a vencer'
+                                    ELSE
+                                          t.id_situacao
+                                          || ' - '
+                                          || initcap(
+                                                s.it_no_situacao
+                                          )
+                              END          id_situacao,
+                              t.id_receita,
+                              SUM(
+                                    CASE
+                                          WHEN t.va_pago IS NULL THEN
+                                                (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                          ELSE
+                                                t.va_pago
+                                    END
+                              )            valor,
+                              lpad(
+                                    TRIM(to_char(
+                                          round(
+                                                RATIO_TO_REPORT(SUM(
+                                                      CASE
+                                                            WHEN va_pago IS NULL THEN
+                                                                  (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                                            ELSE
+                                                                  t.va_pago
+                                                      END
+                                                ))
+                                                OVER(PARTITION BY
+                                                      CASE
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento < sysdate THEN
+                                                                  '01 - Não pago e Vencido'
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento > sysdate THEN
+                                                                  '01 - Não pago a vencer'
+                                                            ELSE
+                                                                  t.id_situacao
+                                                                  || ' - '
+                                                                  || initcap(
+                                                                        s.it_no_situacao
+                                                                  )
+                                                      END
+                                                ),
+                                                4
+                                          )* 100,
+                                          '990.00L',
+                                          'NLS_CURRENCY=%'
+                                    )),
+                                    8
+                              )            rr
+                          FROM
+                              bi.fato_lanc_arrec           t
+                                LEFT JOIN bi.dm_situacao_lancamento    s ON t.id_situacao = s.it_co_situacao
+                         WHERE
+                              t.id_cpf_cnpj =       CASE
+            WHEN instr(
+                  :INFO,
+                  ' - '
+            )= 34 THEN
+                  substr(
+                        :INFO,
+                        20,
+                        14
+                  )
+            ELSE
+                  substr(
+                        :INFO,
+                        20,
+                        11
+                  )
+      END
+                         GROUP BY
+                                    CASE
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento < sysdate THEN
+                                                '01 - Não pago e Vencido'
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento > sysdate THEN
+                                                '01 - Não pago a vencer'
+                                          ELSE
+                                                t.id_situacao
+                                                || ' - '
+                                                || initcap(
+                                                      s.it_no_situacao
+                                                )
+                                    END,
+                                    t.id_situacao,
+                                    t.id_receita
+                  )
+             GROUP BY
+                  id_situacao_,
+                  id_situacao
+      )
+ GROUP BY
+      GROUPING SETS((),(id_situacao_,
+                        id_situacao,
+                        receitas))
+                        
+order by case when id_situacao_ is null then 1
+                  when id_situacao_ = '01' then 2
+                  else 3 end, total desc]]></sql>
+				<binds>
+					<bind id="INFO">
+						<prompt><![CDATA[INFO]]></prompt>
+						<tooltip><![CDATA[INFO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[NFs - Entr X Saida (VAF)]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[
+							WITH CFOP AS (
+                    SELECT I.CO_CFOP 
+                    FROM BI.DM_CFOP I 
+                    WHERE I.IN_VAF = 'X'
+                        AND I.DEV_VENDA IS NULL AND I.DEV_COMPRA IS NULL 
+                        AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'TRANSF%' 
+                        AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'RETORN%'
+                        AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'ANULA%'
+                    )
+        SELECT
+        :CO_CNPJ_CPF CO_CNPJ_CPF,
+        ANO,
+        LPAD(TRIM(TO_CHAR(ENTRADA, '999G999G999G990D00')), LENGTH(MAX(ENTRADA)OVER()) + 7) 							ENTRADA,
+        LPAD(TRIM(TO_CHAR(SAIDA, '999G999G999G990D00')),LENGTH(MAX(SAIDA)OVER()) + 7) 								SAIDA,
+        LPAD(TRIM(TO_CHAR(SAIDA-ENTRADA, '999G999G999G990D00')),LENGTH(MAX(SAIDA-ENTRADA)OVER()) + 7)				DIFERENCA,
+        CASE 
+            WHEN NVL(ENTRADA,0) = 0 THEN 'N/D'
+            WHEN NVL(SAIDA, 0) / NVL(ENTRADA, 0) < 1 
+                THEN '<HTML><B STYLE="COLOR:#D7463A">'|| NVL(ROUND(((NVL(SAIDA,0)-NVL(ENTRADA,0))/NVL(ENTRADA,0))*100,2),2)||'%'
+            ELSE'<HTML><B STYLE="COLOR:#3A51D7">'||NVL(ROUND(((NVL(SAIDA,0)-NVL(ENTRADA,0))/NVL(ENTRADA,0))*100,2),2)||'%'
+        END          																								AGREG
+        FROM
+        (SELECT
+                EXTRACT(YEAR FROM DA_REFERENCIA) ANO,
+                SUM( CASE
+                        WHEN T.CO_EMITENTE = :CO_CNPJ_CPF     AND T.CO_TP_NF = 1 THEN (T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC) --CNPJ NO CO_EMITENTE DE EMISSÃO PRÓPRIA
+                        ELSE 0 END )                                                                                SAIDA,
+                SUM( CASE
+                        WHEN T.CO_DESTINATARIO = :CO_CNPJ_CPF AND T.CO_TP_NF = 1 THEN (T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC) --CNPJ NO CO_DESTINATPARIO DE EMISSÃO PRÓPRIA
+                        WHEN T.CO_EMITENTE = :CO_CNPJ_CPF     AND T.CO_TP_NF = 0 THEN (T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC) --CNPJ NO CO_EMITENTE DE EMISSÃO DE TERCEIRO
+                        ELSE 0 END )                                                                                ENTRADA
+            FROM
+                     BI.FATO_NFE_NFCE_SUMARIZADA T    
+            INNER JOIN BI.DM_CFOP C ON T.CO_CFOP = C.CO_CFOP 
+            WHERE ( T.CO_EMITENTE = :CO_CNPJ_CPF OR T.CO_DESTINATARIO = :CO_CNPJ_CPF )
+            GROUP BY GROUPING SETS((:CO_CNPJ_CPF),(EXTRACT(YEAR FROM DA_REFERENCIA)))	
+            ORDER BY ANO DESC
+        )
+							]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[NFs - Entrada e Saída Detalhe]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[
+							WITH CFOP AS (
+										SELECT I.CO_CFOP 
+											FROM BI.DM_CFOP I 
+											WHERE I.IN_VAF = 'X'
+												AND I.DEV_VENDA IS NULL 
+												AND I.DEV_COMPRA IS NULL 
+												AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'TRANSF%' 
+												AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'RETORN%'
+												AND UPPER(I.DESCRICAO_CFOP) NOT LIKE 'ANULA%'
+										)
+
+								SELECT
+									CASE WHEN CO_GRUPO IS NULL      AND TIPO = 'ENTRADAS'           THEN '<html><strong><font color="red">' || TIPO || ' TOTAL'
+										 WHEN CO_GRUPO IS NULL      AND TIPO = 'SAÍDAS'             THEN '<html><strong><font color="blue">' || TIPO || ' TOTAL'
+										 WHEN CO_GRUPO IS NOT NULL  AND CO_SUBGRUPO IS NULL         THEN '<HTML><b> -> ' || TO_CHAR(CO_GRUPO) || ' ' || DESCRICAO_GRUPO
+										 WHEN CO_GRUPO IS NOT NULL  AND CO_SUBGRUPO IS NOT NULL     THEN '<HTML><i> ----> ' || TO_CHAR(CO_SUBGRUPO) || ' ' || LOWER(DESCRICAO_SUBGRUPO)
+										END                                                                                                                                             DESCRICAO,
+									CONCAT(TO_CHAR((RATIO_TO_REPORT(PARTICAO)                    OVER(PARTITION BY
+											CASE    WHEN CO_GRUPO IS NULL                                   THEN TIPO || '1'
+													WHEN CO_GRUPO IS NOT NULL AND CO_SUBGRUPO IS NULL       THEN TIPO || '2'
+													WHEN CO_GRUPO IS NOT NULL AND CO_SUBGRUPO IS NOT NULL   THEN TIPO || CO_GRUPO || '3' END ) * 100), '990D00'), '%')                  RR,
+									TOTAL,
+									VBC,
+									CONCAT(TO_CHAR(((NULLIF(PARTICAO_VBC, 0) / NULLIF(PARTICAO, 0)) * 100), '990D00'), '%')                                                             "TOTAL / VBC",
+									ICMS,
+									CONCAT(TO_CHAR((NULLIF(PARTICAO_VICMS, 0) /(NULLIF(PARTICAO_VBC, 0)) * 100), '990D00'), '%')                                                        "VBC / ICMS"
+								FROM
+									(
+										SELECT
+											CASE WHEN T.CO_EMITENTE = :CO_CNPJ_CPF AND T.CO_TP_NF = '1'     THEN 'SAÍDAS'
+																											ELSE 'ENTRADAS'
+											END                                                                    TIPO,
+											D.CO_GRUPO,
+											D.DESCRICAO_GRUPO,
+											D.CO_SUBGRUPO,
+											D.DESCRICAO_SUBGRUPO,
+											SUM(T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC) PARTICAO,
+											SUM(ICMS_VBC)                                                          PARTICAO_VBC,
+											SUM(ICMS_VICMS)                                                        PARTICAO_VICMS,
+											LPAD(TRIM(TO_CHAR(SUM(T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC), '999G999G999G990D00')), LENGTH( MAX(SUM(T.PROD_VPROD + PROD_VFRETE + PROD_VSEG + PROD_VOUTRO - PROD_VDESC)) OVER()) + 6) TOTAL,
+											LPAD(TRIM(TO_CHAR(SUM(ICMS_VBC), '999G999G999G990D00')), LENGTH(MAX(SUM(ICMS_VBC)) OVER()) + 6) VBC,
+											LPAD(TRIM(TO_CHAR(SUM(ICMS_VICMS), '999G999G999G990D00')), LENGTH(MAX(SUM(ICMS_VICMS)) OVER()) + 6) ICMS
+										FROM
+												 BI.FATO_NFE_NFCE_SUMARIZADA T
+											INNER JOIN BI.DM_CALENDARIO C ON T.DA_REFERENCIA = C.DATA
+											INNER JOIN BI.DM_CFOP       D ON T.CO_CFOP = D.CO_CFOP
+										WHERE
+											( T.CO_EMITENTE = :CO_CNPJ_CPF
+											  OR T.CO_DESTINATARIO = :CO_CNPJ_CPF )
+											AND C.ANO = :ANO
+											AND D.IN_VAF = 'X'
+											AND T.CO_CFOP IN (SELECT * FROM CFOP) --CASO DESEJE VER TODAS AS RECEITAS, INCLUINDO RETORNOS E DEVOLUÇÕES, RETIRAR ESSA LINHA
+										GROUP BY
+											GROUPING SETS ( ( CASE  WHEN T.CO_EMITENTE = :CO_CNPJ_CPF AND T.CO_TP_NF = '1' THEN 'SAÍDAS'
+																	ELSE 'ENTRADAS' END ), 
+															( CASE  WHEN T.CO_EMITENTE = :CO_CNPJ_CPF AND T.CO_TP_NF = '1' THEN 'SAÍDAS'
+																	ELSE 'ENTRADAS' END,
+															D.CO_GRUPO,
+															D.DESCRICAO_GRUPO ), (
+																					CASE    WHEN T.CO_EMITENTE = :CO_CNPJ_CPF AND T.CO_TP_NF = '1' THEN 'SAÍDAS'
+																							ELSE 'ENTRADAS' END,
+												D.CO_GRUPO,
+												D.DESCRICAO_GRUPO,
+												D.CO_SUBGRUPO,
+												D.DESCRICAO_SUBGRUPO ) )
+									)
+								ORDER BY 
+									CASE    WHEN TIPO = 'ENTRADAS'  AND CO_GRUPO IS NULL        THEN 1
+											WHEN TIPO = 'ENTRADAS'  AND CO_GRUPO IS NOT NULL    THEN 2
+											WHEN TIPO = 'SAÍDAS'    AND CO_GRUPO IS NULL        THEN 3
+											WHEN TIPO = 'SAÍDAS'    AND CO_GRUPO IS NOT NULL    THEN 4    END,
+									CO_GRUPO,
+									CASE WHEN CO_SUBGRUPO IS NULL THEN 0 ELSE 1 END,
+									TOTAL DESC
+				]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="ANO">
+						<prompt><![CDATA[ANO]]></prompt>
+						<tooltip><![CDATA[ANO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Notas_Entrada]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select D.CHAVE_ACESSO, D.PROD_NITEM, D.IDE_CO_CUF, D.IDE_CO_INDPAG, D.IDE_CO_MOD, D.IDE_SERIE, D.NNF, D.DHEMI, D.DHEMI_HORA, D.CO_TP_NF, D.CO_IDDEST, D.CO_CMUN_FG, D.CO_TPEMIS, D.CO_FINNFE, D.CO_INDFINAL, D.CO_INDPRES, D.CO_EMITENTE, D.XNOME_EMIT, D.XFANT_EMIT, D.CO_UF_EMIT, D.CO_CAD_ICMS_EMIT, D.CO_CRT, D.XLGR_EMIT, D.NRO_EMIT, D.XCPL_EMIT, D.XBAIRRO_EMIT, D.CO_CMUN_EMIT, D.XMUN_EMIT, D.CEP_EMIT, D.CPAIS_EMIT, D.XPAIS_EMIT, D.FONE_EMIT, D.CO_DESTINATARIO, D.XNOME_DEST, D.CO_UF_DEST, D.CO_INDIEDEST, D.XLGR_DEST, D.NRO_DEST, D.XCPL_DEST, D.XBAIRRO_DEST, D.CO_CMUN_DEST, D.XMUN_DEST, D.CEP_DEST, D.CPAIS_DEST, D.XPAIS_DEST, D.FONE_DEST, D.PROD_CPROD, D.PROD_CEAN, D.PROD_XPROD, D.PROD_NCM, D.CO_CFOP, D.PROD_UCOM, D.PROD_QCOM, D.PROD_VUNCOM, D.PROD_VPROD, D.PROD_CEANTRIB, D.PROD_UTRIB, D.PROD_QTRIB, D.PROD_VUNTRIB, D.PROD_VFRETE, D.PROD_VSEG, D.PROD_VDESC, D.PROD_VOUTRO, D.PROD_INDTOT, D.ICMS_CSOSN, D.ICMS_CST, D.ICMS_MODBC, D.ICMS_MODBCST, D.ICMS_MOTDESICMS, D.ICMS_ORIG, D.ICMS_PBCOP, D.ICMS_PCREDSN, D.ICMS_PDIF, D.ICMS_PICMS, D.ICMS_PICMSST, D.ICMS_PMVAST, D.ICMS_PREDBC, D.ICMS_PREDBCST, D.ICMS_UFST, D.ICMS_VBC, D.ICMS_VBCST, D.ICMS_VBCSTDEST, D.ICMS_VBCSTRET, D.ICMS_VCREDICMSSN, D.ICMS_VICMS, D.ICMS_VICMSDESON, D.ICMS_VICMSDIF, D.ICMS_VICMSOP, D.ICMS_VICMSST, D.ICMS_VICMSSTDEST, D.ICMS_VICMSSTRET, D.ICMS_VBCFCP, D.ICMS_PFCP, D.ICMS_VFCP, D.ICMS_VBCFCPST, D.ICMS_PFCPST, D.ICMS_VFCPST, D.ICMS_VBCUFDEST, D.ICMS_VBCFCPUFDEST, D.ICMS_PFCPUFDEST, D.ICMS_PICMSUFDEST, D.ICMS_PICMSINTER, D.ICMS_PICMSINTERPART, D.ICMS_VFCPUFDEST, D.ICMS_VICMSUFDEST, D.ICMS_VICMSUFREMET, D.ICMS_PST, D.ICMS_VBCFCPSTRET, D.ICMS_PFCPSTRET, D.ICMS_VFCPSTRET, D.ICMS_PREDBCEFET, D.ICMS_VBCEFET, D.ICMS_PICMSEFET, D.ICMS_VICMSEFET, D.TOT_VBC, D.TOT_VICMS, D.TOT_VICMSDESON, D.TOT_VBCST, D.TOT_VST, D.TOT_VPROD, D.TOT_VFRETE, D.TOT_VSEG, D.TOT_VDESC, D.TOT_VII, D.TOT_VIPI, D.TOT_VPIS, D.TOT_VCOFINS, D.TOT_VOUTRO, D.TOT_VNF, D.TOT_VTOTTRIB, D.TOT_VFCPUFDEST, D.TOT_VICMSUFDEST, D.TOT_VICMSUFREMET, D.TOT_VFCP, D.TOT_VFCPST, D.TOT_VFCPSTRET, D.TOT_VIPIDEVOL, D.ICMS_CSOSN_A, D.ICMS_CST_A, CASE WHEN D.INFPROT_CSTAT = 0   THEN '0 - CANCELAMENTO PELO EMITENTE' WHEN D.INFPROT_CSTAT = 100 THEN '100 - AUTORIZADA' WHEN D.INFPROT_CSTAT = 150 THEN '150 - AUTORIZAÇÃO FORA DE PRAZO' WHEN D.INFPROT_CSTAT = 301 THEN '302 - USO DENEGADO : SITUAÇÃO DO EMITENTE' WHEN D.INFPROT_CSTAT = 302 THEN '302 - USO DENEGADO : SITUAÇAO DO DESTINATARIO' WHEN D.INFPROT_CSTAT = 303 THEN '303 - USO DENEGADO : DESTINATÁRIO NÃO HABILITADO A OPERAR NA UF' END AS STATUS_NF
+							from bi.fato_nfe_detalhe d
+							where (    ( d.co_destinatario = :CO_CNPJ_CPF and d.co_tp_nf = 1)
+									or ( d.co_emitente     = :CO_CNPJ_CPF and d.co_tp_nf = 0)
+								  )
+							  and d.infprot_cstat in ('100','150')
+							  order by d.dhemi desc, d.chave_acesso, d.prod_nitem
+			]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[NFs Entrada - Quantidades]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select :CO_CNPJ_CPF CO_CNPJ_CPF, ano,
+sum(total_nfes) total,
+sum(origem_ro) RO,
+sum(origem_ouf) O_UF,
+sum(fronteira) FR,
+listagg(case when co_uf_emit != 'RO' then '<html><b>'||co_uf_emit||'</b> (T '||total_nfes||' - F '||fronteira||')' end, '   |   ') within group (order by total_nfes desc) origem_outras_UFs
+
+from (
+SELECT
+	  EXTRACT(YEAR FROM dhemi)                 ano,
+	  t.co_uf_emit,
+	  COUNT(DISTINCT chave_acesso)             total_nfes,
+	  COUNT(DISTINCT
+			CASE
+				  WHEN co_uf_emit = 'RO' THEN
+						chave_acesso
+				  ELSE
+						NULL
+			END
+	  )                                        origem_ro,
+	  COUNT(DISTINCT
+			CASE
+				  WHEN co_uf_emit != 'RO' THEN
+						chave_acesso
+				  ELSE
+						NULL
+			END
+	  )                                        origem_ouf,
+	  COUNT(DISTINCT f.it_nu_identificao_nf_e) fronteira
+  FROM
+	  bi.fato_nfe_detalhe t
+		LEFT JOIN(
+			SELECT
+				  f.it_nu_identificao_nf_e
+			  FROM
+				  sitafe.sitafe_nota_fiscal f
+			 WHERE
+				  f.it_nucnpj_cpf_destino_nf = :CO_CNPJ_CPF
+	  )                    f ON t.chave_acesso = f.it_nu_identificao_nf_e
+ WHERE
+			co_destinatario = :CO_CNPJ_CPF
+		 AND t.infprot_cstat IN('100',
+								'150')
+ GROUP BY
+	  EXTRACT(YEAR FROM dhemi),
+	  t.co_uf_emit) b
+	  
+group by ano
+
+order by ano desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Emitente(s)]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+	  ano,
+	  co_emitente,
+	  case when co_emitente is null then null else nome end nome,
+	  case when co_emitente is null then null else municipio end municipio,
+	  uf,
+	  quant,
+	  rr,
+	  total,
+	  icms,
+	  icms_st
+  FROM
+	  (
+			SELECT
+				  EXTRACT(YEAR FROM dhemi) ano,
+				  t.co_emitente,
+				  upper(
+						MAX(xnome_emit)
+				  )                        nome,
+				  upper(
+						MAX(xmun_emit)
+				  )                        municipio,
+				  t.co_uf_emit            uf,
+				  'T '
+				  || to_char(
+						COUNT(DISTINCT chave_acesso)
+				  )
+				  || ', F '
+				  || to_char(
+						COUNT(DISTINCT f.it_nu_identificao_nf_e)
+				  )                        quant,
+				  lpad(
+						TRIM(to_char(
+							  round(
+									RATIO_TO_REPORT(SUM(prod_vprod))
+									OVER(PARTITION BY
+										  CASE
+												WHEN EXTRACT(YEAR FROM dhemi)IS NULL THEN
+													  1
+												ELSE
+													  0
+										  END
+									),
+									4
+							  )* 100,
+							  '990.00L',
+							  'NLS_CURRENCY=%'
+						)),
+						8
+				  )                        rr,
+				  lpad(
+						TRIM(to_char(
+							  SUM(prod_vprod),
+							  '999G999G999G990D00'
+						)),
+						length(
+							   MAX(SUM(prod_vprod))
+							   OVER()
+						 )+ 6
+				  )                        total,
+				  lpad(
+						TRIM(to_char(
+							  SUM(icms_vicms),
+							  '999G999G999G990D00'
+						)),
+						length(
+							   MAX(SUM(icms_vicms))
+							   OVER()
+						 )+ 6
+				  )                        icms,
+				  lpad(
+						TRIM(to_char(
+							  SUM(icms_vicmsst),
+							  '999G999G999G990D00'
+						)),
+						length(
+							   MAX(SUM(icms_vicmsst))
+							   OVER()
+						 )+ 6
+				  )                        icms_st
+			  FROM
+				  bi.fato_nfe_detalhe t
+					LEFT JOIN(
+						SELECT
+							  f.it_nu_identificao_nf_e
+						  FROM
+							  sitafe.sitafe_nota_fiscal f
+						 WHERE
+							  f.it_nucnpj_cpf_destino_nf = :CO_CNPJ_CPF
+				  )                    f ON t.chave_acesso = f.it_nu_identificao_nf_e
+			 WHERE
+						co_destinatario = :CO_CNPJ_CPF
+					 AND t.infprot_cstat IN('100',
+											'150')
+					 AND EXTRACT(YEAR FROM dhemi)= :ANO
+			 GROUP BY
+				  GROUPING SETS((),(EXTRACT(YEAR FROM dhemi),
+									t.co_uf_emit,
+									t.co_emitente))
+			 ORDER BY
+				  total DESC
+	  )]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="ANO">
+						<prompt><![CDATA[ANO]]></prompt>
+						<tooltip><![CDATA[ANO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Notas_Saida]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[
+			
+			select D.CHAVE_ACESSO, D.PROD_NITEM, D.IDE_CO_CUF, D.IDE_CO_INDPAG, D.IDE_CO_MOD, D.IDE_SERIE, D.NNF, D.DHEMI, D.DHEMI_HORA, D.CO_TP_NF, D.CO_IDDEST, D.CO_CMUN_FG, D.CO_TPEMIS, D.CO_FINNFE, D.CO_INDFINAL, D.CO_INDPRES, D.CO_EMITENTE, D.XNOME_EMIT, D.XFANT_EMIT, D.CO_UF_EMIT, D.CO_CAD_ICMS_EMIT, D.CO_CRT, D.XLGR_EMIT, D.NRO_EMIT, D.XCPL_EMIT, D.XBAIRRO_EMIT, D.CO_CMUN_EMIT, D.XMUN_EMIT, D.CEP_EMIT, D.CPAIS_EMIT, D.XPAIS_EMIT, D.FONE_EMIT, D.CO_DESTINATARIO, D.XNOME_DEST, D.CO_UF_DEST, D.CO_INDIEDEST, D.XLGR_DEST, D.NRO_DEST, D.XCPL_DEST, D.XBAIRRO_DEST, D.CO_CMUN_DEST, D.XMUN_DEST, D.CEP_DEST, D.CPAIS_DEST, D.XPAIS_DEST, D.FONE_DEST, D.PROD_CPROD, D.PROD_CEAN, D.PROD_XPROD, D.PROD_NCM, D.CO_CFOP, D.PROD_UCOM, D.PROD_QCOM, D.PROD_VUNCOM, D.PROD_VPROD, D.PROD_CEANTRIB, D.PROD_UTRIB, D.PROD_QTRIB, D.PROD_VUNTRIB, D.PROD_VFRETE, D.PROD_VSEG, D.PROD_VDESC, D.PROD_VOUTRO, D.PROD_INDTOT, D.ICMS_CSOSN, D.ICMS_CST, D.ICMS_MODBC, D.ICMS_MODBCST, D.ICMS_MOTDESICMS, D.ICMS_ORIG, D.ICMS_PBCOP, D.ICMS_PCREDSN, D.ICMS_PDIF, D.ICMS_PICMS, D.ICMS_PICMSST, D.ICMS_PMVAST, D.ICMS_PREDBC, D.ICMS_PREDBCST, D.ICMS_UFST, D.ICMS_VBC, D.ICMS_VBCST, D.ICMS_VBCSTDEST, D.ICMS_VBCSTRET, D.ICMS_VCREDICMSSN, D.ICMS_VICMS, D.ICMS_VICMSDESON, D.ICMS_VICMSDIF, D.ICMS_VICMSOP, D.ICMS_VICMSST, D.ICMS_VICMSSTDEST, D.ICMS_VICMSSTRET, D.ICMS_VBCFCP, D.ICMS_PFCP, D.ICMS_VFCP, D.ICMS_VBCFCPST, D.ICMS_PFCPST, D.ICMS_VFCPST, D.ICMS_VBCUFDEST, D.ICMS_VBCFCPUFDEST, D.ICMS_PFCPUFDEST, D.ICMS_PICMSUFDEST, D.ICMS_PICMSINTER, D.ICMS_PICMSINTERPART, D.ICMS_VFCPUFDEST, D.ICMS_VICMSUFDEST, D.ICMS_VICMSUFREMET, D.ICMS_PST, D.ICMS_VBCFCPSTRET, D.ICMS_PFCPSTRET, D.ICMS_VFCPSTRET, D.ICMS_PREDBCEFET, D.ICMS_VBCEFET, D.ICMS_PICMSEFET, D.ICMS_VICMSEFET, D.TOT_VBC, D.TOT_VICMS, D.TOT_VICMSDESON, D.TOT_VBCST, D.TOT_VST, D.TOT_VPROD, D.TOT_VFRETE, D.TOT_VSEG, D.TOT_VDESC, D.TOT_VII, D.TOT_VIPI, D.TOT_VPIS, D.TOT_VCOFINS, D.TOT_VOUTRO, D.TOT_VNF, D.TOT_VTOTTRIB, D.TOT_VFCPUFDEST, D.TOT_VICMSUFDEST, D.TOT_VICMSUFREMET, D.TOT_VFCP, D.TOT_VFCPST, D.TOT_VFCPSTRET, D.TOT_VIPIDEVOL, D.ICMS_CSOSN_A, D.ICMS_CST_A, CASE WHEN D.INFPROT_CSTAT = 0   THEN '0 - CANCELAMENTO PELO EMITENTE' WHEN D.INFPROT_CSTAT = 100 THEN '100 - AUTORIZADA' WHEN D.INFPROT_CSTAT = 150 THEN '150 - AUTORIZAÇÃO FORA DE PRAZO' WHEN D.INFPROT_CSTAT = 301 THEN '302 - USO DENEGADO : SITUAÇÃO DO EMITENTE' WHEN D.INFPROT_CSTAT = 302 THEN '302 - USO DENEGADO : SITUAÇAO DO DESTINATARIO' WHEN D.INFPROT_CSTAT = 303 THEN '303 - USO DENEGADO : DESTINATÁRIO NÃO HABILITADO A OPERAR NA UF' END AS STATUS_NF
+							from bi.fato_nfe_detalhe d
+							where ( d.co_emitente     = :CO_CNPJ_CPF and d.co_tp_nf = 1)
+							  and d.infprot_cstat in ('100','150')
+union
+select D.CHAVE_ACESSO, D.PROD_NITEM, D.IDE_CO_CUF, D.IDE_CO_INDPAG, D.IDE_CO_MOD, D.IDE_SERIE, D.NNF, D.DHEMI, D.DHEMI_HORA, D.CO_TP_NF, D.CO_IDDEST, D.CO_CMUN_FG, D.CO_TPEMIS, D.CO_FINNFE, D.CO_INDFINAL, D.CO_INDPRES, D.CO_EMITENTE, D.XNOME_EMIT, D.XFANT_EMIT, D.CO_UF_EMIT, D.CO_CAD_ICMS_EMIT, D.CO_CRT, D.XLGR_EMIT, D.NRO_EMIT, D.XCPL_EMIT, D.XBAIRRO_EMIT, D.CO_CMUN_EMIT, D.XMUN_EMIT, D.CEP_EMIT, D.CPAIS_EMIT, D.XPAIS_EMIT, D.FONE_EMIT, D.CO_DESTINATARIO, D.XNOME_DEST, D.CO_UF_DEST, D.CO_INDIEDEST, D.XLGR_DEST, D.NRO_DEST, D.XCPL_DEST, D.XBAIRRO_DEST, D.CO_CMUN_DEST, D.XMUN_DEST, D.CEP_DEST, D.CPAIS_DEST, D.XPAIS_DEST, D.FONE_DEST, D.PROD_CPROD, D.PROD_CEAN, D.PROD_XPROD, D.PROD_NCM, D.CO_CFOP, D.PROD_UCOM, D.PROD_QCOM, D.PROD_VUNCOM, D.PROD_VPROD, D.PROD_CEANTRIB, D.PROD_UTRIB, D.PROD_QTRIB, D.PROD_VUNTRIB, D.PROD_VFRETE, D.PROD_VSEG, D.PROD_VDESC, D.PROD_VOUTRO, D.PROD_INDTOT, D.ICMS_CSOSN, D.ICMS_CST, D.ICMS_MODBC, D.ICMS_MODBCST, D.ICMS_MOTDESICMS, D.ICMS_ORIG, D.ICMS_PBCOP, D.ICMS_PCREDSN, D.ICMS_PDIF, D.ICMS_PICMS, D.ICMS_PICMSST, D.ICMS_PMVAST, D.ICMS_PREDBC, D.ICMS_PREDBCST, D.ICMS_UFST, D.ICMS_VBC, D.ICMS_VBCST, D.ICMS_VBCSTDEST, D.ICMS_VBCSTRET, D.ICMS_VCREDICMSSN, D.ICMS_VICMS, D.ICMS_VICMSDESON, D.ICMS_VICMSDIF, D.ICMS_VICMSOP, D.ICMS_VICMSST, D.ICMS_VICMSSTDEST, D.ICMS_VICMSSTRET, D.ICMS_VBCFCP, D.ICMS_PFCP, D.ICMS_VFCP, D.ICMS_VBCFCPST, D.ICMS_PFCPST, D.ICMS_VFCPST, D.ICMS_VBCUFDEST, D.ICMS_VBCFCPUFDEST, D.ICMS_PFCPUFDEST, D.ICMS_PICMSUFDEST, D.ICMS_PICMSINTER, D.ICMS_PICMSINTERPART, D.ICMS_VFCPUFDEST, D.ICMS_VICMSUFDEST, D.ICMS_VICMSUFREMET, D.ICMS_PST, D.ICMS_VBCFCPSTRET, D.ICMS_PFCPSTRET, D.ICMS_VFCPSTRET, D.ICMS_PREDBCEFET, D.ICMS_VBCEFET, D.ICMS_PICMSEFET, D.ICMS_VICMSEFET, D.TOT_VBC, D.TOT_VICMS, D.TOT_VICMSDESON, D.TOT_VBCST, D.TOT_VST, D.TOT_VPROD, D.TOT_VFRETE, D.TOT_VSEG, D.TOT_VDESC, D.TOT_VII, D.TOT_VIPI, D.TOT_VPIS, D.TOT_VCOFINS, D.TOT_VOUTRO, D.TOT_VNF, D.TOT_VTOTTRIB, D.TOT_VFCPUFDEST, D.TOT_VICMSUFDEST, D.TOT_VICMSUFREMET, D.TOT_VFCP, D.TOT_VFCPST, D.TOT_VFCPSTRET, D.TOT_VIPIDEVOL, D.ICMS_CSOSN_A, D.ICMS_CST_A, CASE WHEN D.INFPROT_CSTAT = 0   THEN '0 - CANCELAMENTO PELO EMITENTE' WHEN D.INFPROT_CSTAT = 100 THEN '100 - AUTORIZADA' WHEN D.INFPROT_CSTAT = 150 THEN '150 - AUTORIZAÇÃO FORA DE PRAZO' WHEN D.INFPROT_CSTAT = 301 THEN '302 - USO DENEGADO : SITUAÇÃO DO EMITENTE' WHEN D.INFPROT_CSTAT = 302 THEN '302 - USO DENEGADO : SITUAÇAO DO DESTINATARIO' WHEN D.INFPROT_CSTAT = 303 THEN '303 - USO DENEGADO : DESTINATÁRIO NÃO HABILITADO A OPERAR NA UF' END AS STATUS_NF
+							from bi.fato_nfce_detalhe d
+							where ( d.co_emitente     = :CO_CNPJ_CPF and d.co_tp_nf = 1)
+							  and d.infprot_cstat in ('100','150')
+							  order by dhemi desc, chave_acesso, prod_nitem
+							  
+			]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Manifesto(s)]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[WITH chaves_nfe AS(
+						  SELECT
+								chave_acesso
+							FROM
+								bi.fato_nfe_detalhe
+						   WHERE
+								co_destinatario = :CO_CNPJ_CPF or co_emitente = :CO_CNPJ_CPF
+						   GROUP BY
+								chave_acesso
+					)
+					select md.it_nu_chave_mdfe, md.it_da_emissao, md.it_uf_inicio, md.it_uf_fim, md.it_cnpj_emitente, md.it_uf_emitente, md.it_nu_placa_veiculo, md.it_nu_placa_reboque1, md.it_nu_placa_uf, md.it_valor_carga, md.it_cpf_motorista, md.it_no_motorista, :CO_CNPJ_CPF CO_CNPJ_CPF from (
+					SELECT
+						  distinct it_nu_chave_mdfe
+					  FROM
+						  (
+								SELECT
+									  it_nu_chave_mdfe
+								  FROM
+										   sitafe.sitafe_mdfe_item m
+									   INNER JOIN sitafe.sitafe_cte_itens    c ON m.it_nu_chave_acesso = c.it_nu_chave_cte
+									   INNER JOIN chaves_nfe                 ch ON c.it_nu_chave_nfe = ch.chave_acesso
+								UNION ALL
+								SELECT
+									  it_nu_chave_mdfe
+								  FROM
+										   sitafe.sitafe_mdfe_item m
+									   INNER JOIN chaves_nfe ch ON m.it_nu_chave_acesso = ch.chave_acesso
+						  ))g
+					LEFT JOIN sitafe.sitafe_mdfe    md ON g.it_nu_chave_mdfe = md.it_nu_chave_mdfe
+					order by md.it_da_emissao desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[CTE(s)]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[WITH chaves_nfe AS(
+      SELECT
+            bi.fato_nfe_detalhe.chave_acesso
+        FROM
+            bi.fato_nfe_detalhe
+       WHERE
+            (bi.fato_nfe_detalhe.co_destinatario = :CO_CNPJ_CPF)
+                OR(bi.fato_nfe_detalhe.co_emitente = :CO_CNPJ_CPF)
+       GROUP BY
+            bi.fato_nfe_detalhe.chave_acesso
+)
+SELECT
+      c.it_nu_chave_acesso,
+      c.it_nu_ct,
+      c.it_da_emissao,
+      c.it_uf_inicio_prestacao,
+      c.it_nu_cnpj_emitente,
+      c.it_nu_inscricao_emitente,
+      c.it_in_nome_emitente,
+      c.it_in_fantasia_emitente,
+      c.it_nu_cnpj_remetente,
+      c.it_nu_cpf_remetente,
+      c.it_nu_inscricao_remetente,
+      c.it_in_nome_remetente,
+      c.it_in_fantasia_remetente,
+      c.it_tp_frete,
+      c.it_va_total_frete,
+      c.it_va_base_calculo,
+      c.it_va_valor_icms,
+      c.it_nu_placa_trator,
+      c.it_nu_cpf_motorista,
+      c.it_nu_cnpj_tomador
+  FROM
+      (
+            SELECT DISTINCT
+                  m.it_nu_chave_acesso
+              FROM
+                       sitafe.sitafe_mdfe_item m
+                   INNER JOIN sitafe.sitafe_cte_itens    c ON m.it_nu_chave_acesso = c.it_nu_chave_cte
+                   INNER JOIN chaves_nfe                 ch ON c.it_nu_chave_nfe = ch.chave_acesso
+             WHERE
+                  m.it_nu_chave_mdfe = :IT_NU_CHAVE_MDFE
+      )                    g
+        LEFT JOIN sitafe.sitafe_cte    c ON g.it_nu_chave_acesso = c.it_nu_chave_acesso]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="IT_NU_CHAVE_MDFE">
+						<prompt><![CDATA[IT_NU_CHAVE_MDFE]]></prompt>
+						<tooltip><![CDATA[IT_NU_CHAVE_MDFE]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Fornecedor(es)]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+							n.co_emitente,
+							'<html><b>'||n.xnome_emit nome,
+							n.xmun_emit municipio,
+							n.co_uf_emit uf,
+							sum(n.prod_vprod+n.prod_vfrete+ n.prod_vseg+n.prod_voutro-n.prod_vdesc) total,
+							sum(n.icms_vbc) bc_icms,
+							sum(n.icms_vicms) icms,
+							sum(n.icms_vbcst) bc_st,
+							sum(n.icms_vicmsst) icms_st
+
+							  FROM
+								  sitafe.sitafe_mdfe_item t
+							inner join sitafe.sitafe_cte_itens c on t.it_nu_chave_acesso = c.it_nu_chave_cte
+							inner join bi.fato_nfe_detalhe n on c.it_nu_chave_nfe = n.chave_acesso
+							where t.it_nu_chave_mdfe = :IT_NU_CHAVE_MDFE
+								  and c.it_inf_tipo = 'NFE'
+								  and (n.co_emitente = :CO_CNPJ_CPF or n.co_destinatario = :CO_CNPJ_CPF)
+
+							group by n.co_emitente,
+							n.xnome_emit,
+							n.xmun_emit,
+							n.co_uf_emit
+
+							order by total desc]]></sql>
+				<binds>
+					<bind id="IT_NU_CHAVE_MDFE">
+						<prompt><![CDATA[IT_NU_CHAVE_MDFE]]></prompt>
+						<tooltip><![CDATA[IT_NU_CHAVE_MDFE]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Nota(s) Fiscal(is)]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+								n.chave_acesso,
+								n.co_emitente,
+								'<html><b>'||n.xnome_emit nome,
+								sum(n.prod_vprod+n.prod_vfrete+ n.prod_vseg+n.prod_voutro-n.prod_vdesc) total,
+								sum(n.icms_vbc) bc_icms,
+								sum(n.icms_vicms) icms,
+								sum(n.icms_vbcst) bc_st,
+								sum(n.icms_vicmsst) icms_st
+
+								  FROM
+									  sitafe.sitafe_mdfe_item t
+								inner join sitafe.sitafe_cte_itens c on t.it_nu_chave_acesso = c.it_nu_chave_cte
+								inner join bi.fato_nfe_detalhe n on c.it_nu_chave_nfe = n.chave_acesso
+								where t.it_nu_chave_mdfe = :IT_NU_CHAVE_MDFE
+									  and c.it_inf_tipo = 'NFE'
+									  and (n.co_emitente = :CO_CNPJ_CPF or n.co_destinatario = :CO_CNPJ_CPF)
+
+								group by n.chave_acesso,
+								n.co_emitente,
+								n.xnome_emit]]></sql>
+				<binds>
+					<bind id="IT_NU_CHAVE_MDFE">
+						<prompt><![CDATA[IT_NU_CHAVE_MDFE]]></prompt>
+						<tooltip><![CDATA[IT_NU_CHAVE_MDFE]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Mercadoria]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+									n.co_emitente,
+									'<html><b>'||n.xnome_emit nome,
+									n.prod_xprod produto,
+									n.prod_ncm ncm,
+									n.co_cfop cfop,
+									sum(n.prod_vprod+n.prod_vfrete+ n.prod_vseg+n.prod_voutro-n.prod_vdesc) total,
+									sum(n.icms_vbc) bc_icms,
+									sum(n.icms_vicms) icms,
+									sum(n.icms_vbcst) bc_st,
+									sum(n.icms_vicmsst) icms_st
+
+									  FROM
+										  sitafe.sitafe_mdfe_item t
+									inner join sitafe.sitafe_cte_itens c on t.it_nu_chave_acesso = c.it_nu_chave_cte
+									inner join bi.fato_nfe_detalhe n on c.it_nu_chave_nfe = n.chave_acesso
+									where t.it_nu_chave_mdfe = :IT_NU_CHAVE_MDFE
+										  and c.it_inf_tipo = 'NFE'
+										  and (n.co_emitente = :CO_CNPJ_CPF or n.co_destinatario = :CO_CNPJ_CPF)
+
+									group by n.co_emitente,
+									n.xnome_emit,
+									n.prod_xprod,
+									n.prod_ncm,
+									n.co_cfop
+
+									order by total desc]]></sql>
+				<binds>
+					<bind id="IT_NU_CHAVE_MDFE">
+						<prompt><![CDATA[IT_NU_CHAVE_MDFE]]></prompt>
+						<tooltip><![CDATA[IT_NU_CHAVE_MDFE]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Evento(s)]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+									  z.*,
+									  a.xml
+								  FROM
+									  xdb_mdfe.arquivo a,
+									  XMLTABLE(XMLNAMESPACES(DEFAULT 'http://www.portalfiscal.inf.br/mdfe'), '//eventoMDFe/infEvento'
+												  PASSING a.xml
+											COLUMNS
+												  corgao NUMBER PATH '//cOrgao',
+												  dhevento timestamp with time zone PATH '//dhEvento',
+												  tpevento VARCHAR2(60) PATH '//tpEvento',
+												  nseqevento VARCHAR2(60) PATH '//nSeqEvento',
+												  descEvento VARCHAR2(250) PATH '//detEvento//descEvento',
+												  tpTransm VARCHAR2(250) PATH '//detEvento//tpTransm',
+												  cUFTransito VARCHAR2(250) PATH '//detEvento//*/cUFTransito',
+												  cIdEquip VARCHAR2(250) PATH '//detEvento//*/cIdEquip',
+												  xIdEquip VARCHAR2(250) PATH '//detEvento//*/xIdEquip',
+												  tpEquip VARCHAR2(250) PATH '//detEvento//*/tpEquip',
+												  placa VARCHAR2(250) PATH '//detEvento//*/placa',
+												  tpSentido VARCHAR2(250) PATH '//detEvento//*/tpSentido',
+												  dhPass VARCHAR2(250) PATH '//detEvento//*/dhPass',
+												  xUnidFiscal VARCHAR2(250) PATH '//detEvento//*/xUnidFiscal',
+												  xObs VARCHAR2(250) PATH '//detEvento//*/xObs',
+												  latitude VARCHAR2(250) PATH '//detEvento//*/latitude',
+												  longitude VARCHAR2(250) PATH '//detEvento//*/longitude'
+
+									  ) z
+								 WHERE
+											substr(
+												  a.xml_schema,
+												  1,
+												  8
+											)= 'procEven'
+										 AND chave_acesso = :IT_NU_CHAVE_MDFE
+										 order by dhevento ]]></sql>
+				<binds>
+					<bind id="IT_NU_CHAVE_MDFE">
+						<prompt><![CDATA[IT_NU_CHAVE_MDFE]]></prompt>
+						<tooltip><![CDATA[IT_NU_CHAVE_MDFE]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Conta Corrente]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+:CO_CNPJ_CPF CO_CNPJ_CPF,
+      case when id_situacao is null then '<html><b>Σ TOTAL GERAL' 
+      when id_situacao = '01 - Não pago e Vencido' then '<html><b style="color:#CF3434">01 - Não pago e Vencido'
+      when id_situacao = '01 - Não pago a vencer' then '<html><b style="color:#3440CF">01 - Não pago a Vencer'
+      else  '<html><p style="color:#121212">'||id_situacao  end situacao,
+
+      lpad(
+            TRIM(to_char(
+                  SUM(total),
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(SUM(total))
+                   OVER()
+             )+7
+      )    total,
+         lpad(TRIM(to_char(round(RATIO_TO_REPORT(SUM(total))
+                       OVER(PARTITION BY case when id_situacao is null then 1 else 2 end), 4) * 100,
+                 '990.00L',
+                 'NLS_CURRENCY=%')),
+      8)           rr,
+      receitas
+  FROM
+      (
+            SELECT
+                  id_situacao_,
+                  id_situacao,
+                  SUM(valor)     total,
+                  LISTAGG('<html><b>'
+                          || id_receita
+                          || '</b> - '
+                          || '<i style="color:#854607">'||rr||'</i>',
+                          '; ')WITHIN GROUP(
+                         ORDER BY
+                              rr DESC
+                  )              receitas
+              FROM
+                  (
+                        SELECT
+                              id_situacao  id_situacao_,
+                              CASE
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento < sysdate THEN
+                                          '01 - Não pago e Vencido'
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento > sysdate THEN
+                                          '01 - Não pago a vencer'
+                                    ELSE
+                                          t.id_situacao
+                                          || ' - '
+                                          || initcap(
+                                                s.it_no_situacao
+                                          )
+                              END          id_situacao,
+                              t.id_receita,
+                              SUM(
+                                    CASE
+                                          WHEN t.va_pago IS NULL THEN
+                                                (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                          ELSE
+                                                t.va_pago
+                                    END
+                              )            valor,
+                              lpad(
+                                    TRIM(to_char(
+                                          round(
+                                                RATIO_TO_REPORT(SUM(
+                                                      CASE
+                                                            WHEN va_pago IS NULL THEN
+                                                                  (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                                            ELSE
+                                                                  t.va_pago
+                                                      END
+                                                ))
+                                                OVER(PARTITION BY
+                                                      CASE
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento < sysdate THEN
+                                                                  '01 - Não pago e Vencido'
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento > sysdate THEN
+                                                                  '01 - Não pago a vencer'
+                                                            ELSE
+                                                                  t.id_situacao
+                                                                  || ' - '
+                                                                  || initcap(
+                                                                        s.it_no_situacao
+                                                                  )
+                                                      END
+                                                ),
+                                                4
+                                          )* 100,
+                                          '990.00L',
+                                          'NLS_CURRENCY=%'
+                                    )),
+                                    8
+                              )            rr
+                          FROM
+                              bi.fato_lanc_arrec           t
+                                LEFT JOIN bi.dm_situacao_lancamento    s ON t.id_situacao = s.it_co_situacao
+                         WHERE
+                              t.id_cpf_cnpj = :CO_CNPJ_CPF
+                         GROUP BY
+                                    CASE
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento < sysdate THEN
+                                                '01 - Não pago e Vencido'
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento > sysdate THEN
+                                                '01 - Não pago a vencer'
+                                          ELSE
+                                                t.id_situacao
+                                                || ' - '
+                                                || initcap(
+                                                      s.it_no_situacao
+                                                )
+                                    END,
+                                    t.id_situacao,
+                                    t.id_receita
+                  )
+             GROUP BY
+                  id_situacao_,
+                  id_situacao
+      )
+ GROUP BY
+      GROUPING SETS((),(id_situacao_,
+                        id_situacao,
+                        receitas))
+                        
+order by case when id_situacao_ is null then 1
+                  when id_situacao_ = '01' then 2
+                  else 3 end, total desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Detalhe]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+      da_vencimento,
+      da_pagamento,
+      nu_guia_parcela,
+      nu_complemento,
+      CASE
+            WHEN da_vencimento IS NULL
+               AND da_pagamento IS NULL THEN
+                  '<html><b>' || receita
+            ELSE
+                  receita
+      END            receita,
+      lpad(
+            TRIM(to_char(
+                  round(
+                        RATIO_TO_REPORT(SUM(total))
+                        OVER(PARTITION BY
+                              CASE
+                                    WHEN da_vencimento IS NULL
+                                       AND da_pagamento IS NULL THEN
+                                          1
+                                    ELSE
+                                          2
+                              END
+                        ),
+                        4
+                  )* 100,
+                  '990.00L',
+                  'NLS_CURRENCY=%'
+            )),
+            8
+      )              rr,
+      
+          lpad(
+            TRIM(to_char(
+                  SUM(total),
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(SUM(total))
+                   OVER()
+             )+7
+      )    total  
+      
+  FROM
+      (
+            SELECT
+                  t.da_vencimento,
+                  t.da_pagamento,
+                  t.nu_guia_parcela,
+                  t.nu_complemento,
+                  t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo          total,
+                  t.va_pago,
+                  substr(
+                        t.id_receita
+                        || ' - '
+                        || r.it_no_receita,
+                        1,
+                        100
+                  )                                                                  receita
+              FROM
+                  bi.fato_lanc_arrec    t
+                    LEFT JOIN bi.dm_receita         r ON t.id_receita = r.it_co_receita
+             WHERE
+                        id_cpf_cnpj = :CO_CNPJ_CPF
+                     AND(:SITUACAO = '<html><b>Σ TOTAL GERAL'
+                      OR id_situacao = substr(
+                        :SITUACAO,
+                        32,
+                        2
+                  ))
+      )
+ GROUP BY
+      GROUPING SETS((receita),(da_vencimento,
+                               da_pagamento,
+                               nu_guia_parcela,
+                               nu_complemento,
+                               receita))
+ ORDER BY
+      CASE
+            WHEN da_vencimento IS NULL
+               AND da_pagamento IS NULL THEN
+                  1
+            ELSE
+                  2
+      END,
+      total DESC]]></sql>
+				<binds>
+					<bind id="CO_CNPJ_CPF">
+						<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+						<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="SITUACAO">
+						<prompt><![CDATA[SITUACAO]]></prompt>
+						<tooltip><![CDATA[SITUACAO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Regime Especial]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+                                        t.it_co_regime         co_reg,
+                                        r.it_no_regime         regime,
+                                        t.it_nu_ato            nu_ato,
+                                        t.it_nu_processo       nu_processo,
+                                        CASE
+                                            WHEN t.it_da_transacao > '1' THEN
+                                                TO_DATE(t.it_da_transacao, 'YYYYMMDD')
+                                        END da_transacao,
+                                        CASE
+                                            WHEN t.it_da_cadastro > '1' THEN
+                                                TO_DATE(t.it_da_cadastro, 'YYYYMMDD')
+                                        END da_cadastro,
+                                        CASE
+                                            WHEN t.it_da_vencimento > '1' THEN
+                                                TO_DATE(t.it_da_vencimento, 'YYYYMMDD')
+                                        END da_vencimento,
+                                        CASE
+                                            WHEN t.it_da_baixa > '1' THEN
+                                                TO_DATE(t.it_da_baixa, 'YYYYMMDD')
+                                        END da_baixa,
+                                    
+                                        t.it_tx_observacao observacao,
+                                        t.it_tx_motivo_baixa motivo_baixa,
+                                        CASE
+                                            WHEN t.it_da_baixa = '       ' THEN
+                                                '<html><strong><font color="blue">'
+                                                || 'ATIVO'
+                                                || '</font></strong>'
+                                            ELSE
+                                                        '<html><strong><font color="red">'
+                                                || 'CANCELADO'
+                                                || '</font></strong>'
+                                        END situacao
+                                    FROM
+                                        sitafe.sitafe_regime_contribuinte      t
+                                        LEFT JOIN sitafe.sitafe_regime_especial_padrao   r ON t.it_co_regime = r.it_co_regime
+                                    WHERE
+                                        substr(t.gr_identificacao,2,14) = :CO_CNPJ_CPF
+                                        AND t.it_in_ultima = '9'
+                                    GROUP BY
+                                        t.it_co_regime,
+                                        r.it_no_regime,
+                                        t.it_nu_ato,
+                                        t.it_nu_processo,
+                                        CASE
+                                                WHEN t.it_da_transacao > '1' THEN
+                                                    TO_DATE(t.it_da_transacao, 'YYYYMMDD')
+                                            END,
+                                        CASE
+                                                WHEN t.it_da_cadastro > '1' THEN
+                                                    TO_DATE(t.it_da_cadastro, 'YYYYMMDD')
+                                            END,
+                                        CASE
+                                                WHEN t.it_da_vencimento > '1' THEN
+                                                    TO_DATE(t.it_da_vencimento, 'YYYYMMDD')
+                                            END,
+                                        CASE
+                                                WHEN t.it_da_baixa > '1' THEN
+                                                    TO_DATE(t.it_da_baixa, 'YYYYMMDD')
+                                            END,
+                                        t.it_tx_motivo_baixa, 
+                                        CASE
+                                            WHEN t.it_da_baixa = '       ' THEN
+                                                    '<html><strong><font color="blue">'
+                                                    || 'ATIVO'
+                                                    || '</font></strong>'
+                                                ELSE
+                                                    '<html><strong><font color="red">'
+                                                    || 'CANCELADO'
+                                                    || '</font></strong>'
+                                            END,
+                                            t.it_tx_observacao,
+                                            t.it_tx_motivo_baixa]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[DIMP]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[with 
+							cartao_contribuinte as (
+							select 
+								   row_number() over (order by ano asc, periodo asc)                        ordem,
+								   case
+									when ano is null and periodo is null 
+									  then '<html><b style="color:blue">Σ TOTAL GERAL'
+									when ano is not null and periodo is null 
+									  then '<html><b style="color:green">Σ Total no ano ' || ano
+									when ano is not null and periodo is not null 
+									  then '----Total no período ' || periodo
+								   end                                                                      info,
+								   operacoes,
+								   cartao                                                                   cartao
+							from(
+							select extract(year from mp.dt_op)                                                 ano,
+								   extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0')     periodo,
+								   count(*)                                                                 operacoes,
+								   sum(mp.valor)                                                               cartao
+							from bi.mpg_f_detalhe_operacao mp
+								inner join dimp.reg0000s d
+								on mp.id_reg0000 = d.id and mp.cnpj_declarante = d.cnpj
+							where mp.cnpj_cpf = :CO_CNPJ_CPF
+									and mp.flag_comex = 0
+									and ((mp.cnpj_adquirente =  mp.cnpj_declarante) or  (mp.cnpj_adquirente is null))
+									and mp.id_origem_informacao = 'DIMP'
+									and mp.flag_cancelado = 0
+									and mp.nat_oper not in  ('3', '4', '5', '8', '11')
+							group by grouping sets 
+									( ( ),
+										(extract(year from mp.dt_op)), 
+											(extract(year from mp.dt_op), extract(year from mp.dt_op)||'/'||lpad(extract(month from mp.dt_op),2,'0'))
+									)
+								 )
+							order by ano asc, periodo asc
+							),
+
+							saidas_contribuinte as (
+							select case
+									when ano is null and periodo is null 
+									  then '<html><b style="color:blue">Σ TOTAL GERAL'
+									when ano is not null and periodo is null 
+									  then '<html><b style="color:green">Σ Total no ano ' || ano
+									when ano is not null and periodo is not null 
+									  then '----Total no período ' || periodo
+								   end                                                                                      info,
+								   nfe_nfce                                                                                 nfe_nfce
+							from(
+							select extract(year from da_referencia)                                                 ano,
+								   extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0')     periodo,
+								   sum(prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc)             nfe_nfce
+							from BI.fato_nfe_nfce_sumarizada nf
+							inner join bi.dm_cfop c on nf.co_cfop = c.co_cfop and c.operacao_mercantil = 'X'
+							where co_emitente = :CO_CNPJ_CPF
+							  and co_tp_nf = 1
+							group by grouping sets 
+									( ( ),
+										(extract(year from da_referencia)), 
+											(extract(year from da_referencia), extract(year from da_referencia)||'/'||lpad(extract(month from da_referencia),2,'0'))
+									)
+								 )
+							order by ano asc, periodo asc
+							)
+							select nvl(cartao_contribuinte.info,saidas_contribuinte.info)                                                                               info,
+								   cartao_contribuinte.operacoes                                                                                                        operacoes_cartao,
+								   lpad(trim(to_char(cartao_contribuinte.cartao, '999G999G999G990D00')), length(max(cartao_contribuinte.cartao) over()) + 7)            valor_cartao,
+								   lpad(trim(to_char(saidas_contribuinte.nfe_nfce , '999G999G999G990D00')), length(max(saidas_contribuinte.nfe_nfce) over()) + 7)       valor_nfe_nfce,
+								   case when substr(nvl(cartao_contribuinte.info,saidas_contribuinte.info),1,6) = '<html>' 
+										 then lpad(trim(to_char('-')),
+												   length(max(cartao_contribuinte.cartao) over()) + 7)
+										when nvl(cartao_contribuinte.cartao,0) - nvl(saidas_contribuinte.nfe_nfce,0) > 0 
+										 then lpad(trim(to_char(nvl(cartao_contribuinte.cartao,0)-nvl(saidas_contribuinte.nfe_nfce,0),'999G999G999G990D00')),
+												   length(max(nvl(cartao_contribuinte.cartao,0)) over()) + 7)
+										else lpad(to_char('-'),
+												  length(max(cartao_contribuinte.cartao) over()) + 7)
+										end                                                                                                                             excesso_valor 
+							from cartao_contribuinte
+							left join saidas_contribuinte
+								   on cartao_contribuinte.info = saidas_contribuinte.info
+							order by cartao_contribuinte.ordem]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[DIMP + Sócios]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[
+						WITH s_auto AS (
+							SELECT
+								bi.dm_pessoa.co_cnpj_cpf,
+								bi.dm_pessoa.co_cad_icms ie
+							FROM
+								bi.dm_pessoa
+							WHERE
+								bi.dm_pessoa.co_cnpj_cpf = :CO_CNPJ_CPF
+						), hist_socio AS (
+							SELECT
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual,
+								MIN(shs.it_da_inicio_part_societaria) da_entrada,
+								MAX(shs.it_da_fim_part_societaria)    da_saida
+							FROM
+								s_auto
+								LEFT JOIN sitafe.sitafe_historico_socio shs ON shs.it_nu_inscricao_estadual = s_auto.ie
+							GROUP BY
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+						), ult_socio AS (
+							SELECT
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+							FROM
+								s_auto
+								LEFT JOIN sitafe.sitafe_historico_socio shs ON shs.it_nu_inscricao_estadual = s_auto.ie
+																			   AND shs.it_in_ultima_fac = '9'
+																			   AND ( shs.it_da_fim_part_societaria = '        '
+																					 OR shs.it_da_fim_part_societaria > to_char(sysdate, 'yyyymmdd') )
+							GROUP BY
+								shs.gr_identificacao,
+								shs.it_nu_inscricao_estadual
+						), tabela AS (
+							SELECT
+								CASE
+									WHEN ult_socio.gr_identificacao IS NOT NULL THEN
+										'<html><b>SÓCIO ATUAL'
+									ELSE
+										'SÓCIO ANTIGO'
+								END                           part_atual,
+								substr(p.gr_identificacao, 2) cpfcnpj,
+								p.it_no_pessoa,
+								CASE
+									WHEN hist_socio.da_entrada != '         ' THEN
+										TO_DATE(hist_socio.da_entrada, 'YYYYMMDD')
+								END                           it_da_inicio_part_societaria,
+								CASE
+									WHEN ult_socio.gr_identificacao IS NOT NULL THEN
+										'SÓCIO ATUAL'
+									WHEN hist_socio.da_saida = '        ' THEN
+										'NÃO INFORMADO'
+									ELSE
+										to_char(TO_DATE(hist_socio.da_saida, 'YYYYMMDD'))
+								END                           fim_part_societaria_real
+							FROM
+								hist_socio
+								LEFT JOIN ult_socio ON hist_socio.gr_identificacao = ult_socio.gr_identificacao
+													   AND hist_socio.it_nu_inscricao_estadual = ult_socio.it_nu_inscricao_estadual
+								LEFT JOIN sitafe.sitafe_pessoa p ON p.gr_identificacao = hist_socio.gr_identificacao
+																	AND p.it_in_ultima_situacao = '9'
+						), socio_final AS (
+							SELECT
+								tabela.cpfcnpj     co_cnpj_cpf_socio,
+								nvl(TO_DATE(tabela.it_da_inicio_part_societaria DEFAULT NULL ON CONVERSION ERROR, 'dd/mm/yyyy hh24:mi:ss'),
+									TO_DATE('01/01/1900',
+									'dd/mm/yyyy')) da_inicio,
+								nvl(TO_DATE(tabela.fim_part_societaria_real DEFAULT NULL ON CONVERSION ERROR, 'dd/mm/yyyy hh24:mi:ss'),
+									sysdate)       da_fim
+							FROM
+								tabela
+							union
+							SELECT
+								:CO_CNPJ_CPF                        co_cnpj_cpf_socio,
+								to_date('01/01/1900','dd/mm/yyyy')  da_inicio,
+								sysdate                             da_fim
+							FROM
+								dual
+						), www AS (
+							SELECT
+								1            ddd,
+								:CO_CNPJ_CPF cnpj,
+								'01/01/1900' data1,
+								sysdate      data2
+							FROM
+								dual
+						), doc_vaf AS (
+							SELECT
+								d.co_emitente,
+								EXTRACT(YEAR FROM da_referencia)
+								|| '/'
+								|| substr(da_referencia, 4, 2)                                       ref,
+								SUM(prod_vprod + prod_vfrete + prod_vseg - prod_vdesc + prod_voutro) doc_cfop_vaf
+							FROM
+									 bi.fato_nfe_nfce_sumarizada d
+								JOIN www ON www.ddd = 1
+								JOIN bi.dm_cfop op ON d.co_cfop = op.co_cfop
+													  AND op.in_vaf IS NOT NULL
+													  AND op.operacao_mercantil = 'X'
+													  AND d.co_emitente = www.cnpj
+													  AND d.da_referencia BETWEEN www.data1 AND www.data2
+													  AND D.CO_TP_NF = 1
+							GROUP BY
+								d.co_emitente,
+								da_referencia
+						), dimp AS (
+							SELECT
+								mp.cnpj_cpf,
+								substr(mp.id_mes_operacao, 1, 4)
+								|| '/'
+								|| substr(mp.id_mes_operacao, 5, 2) ref,
+								CASE
+									WHEN nat_oper_descricao = 'PIX' THEN
+										valor
+									ELSE
+										0
+								END                                 valor_pix,
+								CASE
+									WHEN nat_oper_descricao != 'PIX' THEN
+										valor
+									ELSE
+										0
+								END                                 valor_outros,
+								valor
+							FROM socio_final
+								inner join bi.mpg_f_detalhe_operacao mp on mp.cnpj_cpf =  socio_final.co_cnpj_cpf_socio and mp.dt_op BETWEEN socio_final.da_inicio AND socio_final.da_fim
+								INNER JOIN dimp.reg0000s d ON mp.id_reg0000 = d.id
+															  AND mp.cnpj_declarante = d.cnpj
+							WHERE mp.flag_comex = 0
+								AND ( ( mp.cnpj_adquirente = mp.cnpj_declarante ) OR ( mp.cnpj_adquirente IS NULL ) )
+								AND mp.id_origem_informacao = 'DIMP'
+								AND mp.flag_cancelado = 0
+								and mp.nat_oper not in  ('3', '4', '5', '8', '11')
+								--AND MP.NAT_OPER <> 5 -- Pagamento efetuado em dinheiro ou por outra estrutura  --COM COMENT RIO: IGUAL FISCONFORME / SEM COMENT RIO: IGUAL VIS O 360
+								
+						), soma_dimp AS (
+							SELECT
+								cnpj_cpf,
+								ref,
+								SUM(valor_pix)    valor_pix,
+								SUM(valor_outros) valor_outros,
+								SUM(valor)        valor
+							FROM
+								dimp
+							GROUP BY
+								cnpj_cpf,
+								ref
+						), ref AS (
+							SELECT
+								ref,
+								cnpj_cpf cod
+							FROM
+								dimp
+							UNION
+							SELECT
+								ref,
+								co_emitente cod
+							FROM
+								doc_vaf
+						)
+						SELECT
+							CASE
+								WHEN length(p.co_cnpj_cpf) = 14 THEN
+									'EMPRESA'
+								ELSE
+									'CPF'
+							END              tipo,
+							p.co_cnpj_cpf
+							|| ' - '
+							|| p.no_razao_social
+							|| ' - '
+							|| da_fim razao_socio,
+							ref.ref,
+							lpad(TRIM(to_char(doc_cfop_vaf, '999G999G999G990D00')),
+								 18)         doc_cfop_vaf,
+							lpad(TRIM(to_char(valor, '999G999G999G990D00')),
+								 18)         dimp_total,
+							lpad(TRIM(to_char(valor_pix, '999G999G999G990D00')),
+								 18)         dimp_pix,
+							lpad(TRIM(to_char(valor_outros, '999G999G999G990D00')),
+								 18)         dimp_outros
+						FROM
+								 (
+								SELECT
+									co_cnpj_cpf,
+									no_razao_social
+								FROM
+									bi.dm_pessoa
+							) p
+							JOIN socio_final ON socio_final.co_cnpj_cpf_socio  = p.co_cnpj_cpf
+							LEFT JOIN ref ON ref.cod = p.co_cnpj_cpf
+							LEFT JOIN soma_dimp d ON d.cnpj_cpf = ref.cod
+													 AND ref.ref = d.ref
+							LEFT JOIN doc_vaf   v ON v.co_emitente = ref.cod
+												   AND ref.ref = v.ref
+						UNION
+						SELECT
+							'SUB-TOTAL',
+							CASE
+								WHEN length(p.co_cnpj_cpf) = 14 THEN
+										'EMPRESA'
+								ELSE
+									'CPF'
+							END
+							|| ' - '
+							|| p.co_cnpj_cpf
+							|| ' - '
+							|| p.no_razao_social
+							|| ' - '
+							|| da_fim,
+							'-',
+							lpad(TRIM(to_char(SUM(doc_cfop_vaf),
+											  '999G999G999G990D00')),
+								 18) doc_cfop_vaf,
+							lpad(TRIM(to_char(SUM(valor),
+											  '999G999G999G990D00')),
+								 18) dimp_total,
+							lpad(TRIM(to_char(SUM(valor_pix),
+											  '999G999G999G990D00')),
+								 18) dimp_pix,
+							lpad(TRIM(to_char(SUM(valor_outros),
+											  '999G999G999G990D00')),
+								 18) dimp_outros
+						FROM
+								 (
+								SELECT
+									co_cnpj_cpf,
+									no_razao_social
+								FROM
+									bi.dm_pessoa
+							) p
+							JOIN socio_final ON socio_final.co_cnpj_cpf_socio = p.co_cnpj_cpf
+							LEFT JOIN ref ON ref.cod = p.co_cnpj_cpf
+							LEFT JOIN soma_dimp d ON d.cnpj_cpf = ref.cod
+													 AND ref.ref = d.ref
+							LEFT JOIN doc_vaf   v ON v.co_emitente = ref.cod
+												   AND ref.ref = v.ref
+						GROUP BY
+							'SUB-TOTAL',
+							CASE
+								WHEN length(p.co_cnpj_cpf) = 14 THEN
+										'EMPRESA'
+								ELSE
+									'CPF'
+							END
+							|| ' - '
+							|| p.co_cnpj_cpf
+							|| ' - '
+							|| p.no_razao_social
+							|| ' - '
+							|| da_fim
+						ORDER BY
+							1 DESC,
+							2 DESC,
+							3 DESC           
+												-- select * from doc_vaf
+						]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Parcelamentos]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+							t.it_nu_proc_parcelamento,
+							CASE
+                                WHEN t.it_in_situacao_parcelamento = '0'    THEN
+									'Cancelado'
+								WHEN t.it_in_situacao_parcelamento = '1'    THEN
+									'Deferido / Pago'
+								WHEN t.it_in_situacao_parcelamento = '2'    THEN
+									'Indeferido / Cancelado'
+								WHEN t.it_in_situacao_parcelamento = '3'    THEN
+									'Aguardando deferimento / Não pago'
+								WHEN t.it_in_situacao_parcelamento = '4'    THEN
+									'Liquidado'
+								WHEN t.it_in_situacao_parcelamento = '5'    THEN
+									'Reparcelado'
+								WHEN t.it_in_situacao_parcelamento = '6'    THEN
+									'Cancelado'
+								WHEN t.it_in_situacao_parcelamento = '7'    THEN
+									'Indeferido por falta de garantia'
+								WHEN t.it_in_situacao_parcelamento = '8'    THEN
+									'Inscrito em dívida ativa'
+								WHEN t.it_in_situacao_parcelamento = '9'    THEN
+									'Excluído'
+								WHEN t.it_in_situacao_parcelamento = ' '    THEN
+									'Ainda não confirmado'
+								ELSE
+									NULL
+							END situacao_parc,
+							t.it_co_receita,
+							t.it_nu_guia_parcelamento,
+							t.it_qt_parcela,
+							t.it_va_principal,
+							t.it_va_total_parcelamento,
+							t.it_va_parcela_inicial,
+							t.it_va_total_parc_inic,
+							t.it_va_parcela_vincenda,
+							t.it_va_total_parc_vinc
+						FROM
+							sitafe.sitafe_parcelamento t
+						WHERE SUBSTR(t.gr_identificacao,2,14) = :CO_CNPJ_CPF
+						ORDER BY
+							t.it_da_parcelamento DESC]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Parcelas]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+						t.da_vencimento,
+						t.da_pagamento,
+						t.da_referencia,
+						t.id_receita,
+						rec.it_no_receita,
+						t.id_situacao,
+						lanc.it_no_situacao,
+						t.nu_guia_parcela,
+						t.va_principal,
+						t.va_multa,
+						t.va_juros,
+						t.va_acrescimo,
+						t.va_pago
+						
+					FROM
+						bi.fato_lanc_arrec           t
+						LEFT JOIN bi.dm_situacao_lancamento    lanc ON t.id_situacao = lanc.it_co_situacao
+						LEFT JOIN bi.dm_receita                rec ON t.id_receita = rec.it_co_receita
+					WHERE
+						t.nu_guia = :IT_NU_GUIA_PARCELAMENTO
+					order by t.da_vencimento]]></sql>
+				<binds>
+					<bind id="IT_NU_GUIA_PARCELAMENTO">
+						<prompt><![CDATA[IT_NU_GUIA_PARCELAMENTO]]></prompt>
+						<tooltip><![CDATA[IT_NU_GUIA_PARCELAMENTO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Origem]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+								lanc.nu_guia,
+								substr(lanc.nu_guia_parcela,15,2) p,
+								lanc.nu_complemento,
+								lanc.da_referencia,
+								lanc.da_vencimento,
+								lanc.da_pagamento,
+								lanc.id_receita,
+								rec.it_no_receita,
+								lanc.id_situacao,
+								sit.it_no_situacao,
+								lanc.va_principal,
+								lanc.va_multa,
+								lanc.va_juros,
+								lanc.va_acrescimo,
+								lanc.va_pago
+							FROM
+								bi.dm_hist_redir_lanc        t
+								LEFT JOIN bi.fato_lanc_arrec           lanc ON t.nu_guia_parcela_origem = lanc.nu_guia_parcela
+								LEFT JOIN bi.dm_receita                rec ON lanc.id_receita = rec.it_co_receita
+								LEFT JOIN bi.dm_situacao_lancamento    sit ON lanc.id_situacao = sit.it_co_situacao
+							WHERE
+								t.nu_guia_redir = :IT_NU_GUIA_PARCELAMENTO]]></sql>
+				<binds>
+					<bind id="IT_NU_GUIA_PARCELAMENTO">
+						<prompt><![CDATA[IT_NU_GUIA_PARCELAMENTO]]></prompt>
+						<tooltip><![CDATA[IT_NU_GUIA_PARCELAMENTO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Ações Fiscais]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[
+			             select 
+								t.in_modelo_acao_fiscal   tipo,
+								t.no_situacao_acao        situacao,
+								t.nu_acao_fiscal          acao_fiscal,
+								t.nu_dfe                  nu_dfe_dsf,
+								t.da_periodo_inicio_fisc  p_ini,
+								t.da_periodo_fim_fisc     p_fin,
+								t.nu_prazo_acao           prazo,
+								t.nu_prazo_prorrog        prorr,
+								t.da_distri_acao_fiscal   da_distr,
+								t.da_abertu_acao_fiscal   da_aber,
+								t.da_conclu_acao_fiscal   da_concl,
+								o.tx_origem_acao,
+								t.tx_documento,
+								t.tx_observacao
+
+						from bi.dm_acao_fiscal t
+						left join bi.dm_acao_fiscal_origem_acao o 
+							   on t.nu_acao_fiscal = o.nu_acao_fiscal
+						where co_cnpj_cpf = :CO_CNPJ_CPF
+
+						union
+
+						select 
+            'DSF' as                                                                tipo,
+            case when df.it_co_situacao_diligencia = 01 then '01 - DOC. REGISTRADO'
+                 when df.it_co_situacao_diligencia = 02 then '02 - DIL. GERADA'
+                 when df.it_co_situacao_diligencia = 03 then '03 - DIL. ENTREGUE'
+                 when df.it_co_situacao_diligencia = 04 then '04 - DIL. CONCLUÍDA'
+                 when df.it_co_situacao_diligencia = 05 then '05 - DIL. EXCLUÍDA'
+            end                                                                     situacao,
+            to_char(df.it_nu_diligencia)                                            acao_fiscal,
+            dft.it_nu_diligencia                                                    dsf, 
+            null                                                                    p_ini,
+            null                                                                    p_fin,
+            df.it_prazo_max                                                         prazo,
+            null                                                                    prorr,
+            null                                                                    da_distr,
+            to_date(df.it_da_lancamento default null on conversion error,'yyyymmdd')da_aber,
+            to_date(df.it_da_retorno default null on conversion error,'yyyymmdd')   da_concl,
+            dta.tx_origem_acao                                                      tx_origem_acao,
+            dft.it_nu_documento_origem                                              tx_documento,
+            null                                                                    tx_observacao
+    from sitafe.sitafe_diligencia_fiscal_taref dft
+    left join sitafe.sitafe_diligencia_fiscal df
+           on df.it_nu_diligencia = substr(dft.it_nu_diligencia,1,5)||'7'||substr(dft.it_nu_diligencia,7)
+    left join sitafe.sitafe_dilig_it_nu_afte afte
+           on afte.tuk = df.tuk
+          and afte.m_occurs = 1
+    left join sitafe.sitafe_usuario su
+           on to_number(su.it_co_matricula_usuario) = to_number(afte.it_nu_afte)
+    left join (select da.it_nu_acao_fiscal,
+                      listagg(da.it_nu_ai,' * ' on overflow truncate) within group (order by da.it_nu_acao_fiscal) autos
+                 from sitafe.sitafe_diligencia_autos da
+             group by da.it_nu_acao_fiscal) da
+               on da.it_nu_acao_fiscal = df.it_nu_diligencia
+    left join (select dta.tuk,
+                       listagg(dta.it_tx_atividade) within group (order by dta.m_occurs) tx_origem_acao
+                from sitafe.sitafe_diligencia_tx_atividade dta
+                group by dta.tuk) dta
+                on dta.tuk = dft.tuk
+    where dft.it_nu_identificacao = :CO_CNPJ_CPF
+union
+select 
+            'DSF' as                                                                tipo,
+            case when df.it_co_situacao_diligencia = 01 then '01 - DOC. REGISTRADO'
+                 when df.it_co_situacao_diligencia = 02 then '02 - DIL. GERADA'
+                 when df.it_co_situacao_diligencia = 03 then '03 - DIL. ENTREGUE'
+                 when df.it_co_situacao_diligencia = 04 then '04 - DIL. CONCLUÍDA'
+                 when df.it_co_situacao_diligencia = 05 then '05 - DIL. EXCLUÍDA'
+            end                                                                     situacao,
+            to_char(df.it_nu_diligencia)                                            acao_fiscal,
+            dft.it_nu_diligencia                                                    dsf, 
+            null                                                                    p_ini,
+            null                                                                    p_fin,
+            df.it_prazo_max                                                         prazo,
+            null                                                                    prorr,
+            null                                                                    da_distr,
+            to_date(df.it_da_lancamento default null on conversion error,'yyyymmdd')da_aber,
+            to_date(df.it_da_retorno default null on conversion error,'yyyymmdd')   da_concl,
+            dta.tx_origem_acao                                                      tx_origem_acao,
+            dft.it_nu_documento_origem                                              tx_documento,
+            null                                                                    tx_observacao
+    from sitafe.sitafe_diligencia_fiscal_taref dft
+    left join sitafe.sitafe_diligencia_fiscal df
+           on df.it_nu_diligencia = substr(dft.it_nu_diligencia,1,5)||'7'||substr(dft.it_nu_diligencia,7)
+    left join sitafe.sitafe_dilig_it_nu_afte afte
+           on afte.tuk = df.tuk
+          and afte.m_occurs = 1
+    left join sitafe.sitafe_usuario su
+           on to_number(su.it_co_matricula_usuario) = to_number(afte.it_nu_afte)
+    left join (select da.it_nu_acao_fiscal,
+                      listagg(da.it_nu_ai,' * ' on overflow truncate) within group (order by da.it_nu_acao_fiscal) autos
+                 from sitafe.sitafe_diligencia_autos da
+             group by da.it_nu_acao_fiscal) da
+               on da.it_nu_acao_fiscal = df.it_nu_diligencia
+    left join (select dta.tuk,
+                       listagg(dta.it_tx_atividade) within group (order by dta.m_occurs) tx_origem_acao
+                from sitafe.sitafe_diligencia_tx_atividade dta
+                group by dta.tuk) dta
+                on dta.tuk = dft.tuk
+    where substr(dft.it_nu_DILIGENCIA,1,5)||substr(dft.it_nu_DILIGENCIA,7,8) IN (SELECT DISTINCT substr(AINF.NU_ACAO_FISCAL,1,5)||substr(AINF.NU_ACAO_FISCAL,7,8) FROM BI.ARR_F_LANCAMENTO_DETALHE L INNER JOIN BI.FATO_ACAO_FISCAL_AINF AINF ON AINF.NU_GUIA_LANC_MULTA = L.NUMERO_GUIA WHERE L.CNPJ_CPF = :CO_CNPJ_CPF)
+						order by 3 desc
+						 ]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Auditores]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+                                            t.co_matricula,
+                                            t.co_cpf_auditor,
+                                            p.no_razao_social
+                                        FROM
+                                            bi.dm_acao_fiscal_auditores    t
+                                            LEFT JOIN bi.dm_pessoa                   p ON t.co_cpf_auditor = p.co_cnpj_cpf
+                                        WHERE
+                                            t.nu_acao_fiscal = :ACAO_FISCAL]]></sql>
+				<binds>
+					<bind id="ACAO_FISCAL">
+						<prompt><![CDATA[ACAO_FISCAL]]></prompt>
+						<tooltip><![CDATA[ACAO_FISCAL]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Autos de Infração]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select
+							t.da_lavratura_auto     da_lavratura,
+							t.nu_termo_infracao,
+							t.no_local_lavratura,
+							t.va_tributo,
+							t.va_multa,
+							t.va_juros,
+							t.da_periodo_inicio_auto,
+							t.da_periodo_final_auto,
+							tate.no_situacao situacao_tate,
+							t.nu_guia_lanc_trib,
+							t.in_in_sit_lanc_trib   sit_guia_t,
+							solid_trib.solidarios_trib  solid_trib,
+							t.nu_guia_lanc_multa    ,
+							t.in_in_sit_lanc_multa sit_guia_m,
+							solid_multa.solidarios_multa solid_multa
+						from bi.fato_acao_fiscal_ainf t
+						left join bi.dm_acao_fiscal u 
+							on t.nu_acao_fiscal = u.nu_acao_fiscal
+						left join bi.dm_acao_fiscal_historico_tate tate
+							on t.nu_termo_infracao = tate.nu_termo_infracao
+						left join (select d.it_nu_guia, listagg(ptrib.co_cnpj_cpf||' - '||ptrib.no_razao_social,', ') within group (order by d.it_nu_guia) solidarios_trib 
+									from sitafe.sitafe_devedor_solidario d
+									left join bi.dm_pessoa ptrib
+										on d.it_nu_cpf_cnpj_devedor = ptrib.co_cnpj_cpf
+									group by d.it_nu_guia) solid_trib
+							on solid_trib.it_nu_guia = t.nu_guia_lanc_trib
+						left join (select d.it_nu_guia, listagg(pmulta.co_cnpj_cpf||' - '||pmulta.no_razao_social,', ') within group (order by d.it_nu_guia) solidarios_multa
+									from sitafe.sitafe_devedor_solidario d
+									left join bi.dm_pessoa pmulta
+										on d.it_nu_cpf_cnpj_devedor = pmulta.co_cnpj_cpf
+									group by d.it_nu_guia) solid_multa
+							on solid_multa.it_nu_guia = t.nu_guia_lanc_multa
+						left join bi.arr_f_lancamento_detalhe l
+							   on l.numero_guia = t.nu_guia_lanc_multa
+						where t.nu_acao_fiscal = :ACAO_FISCAL
+							and tate.in_ultima = 9
+							and (l.cnpj_cpf is null or l.cnpj_cpf = :CO_CNPJ_CPF)
+						order by t.da_lavratura_auto desc]]></sql>
+				<binds>
+					<bind id="ACAO_FISCAL">
+						<prompt><![CDATA[ACAO_FISCAL]]></prompt>
+						<tooltip><![CDATA[ACAO_FISCAL]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+			<display id="" type="" style="Script" enable="true">
+				<name><![CDATA[Descrição do AI]]></name>
+				<description><![CDATA[]]></description>
+				<tooltip><![CDATA[]]></tooltip>
+				<drillclass><![CDATA[]]></drillclass>
+				<CustomValues>
+				</CustomValues>
+				<query>
+					<sql><![CDATA[set pagesize 25;
+                                                                SET LINESIZE 110;
+                                                                set pagesize 25;
+                                                                SET LINESIZE 110;
+                                                                set newpage 0; 
+                                                                set echo off; 
+                                                                set feedback off; 
+                                                                set heading off;
+                                                                SELECT
+                                                                    'Número do Auto de Infração: '
+                                                                    || t.nu_termo_infracao
+                                                                    || '                 Data da lavratura: '
+                                                                    || t.da_lavratura_auto
+                                                                    || CHR(10)
+                                                                    || 'Sujeito passivo: '
+                                                                    || pessoa.no_razao_social
+                                                                    || CHR(10)
+                                                                    || 'CNPJ: '|| pessoa.co_cnpj_cpf || '            IE: ' || pessoa.co_cad_icms
+                                                                    || CHR(10)
+                                                                    || CHR(10)
+                                                                    || 'Histórico da infração:'
+                                                                    || CHR(10)
+                                                                    ||CONVERT(t.tx_infracao, 'AL32UTF8', 'WE8MSWIN1252')
+                                                                    || CHR(10)
+                                                                    || CHR(10)
+                                                                    || 'Penalidade:'
+                                                                    || CHR(10)
+                                                                    || t.no_penalidade_auto
+                                                                    || CHR(10)
+                                                                    || CHR(10)
+                                                                    || 'Trâmite do processo no TATE: '
+                                                                    || CHR(10)
+                                                                    || TO_CHAR(
+                                                                        LISTAGG(u.da_situacao
+                                                                                || ' - '
+                                                                                || u.no_situacao, CHR(10)) WITHIN GROUP(
+                                                                            ORDER BY
+                                                                                u.da_situacao
+                                                                        )
+                                                                    ) tramite
+                                                                FROM
+                                                                    bi.fato_acao_fiscal_ainf           t
+                                                                    LEFT JOIN bi.dm_acao_fiscal_historico_tate   u ON t.nu_termo_infracao = u.nu_termo_infracao
+                                                                    LEFT JOIN bi.dm_acao_fiscal                  acao ON t.nu_acao_fiscal = acao.nu_acao_fiscal
+                                                                    LEFT JOIN bi.dm_pessoa                       pessoa ON acao.co_cnpj_cpf = pessoa.co_cnpj_cpf
+                                                                WHERE
+                                                                    t.nu_termo_infracao = :NU_TERMO_INFRACAO
+                                                                GROUP BY
+                                                                    t.nu_termo_infracao,
+                                                                    t.da_lavratura_auto,
+                                                                    t.no_penalidade_auto,
+                                                                    t.tx_infracao,
+                                                                    pessoa.no_razao_social,  pessoa.co_cnpj_cpf, pessoa.co_cad_icms]]></sql>
+					<binds>
+						<bind id="NU_TERMO_INFRACAO">
+							<prompt><![CDATA[NU_TERMO_INFRACAO]]></prompt>
+							<tooltip><![CDATA[NU_TERMO_INFRACAO]]></tooltip>
+							<value><![CDATA[NULL_VALUE]]></value>
+							<bracket><![CDATA[null]]></bracket>
+						</bind>
+					</binds>
+				</query>
+			</display>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Autos de Infração]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[
+			
+							WITH ACAO_FISCAL AS (
+							SELECT SUBSTR(DFT.IT_NU_DILIGENCIA,1,5)||'7'||SUBSTR(DFT.IT_NU_DILIGENCIA,7)  NU_ACAO_FISCAL FROM SITAFE.SITAFE_DILIGENCIA_FISCAL_TAREF DFT WHERE DFT.IT_NU_IDENTIFICACAO = :CO_CNPJ_CPF
+							UNION
+							SELECT T.NU_ACAO_FISCAL FROM BI.DM_ACAO_FISCAL T WHERE T.CO_CNPJ_CPF = :CO_CNPJ_CPF
+                            UNION
+                            SELECT AINF.NU_ACAO_FISCAL FROM BI.ARR_F_LANCAMENTO_DETALHE L INNER JOIN BI.FATO_ACAO_FISCAL_AINF AINF ON AINF.NU_GUIA_LANC_MULTA = L.NUMERO_GUIA WHERE L.CNPJ_CPF = :CO_CNPJ_CPF
+                            )
+							SELECT
+									CNPJ_CPF,
+                                    DA_LAVRATURA,
+									NU_TERMO_INFRACAO,
+									CASE WHEN LOCAL IS NULL THEN '<html><b>VALOR TOTAL DOS AUTOS DE INFRAÇÕES LAVRADOS:' ELSE LOCAL END LOCAL,
+									LPAD(TRIM(TO_CHAR(VA_TRIBUTO, '999G999G999G990D00')),18) VA_TRIBUTO,      
+									LPAD(TRIM(TO_CHAR(VA_MULTA, '999G999G999G990D00')),18) VA_MULTA,   
+									LPAD(TRIM(TO_CHAR(VA_JUROS, '999G999G999G990D00')),18) VA_JUROS,   
+									LPAD(TRIM(TO_CHAR(TOTAL, '999G999G999G990D00')),18) TOTAL,
+									PERIODO_FISCALIZADO,
+									SITUACAO_TATE,
+									GUIA_T,
+									SIT_GUIA_T,
+									SOLID_TRIB,
+									GUIA_M,
+									SIT_GUIA_M,
+									SOLID_MULTA
+							FROM (
+							SELECT
+									L.CNPJ_CPF,
+                                    T.DA_LAVRATURA_AUTO                                                     DA_LAVRATURA,
+									T.NU_TERMO_INFRACAO                                                     NU_TERMO_INFRACAO,
+									UPPER(CONVERT(T.NO_LOCAL_LAVRATURA,'AL32UTF8','WE8MSWIN1252'))          LOCAL,
+									SUM(T.VA_TRIBUTO)                                                       VA_TRIBUTO,
+									SUM(T.VA_MULTA)                                                         VA_MULTA,
+									SUM(T.VA_JUROS)                                                         VA_JUROS,
+									SUM(T.VA_TRIBUTO + T.VA_MULTA + T.VA_JUROS)                             TOTAL,
+									'  '||
+										T.DA_PERIODO_INICIO_AUTO|| '    -    '||
+										T.DA_PERIODO_FINAL_AUTO|| '  '                                      PERIODO_FISCALIZADO,
+									TATE.NO_SITUACAO                                                        SITUACAO_TATE,
+									T.NU_GUIA_LANC_TRIB                                                     GUIA_T,
+									T.IN_IN_SIT_LANC_TRIB                                                   SIT_GUIA_T,
+									SOLID_TRIB.SOLIDARIOS_TRIB                                              SOLID_TRIB,
+									T.NU_GUIA_LANC_MULTA                                                    GUIA_M,
+									T.IN_IN_SIT_LANC_MULTA                                                  SIT_GUIA_M,
+									SOLID_MULTA.SOLIDARIOS_MULTA                                            SOLID_MULTA
+							FROM ACAO_FISCAL A
+								LEFT JOIN BI.FATO_ACAO_FISCAL_AINF T ON A.NU_ACAO_FISCAL = T.NU_ACAO_FISCAL
+								LEFT JOIN BI.DM_ACAO_FISCAL U ON T.NU_ACAO_FISCAL = U.NU_ACAO_FISCAL
+								LEFT JOIN BI.DM_ACAO_FISCAL_HISTORICO_TATE TATE ON T.NU_TERMO_INFRACAO = TATE.NU_TERMO_INFRACAO
+							LEFT JOIN (SELECT D.IT_NU_GUIA,
+											  LISTAGG(PTRIB.CO_CNPJ_CPF||' - '||PTRIB.NO_RAZAO_SOCIAL,', ') WITHIN GROUP (ORDER BY D.IT_NU_GUIA) SOLIDARIOS_TRIB
+										 FROM SITAFE.SITAFE_DEVEDOR_SOLIDARIO D
+									LEFT JOIN BI.DM_PESSOA PTRIB
+										   ON D.IT_NU_CPF_CNPJ_DEVEDOR = PTRIB.CO_CNPJ_CPF
+									 GROUP BY D.IT_NU_GUIA
+									  ) SOLID_TRIB
+									 ON SOLID_TRIB.IT_NU_GUIA = T.NU_GUIA_LANC_TRIB
+							LEFT JOIN (SELECT D.IT_NU_GUIA,
+											  LISTAGG(PMULTA.CO_CNPJ_CPF||' - '||PMULTA.NO_RAZAO_SOCIAL,', ') WITHIN GROUP (ORDER BY D.IT_NU_GUIA) SOLIDARIOS_MULTA
+										 FROM SITAFE.SITAFE_DEVEDOR_SOLIDARIO D
+									LEFT JOIN BI.DM_PESSOA PMULTA
+										   ON D.IT_NU_CPF_CNPJ_DEVEDOR = PMULTA.CO_CNPJ_CPF
+									 GROUP BY D.IT_NU_GUIA
+									 ) SOLID_MULTA
+									ON SOLID_MULTA.IT_NU_GUIA = T.NU_GUIA_LANC_MULTA
+							LEFT JOIN BI.ARR_F_LANCAMENTO_DETALHE L
+                                   ON T.NU_TERMO_INFRACAO = L.NUMERO_COMPLEMENTO
+                            WHERE TATE.IN_ULTIMA = 9
+                              AND (L.CNPJ_CPF IS NULL OR L.CNPJ_CPF = :CO_CNPJ_CPF)
+							GROUP BY GROUPING SETS((),(L.CNPJ_CPF,
+                                                       T.DA_LAVRATURA_AUTO,
+													   T.NU_TERMO_INFRACAO,
+													   UPPER(CONVERT(T.NO_LOCAL_LAVRATURA,'AL32UTF8','WE8MSWIN1252')),
+														'  '|| T.DA_PERIODO_INICIO_AUTO|| '    -    '|| T.DA_PERIODO_FINAL_AUTO|| '  ',
+														TATE.NO_SITUACAO,
+														T.NU_GUIA_LANC_TRIB,
+														T.IN_IN_SIT_LANC_TRIB,
+														SOLID_TRIB.SOLIDARIOS_TRIB,
+														T.NU_GUIA_LANC_MULTA,
+														T.IN_IN_SIT_LANC_MULTA,
+														SOLID_MULTA.SOLIDARIOS_MULTA)
+													)
+							ORDER BY T.DA_LAVRATURA_AUTO DESC)
+			]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Script" enable="true">
+			<name><![CDATA[Descrição do AI]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[set pagesize 25;
+                                        SET LINESIZE 110;
+                                        SELECT
+                                            'Número do Auto de Infração: '
+                                            || t.nu_termo_infracao
+                                            || '                 Data da lavratura: '
+                                            || t.da_lavratura_auto
+                                            || CHR(10)
+                                            || 'Sujeito passivo: '
+                                            || pessoa.no_razao_social
+                                            || CHR(10)
+                                            || 'CNPJ: '|| pessoa.co_cnpj_cpf || '            IE: ' || pessoa.co_cad_icms
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Histórico da infração:'
+                                            || CHR(10)
+                                            ||CONVERT(t.tx_infracao, 'AL32UTF8', 'WE8MSWIN1252')
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Penalidade:'
+                                            || CHR(10)
+                                            || t.no_penalidade_auto
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Trâmite do processo no TATE: '
+                                            || CHR(10)
+                                            || TO_CHAR(
+                                                LISTAGG(u.da_situacao
+                                                        || ' - '
+                                                        || u.no_situacao, CHR(10)) WITHIN GROUP(
+                                                    ORDER BY
+                                                        u.da_situacao
+                                                )
+                                            ) tramite
+                                        FROM
+                                            bi.fato_acao_fiscal_ainf           t
+                                            LEFT JOIN bi.dm_acao_fiscal_historico_tate   u ON t.nu_termo_infracao = u.nu_termo_infracao
+                                            LEFT JOIN bi.dm_acao_fiscal                  acao ON t.nu_acao_fiscal = acao.nu_acao_fiscal
+                                            LEFT JOIN bi.dm_pessoa                       pessoa ON acao.co_cnpj_cpf = pessoa.co_cnpj_cpf
+                                        WHERE
+                                            t.nu_termo_infracao = :NU_TERMO_INFRACAO
+                                        GROUP BY
+                                            t.nu_termo_infracao,
+                                            t.da_lavratura_auto,
+                                            t.no_penalidade_auto,
+                                            t.tx_infracao,
+                                            pessoa.no_razao_social,  pessoa.co_cnpj_cpf, pessoa.co_cad_icms]]></sql>
+				<binds>
+					<bind id="NU_TERMO_INFRACAO">
+						<prompt><![CDATA[NU_TERMO_INFRACAO]]></prompt>
+						<tooltip><![CDATA[NU_TERMO_INFRACAO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[FisConforme]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+
+					  case when malha is null and status is null then
+					  '<html><b>TOTAL DE NOTIFICAÇÕES RECEBIDAS: '||quant 
+					  when malha is null and status is not null then
+					   '<html><b>-------Quantidade '||status||': '||quant 
+					  when malha is not null and periodo is null and status is null then
+					  '<html>------------'||malha||' - <b>'||quant
+					  else
+					  '<html>'||malha||' - '||Status end info,
+					  periodo,
+					  co_cpf_cnpj_ciencia,
+					  no_pessoa_ciencia,
+					  dt_ciencia,
+					  nu_ip_ciencia
+				  FROM
+					  (
+							SELECT
+								  t.malhas_id
+								  || ' - '
+								  || m.titulo     malha,
+								  t.periodo,
+										CASE
+							WHEN t.status = 0  THEN
+								  '<html><strong><font color="red">0 - Pendente'
+							WHEN t.status = 1  THEN
+								  '<html><strong><font color="orange">1 - Contestado'
+							WHEN t.status = 2  THEN
+								  '<html><strong><font color="blue">2 - Resolvido'
+							WHEN t.status = 4  THEN
+								  '<html><strong><font color="red">4 - Indeferido'
+							WHEN t.status = 5  THEN
+								  '<html><strong><font color="blue">5 - Deferido'
+							WHEN t.status = 7  THEN
+								  '<html><strong><font color="blue">7 - Deferido Automaticamente'
+							ELSE
+								  to_char(t.status)
+					  END status,
+								  n.co_cpf_cnpj_ciencia,
+								  n.no_pessoa_ciencia,
+								  n.dt_ciencia,
+								  n.nu_ip_ciencia,
+								  COUNT(distinct t.id)        quant
+							  FROM
+								  app_pendencia.pendencias    t
+									LEFT JOIN app_pendencia.malhas        m ON t.malhas_id = m.id
+									LEFT JOIN bi.fato_det_notificacao     n ON t.id = n.id_fisconforme
+							 WHERE
+								  cpf_cnpj = :CO_CNPJ_CPF
+							 GROUP BY
+								  GROUPING SETS((),(                  t.malhas_id
+								  || ' - '
+								  || m.titulo),
+								  (CASE
+							WHEN t.status = 0  THEN
+								  '<html><strong><font color="red">0 - Pendente'
+							WHEN t.status = 1  THEN
+								  '<html><strong><font color="orange">1 - Contestado'
+							WHEN t.status = 2  THEN
+								  '<html><strong><font color="blue">2 - Resolvido'
+							WHEN t.status = 4  THEN
+								  '<html><strong><font color="red">4 - Indeferido'
+							WHEN t.status = 5  THEN
+								  '<html><strong><font color="blue">5 - Deferido'
+							WHEN t.status = 7  THEN
+								  '<html><strong><font color="blue">7 - Deferido Automaticamente'
+							ELSE
+								  to_char(t.status)
+					  END),(t.malhas_id
+											  || ' - '
+											  || m.titulo,
+											  t.periodo,
+													CASE
+							WHEN t.status = 0  THEN
+								  '<html><strong><font color="red">0 - Pendente'
+							WHEN t.status = 1  THEN
+								  '<html><strong><font color="orange">1 - Contestado'
+							WHEN t.status = 2  THEN
+								  '<html><strong><font color="blue">2 - Resolvido'
+							WHEN t.status = 4  THEN
+								  '<html><strong><font color="red">4 - Indeferido'
+							WHEN t.status = 5  THEN
+								  '<html><strong><font color="blue">5 - Deferido'
+							WHEN t.status = 7  THEN
+								  '<html><strong><font color="blue">7 - Deferido Automaticamente'
+							ELSE
+								  to_char(t.status)
+					  END,
+											  n.co_cpf_cnpj_ciencia,
+											  n.no_pessoa_ciencia,
+											  n.dt_ciencia,
+											  n.nu_ip_ciencia))
+					  )
+				order by case when malha is null and status is null then 1
+					  when malha is null and status is not null then 2
+					  when malha is not null and periodo is null and status is null then 3
+					  else 4 end, periodo desc, quant desc
+				]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[DET]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+            t.dt_envio,
+      t.id_notificacao,
+      upper(t.tx_descricao) descricao,
+
+      case when t.tp_status = '4 - CIENCIA' then  '<html><font color="blue">'||t.tp_status||' - '||t.dt_ciencia||' - <b><font color="black">'||t.co_cpf_cnpj_ciencia||' - '||t.no_pessoa_ciencia
+      when t.tp_status = '3 - TACITA' then  '<html><font color="red">'||t.tp_status
+      else t.tp_status end ciencia,
+      t.nu_ip_ciencia ip_ciencia,
+      n.cpf||'   '||p.no_razao_social notificador
+  FROM
+      bi.fato_det_notificacao    t
+        LEFT JOIN det.notificadores          n ON t.id_notificador = n.id
+        LEFT JOIN bi.dm_pessoa               p ON n.cpf = p.co_cnpj_cpf
+ WHERE
+      t.id_fisconforme IS NULL
+         AND co_cnpj_notif = :CO_CNPJ_CPF
+         and t.tp_status not in('1 - PROCESSADA', '5 - CANCELADA')
+order by t.dt_envio desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Arquivo da Notificação]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select case when CHAVE != 'NOTIFICACAO' then 'Anexo'||' - '||tipo else chave||' - '||tipo end tipo, 'https://det.sefin.ro.gov.br/arquivo/download_anexos?uuid='||t.uuid||chr(38)||'id_anexo='||t.id_anexo link_do_anexo 
+								from bi.vm_dm_det_arquivos t
+							WHERE ID_NOTIFICACAO = :ID_NOTIFICACAO]]></sql>
+				<binds>
+					<bind id="ID_NOTIFICACAO">
+						<prompt><![CDATA[ID_NOTIFICACAO]]></prompt>
+						<tooltip><![CDATA[ID_NOTIFICACAO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Processos Administrativos]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+                                    t.nu_processo,
+                                    t.dt_abertura,
+                                    t.in_status,
+                                    t.co_servico,
+                                    serv.it_no_servico,
+                                    t.cpf_solicitante,
+                                    pessoa.no_razao_social nome_solicitante
+                                FROM
+                                    bi.dm_processo_administrativo   t
+                                    LEFT JOIN sitafe.sitafe_servico           serv ON t.co_servico = serv.it_co_servico
+                                    left join bi.dm_pessoa pessoa on t.cpf_solicitante = pessoa.co_cnpj_cpf
+                                    
+                                    where t.co_cpf_cnpj_contribuinte = :CO_CNPJ_CPF
+                                order by dt_abertura desc]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Veículos]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select
+								  '<html><b>'||modelo veiculo,
+								  ano_fabricacao ano,
+								  ano_modelo modelo,
+								  placa,
+								  renavam,
+								  chassi,
+								  case when codigo = 2 then '<html><b style="background-color:#4ACC70">É proprietário'  else '<html><b style="background-color:orange">Já foi proprietário'  end info
+							from
+							(
+							select
+								  2                         codigo,
+								  tb.it_no_marca_modelo     modelo,
+								  t.it_da_ano_fabricacao    ano_fabricacao,
+								  t.it_da_ano_modelo        ano_modelo,
+								  t.it_nu_placa             placa,
+								  t.it_co_renavam           renavam,
+								  t.it_nu_chassi            chassi
+							  from
+								  sitafe.sitafe_veiculo        t
+								  left join sitafe.sitafe_tab_veiculo    tb on t.it_co_marca_modelo = tb.it_co_marca_modelo
+							 where
+								  it_nu_devedor = :CO_CNPJ_CPF
+								  
+							union all
+
+							select
+								  4                        codigo,
+								  tb.it_no_marca_modelo    modelo,
+								  t.ano_fabricacao,
+								  t.ano_modelo,
+								  t.placa,
+								  t.renavam,
+								  t.chassi
+							  from
+								  detran.log_cadastro       t
+									left join sitafe.sitafe_tab_veiculo    tb on t.marca_modelo = tb.it_co_marca_modelo
+							 where
+								  substr( numero_devedor, 1, 14 )= :CO_CNPJ_CPF
+									and trim(chassi)not in( select trim(it_nu_chassi) from sitafe.sitafe_veiculo where it_nu_devedor = :CO_CNPJ_CPF )
+							group by 4,
+								  tb.it_no_marca_modelo,
+								  t.ano_fabricacao,
+								  t.ano_modelo,
+								  t.placa,
+								  t.renavam,
+								  t.chassi
+							)
+							order by codigo, ano]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[IP(s) das NFs]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[WITH IP_ALVO AS (
+                                    SELECT SUBSTR(IP.CHAVE_ACESSO,7,14) CNPJ, 
+                                                    IP.NU_IP            IP,
+                                                    COUNT(IP.CHAVE_ACESSO)       QTD_NOTAS
+                                       FROM BI.DM_IP_TRANSMISSOR_ IP 
+                                    WHERE SUBSTR(IP.CHAVE_ACESSO,7,14) = :CO_CNPJ_CPF
+                                      AND IP.CO_MOD = '55'
+                                    GROUP BY SUBSTR(IP.CHAVE_ACESSO,7,14), 
+                                                     IP.NU_IP)
+                                    , OUTROS_CNPJS AS (
+                                    SELECT IP_OUTROS.NU_IP ,
+                                           COUNT(DISTINCT(SUBSTR(IP_OUTROS.CHAVE_ACESSO,7,14))) QTD_OUTROS_CNPJS
+                                    FROM IP_ALVO
+                                    LEFT JOIN BI.DM_IP_TRANSMISSOR_ IP_OUTROS
+                                           ON IP_OUTROS.NU_IP = IP_ALVO.IP
+                                                AND SUBSTR(IP_OUTROS.CHAVE_ACESSO,7,14) != IP_ALVO.CNPJ
+                                                AND IP_OUTROS.CO_MOD = '55'
+                                    GROUP BY IP_OUTROS.NU_IP)
+                                    SELECT CNPJ, IP, QTD_NOTAS, QTD_OUTROS_CNPJS CONTRIBUINTES
+                                      FROM IP_ALVO, OUTROS_CNPJS
+                                    WHERE IP_ALVO.IP = OUTROS_CNPJS.NU_IP
+									ORDER BY 3 DESC]]></sql>
+			<binds>
+				<bind id="CO_CNPJ_CPF">
+					<prompt><![CDATA[CO_CNPJ_CPF]]></prompt>
+					<tooltip><![CDATA[CO_CNPJ_CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Contribuintes]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT ip.nu_ip,
+                                           substr(ip.chave_acesso, 7,14)            cnpj,
+                                           pemit.no_razao_social    razao,
+                                           locemit.no_municipio mun,
+                                           count(DISTINCT ip.CHAVE_ACESSO) quant_nfs,
+                                           case 
+                                                     when pcont.CO_CNPJ_CPF is not null 
+                                                         then pcont.CO_CNPJ_CPF
+                                                     else hc.cnpj_cont end as cnpj_cont,
+                                                 case 
+                                             when pcont.NO_RAZAO_SOCIAL is not null 
+                                               then pcont.NO_RAZAO_SOCIAL
+                                             else hc.razao_cont end as razao_cont
+                                           
+                                      FROM bi.dm_ip_transmissor_    ip
+                                      LEFT JOIN bi.dm_pessoa            pemit ON pemit.co_cnpj_cpf = substr(ip.chave_acesso, 7,14)
+                                      LEFT JOIN bi.dm_localidade        locemit ON pemit.co_municipio = locemit.co_municipio
+                                      LEFT JOIN bi.dm_pessoa            pcont ON pcont.co_cnpj_cpf = pemit.co_cnpj_cpf_contador
+                                      left join (select hc.IT_NU_INSCRICAO_ESTADUAL,
+                                                      pcont.CO_CNPJ_CPF  cnpj_cont,
+                                                      pcont.NO_RAZAO_SOCIAL razao_cont,
+                                                      ROW_NUMber() over (partition by hc.IT_NU_INSCRICAO_ESTADUAL order by hc.IT_DA_TRANSACAO||hc.IT_HO_TRANSACAO desc) as linha
+                                                from sitafe.SITAFE_HISTORICO_CONTRIBUINTE hc
+                                              left join bi.DM_PESSOA pcont
+                                                     on pcont.CO_CNPJ_CPF = substr(hc.GR_IDENT_CONTADOR,2)
+                                                where hc.GR_IDENT_CONTADOR > ' ' ) hc
+                                           on hc.IT_NU_INSCRICAO_ESTADUAL = pemit.CO_CAD_ICMS
+                                          and hc.linha = 1
+                                     WHERE ip.nu_ip = :IP
+                                       AND ip.co_mod = '55'
+                                     GROUP BY ip.nu_ip,
+                                              substr(ip.chave_acesso, 7,14),
+                                                        pemit.no_razao_social,
+                                               case 
+                                             when pcont.CO_CNPJ_CPF is not null 
+                                               then pcont.CO_CNPJ_CPF
+                                             else hc.cnpj_cont end,
+                                           case 
+                                             when pcont.NO_RAZAO_SOCIAL is not null 
+                                               then pcont.NO_RAZAO_SOCIAL
+                                             else hc.razao_cont end,
+                                            locemit.no_municipio
+                                    order by 5 DESC]]></sql>
+				<binds>
+					<bind id="IP">
+						<prompt><![CDATA[IP]]></prompt>
+						<tooltip><![CDATA[IP]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Contribuintes Detalhe]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT ip.nu_ip,
+                                               CASE
+                                                   WHEN pemit.co_cnpj_cpf = :CNPJ THEN
+                                                       'ALVO'
+                                                   ELSE
+                                                       'OUTROS'
+                                               END                      AS alvo,
+                                               d.co_emitente            cnpj_emit,
+                                               pemit.no_razao_social    razao_emit,
+                                               pcont.co_cnpj_cpf        emit_cont_cnpj,
+                                               pcont.no_razao_social    emit_cont_razao,
+                                               locemit.no_municipio mun_emit,
+                                               d.co_destinatario        cnpj_dest,
+                                               pdest.no_razao_social    razao_dest,
+                                               locdest.no_municipio mun_dest,
+                                               SUM(d.prod_vprod)        vprod,
+                                               SUM(d.icms_vicms)        vicms
+                                          FROM bi.dm_ip_transmissor_    ip
+                                          LEFT JOIN bi.fato_nfe_detalhe     d ON d.chave_acesso = ip.chave_acesso
+                                           AND d.infprot_cstat IN ( '100', '150' )
+                                          LEFT JOIN bi.dm_pessoa            pemit ON pemit.co_cnpj_cpf = d.co_emitente
+                                          LEFT JOIN bi.dm_localidade        locemit ON pemit.co_municipio = locemit.co_municipio
+                                          LEFT JOIN bi.dm_pessoa            pcont ON pcont.co_cnpj_cpf = pemit.co_cnpj_cpf_contador
+                                          LEFT JOIN bi.dm_pessoa            pdest ON pdest.co_cnpj_cpf = d.co_destinatario
+                                          LEFT JOIN bi.dm_localidade        locdest ON pdest.co_municipio = locdest.co_municipio
+                                         WHERE ip.nu_ip = :IP
+                                           AND ip.co_mod = '55'
+                                           AND d.co_emitente IS NOT NULL
+                                         GROUP BY
+                                            CASE
+                                                WHEN pemit.co_cnpj_cpf = :CNPJ THEN
+                                                    'ALVO'
+                                                ELSE
+                                                    'OUTROS'
+                                            END,
+                                            ip.nu_ip,
+                                            d.co_emitente,
+                                            pemit.no_razao_social,
+                                            pcont.co_cnpj_cpf,
+                                            pcont.no_razao_social,
+                                            locemit.no_municipio,
+                                            d.co_destinatario,
+                                            locdest.no_municipio,
+                                            pdest.no_razao_social
+                                         ORDER BY SUM(d.prod_vprod) DESC]]></sql>
+				<binds>
+					<bind id="CNPJ">
+						<prompt><![CDATA[CNPJ]]></prompt>
+						<tooltip><![CDATA[CNPJ]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="IP">
+						<prompt><![CDATA[IP]]></prompt>
+						<tooltip><![CDATA[IP]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+</display>
+</displays>
