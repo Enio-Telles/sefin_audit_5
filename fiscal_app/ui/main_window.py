@@ -947,7 +947,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            res = self.servico_agregacao.agregar_linhas(
+            result = self.servico_agregacao.agregar_linhas(
                 cnpj=self.state.current_cnpj,
                 linhas_selecionadas=combined,
             )
@@ -957,7 +957,7 @@ class MainWindow(QMainWindow):
             
             self.show_info(
                 "Agregação concluída",
-                f"As {len(combined)} descrições foram unificadas em:\n'{res.linha_agregada['descricao']}'"
+                f"As {len(combined)} descrições foram unificadas em:\n'{result.linha_agregada['descricao']}'"
             )
         except Exception as e:
             import traceback
@@ -968,8 +968,6 @@ class MainWindow(QMainWindow):
             self.aggregation_table_model.clear_checked()
             self.results_table_model.clear_checked()
             self.open_editable_aggregation_table()
-        except Exception as exc:
-            self.show_error("Falha na agregação", str(exc))
 
     def apply_quick_filters(self) -> None:
         idx = self.tabs.currentIndex()

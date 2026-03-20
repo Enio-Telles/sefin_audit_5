@@ -13,9 +13,14 @@
 | `gtin`        | `prod_ceantrib` OU `prod_cean` | `cod_barra`            | `cod_barra`          |
 | `unidade`     | `prod_ucom`                      | `unid`                 | `unidade_medida`     |
 
+
 > **NFe/NFCe**: somente linhas onde `co_emitente = cnpj`
 > **C170**: arquivo `c170_simplificada_<cnpj>.parquet`
-> **bloco_h**: arquivo `bloco_h_<cnpj>.parquet` (colunas vêm do JOIN com reg_0200 no bloco_h SQL)
+> **bloco_h**: arquivo `bloco_h_<cnpj>.parquet` 
+>
+> compras = preço de compra
+>
+> venda = preço de venda
 
 ### Lógica de `chave_item_individualizado`
 
@@ -60,7 +65,6 @@ python c:\funcoes\funcoes_tabelas\tabela_produtos\tabela_itens_caracteristicas.p
 Verificar que o arquivo `analises\tabela_itens_caracteristicas_37671507000187.parquet` é criado corretamente com as colunas esperadas e sem linhas duplicadas.
 
 SSS
-
 
 ***No projeto localizado em:***
 
