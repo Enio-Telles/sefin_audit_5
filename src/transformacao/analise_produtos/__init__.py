@@ -1,0 +1,4 @@
+from .itens import processar_tabela_itens
+from .produtos import processar_tabela_produtos
+from .documentos import processar_tabela_documentos
+from .enriquecimento import enriquecer_itens_com_referencias
