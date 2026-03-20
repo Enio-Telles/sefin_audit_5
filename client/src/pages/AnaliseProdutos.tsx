@@ -1,247 +1,63 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { Boxes, ChevronLeft, FileSpreadsheet } from "lucide-react";
-import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RevisaoFinalProdutosView } from "@/pages/RevisaoFinalProdutos";
-import {
-  clearVectorizacaoCache,
-  diagnosticarFatoresConversao,
-  downloadRevisaoManualExcel,
-  getParesGruposSimilares,
-  getProdutosRevisaoFinal,
-  getRuntimeProdutosStatus,
-  getStatusAnaliseProdutos,
-  getVectorizacaoStatus,
-  rebuildRuntimeProdutos,
-  type ProdutoAnaliseStatusResumo,
-} from "@/lib/pythonApi";
 import { ResumoTab } from "@/components/tratamento-produtos/ResumoTab";
 import { SugestoesTab } from "@/components/tratamento-produtos/SugestoesTab";
 import { FatoresTab } from "@/components/tratamento-produtos/FatoresTab";
 import { AvancadoTab } from "@/components/tratamento-produtos/AvancadoTab";
 import type { WorkspaceTab } from "@/components/tratamento-produtos/types";
 import { formatCount, normalizeText } from "@/components/tratamento-produtos/formatters";
+import { useProdutoWorkspace } from "@/hooks/useProdutoWorkspace";
 
 export default function AnaliseProdutos() {
   const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const cnpj = normalizeText(searchParams.get("cnpj")).replace(/\D/g, "");
-  const initialTab = ((): WorkspaceTab => {
-    const tab = normalizeText(searchParams.get("tab")).toLowerCase();
-    if (tab === "resumo" || tab === "sugestoes" || tab === "fatores" || tab === "avancado") return tab as WorkspaceTab;
-    return "revisao";
-  })();
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
-  const [downloadingRevisao, setDownloadingRevisao] = useState(false);
-  const [runtimeLoading, setRuntimeLoading] = useState(false);
-  const [suggestionMode, setSuggestionMode] = useState<"off" | "light" | "faiss">("off");
-  const [suggestionTopK, setSuggestionTopK] = useState("8");
-  const [suggestionMinScore, setSuggestionMinScore] = useState("0.72");
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
-
-  const emptyStatusResumo = useMemo<ProdutoAnaliseStatusResumo>(
-    () => ({
-      pendentes: 0,
-      verificados: 0,
-      consolidados: 0,
-      separados: 0,
-      decididos_entre_grupos: 0,
-    }),
-    []
-  );
-
-  const metaQuery = useQuery({
-    queryKey: ["analise-produtos-meta", cnpj],
-    queryFn: () => getProdutosRevisaoFinal(cnpj),
-    enabled: Boolean(cnpj),
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const statusQuery = useQuery({
-    queryKey: ["analise-produtos-status", cnpj],
-    queryFn: () =>
-      getStatusAnaliseProdutos(cnpj, { includeData: false }).catch(() => ({
-        success: true,
-        file_path: "",
-        data: [],
-        resumo: emptyStatusResumo,
-      })),
-    enabled: Boolean(cnpj),
-    staleTime: 30_000,
-    retry: 1,
-  });
-
-  const runtimeQuery = useQuery({
-    queryKey: ["analise-produtos-runtime", cnpj],
-    queryFn: () => getRuntimeProdutosStatus(cnpj),
-    enabled: Boolean(cnpj),
-    staleTime: 30_000,
-    retry: 1,
-  });
-
-  const vectorStatusQuery = useQuery({
-    queryKey: ["analise-produtos-vector", cnpj],
-    queryFn: () => getVectorizacaoStatus(cnpj),
-    enabled: Boolean(cnpj),
-    staleTime: 30_000,
-    retry: 1,
-  });
-
-  const fatoresQuery = useQuery({
-    queryKey: ["analise-produtos-fatores", cnpj],
-    queryFn: () => diagnosticarFatoresConversao(cnpj),
-    enabled: Boolean(cnpj),
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const statusResumo = statusQuery.data?.resumo || emptyStatusResumo;
-  const runtimeStatus = runtimeQuery.data?.runtime || null;
-  const runtimeFiles = runtimeStatus?.files || {};
-  const availableRuntimeFiles = Object.values(runtimeFiles).filter((item: any) => item?.exists).length;
-  const totalRuntimeFiles = Object.keys(runtimeFiles).length;
-
-  const factorsError = fatoresQuery.error as (Error & { status?: number }) | null;
-  const fatoresMissing = fatoresQuery.data ? !fatoresQuery.data.available : factorsError?.status === 404;
-  const fatoresIssues = fatoresQuery.data?.issues || [];
-  const fatoresCriticos = fatoresIssues.filter((item) => normalizeText(item.severidade).toLowerCase() === "critico").length;
-  const fatoresAltos = fatoresIssues.filter((item) => normalizeText(item.severidade).toLowerCase() === "alto").length;
-
-  const faissModeStatus = vectorStatusQuery.data?.status?.modes?.faiss;
-  const lightModeStatus = vectorStatusQuery.data?.status?.modes?.light;
-  const faissCache = vectorStatusQuery.data?.caches?.faiss as ({ generated_at_utc?: string; stale?: boolean } | undefined);
-  const lightCache = vectorStatusQuery.data?.caches?.light as ({ generated_at_utc?: string; stale?: boolean } | undefined);
-  const activeCache = suggestionMode === "faiss" ? faissCache : suggestionMode === "light" ? lightCache : null;
-
-  const activeSummaryQuery = useQuery({
-    queryKey: [
-      "analise-produtos-suggestion-summary",
-      cnpj,
-      suggestionMode,
-      activeCache?.generated_at_utc ?? "",
-      suggestionTopK,
-      suggestionMinScore,
-    ],
-    queryFn: () =>
-      getParesGruposSimilares(cnpj, suggestionMode === "faiss" ? "faiss" : "light", false, {
-        topK: Math.max(2, Math.min(20, Number(suggestionTopK) || 8)),
-        minScore: Math.max(0.3, Math.min(0.98, Number(suggestionMinScore) || (suggestionMode === "faiss" ? 0.62 : 0.72))),
-        page: 1,
-        pageSize: 1,
-        showAnalyzed: false,
-      }),
-    enabled: Boolean(cnpj && suggestionMode !== "off" && activeCache?.generated_at_utc),
-    staleTime: 30_000,
-    retry: 1,
-  });
-
-  const openParquetInNewTab = (filePath: string) => {
-    const normalized = normalizeText(filePath).replace(/\\/g, "/");
-    if (!normalized) return;
-    window.open(`/tabelas/view?file_path=${encodeURIComponent(normalized)}`, "_blank");
-  };
-
-  const openWorkspaceTab = (tab: WorkspaceTab, options?: { agrupamento?: "faiss" | null }) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("cnpj", cnpj);
-    params.set("tab", tab);
-    if (options && "agrupamento" in options) {
-      if (options.agrupamento) params.set("agrupamento", options.agrupamento);
-      else params.delete("agrupamento");
-    }
-    navigate(`/analise-produtos?${params.toString()}`);
-    setActiveTab(tab);
-  };
-
-  const openRevisaoFinal = () => {
-    openWorkspaceTab("revisao", {
-      agrupamento: suggestionMode === "faiss" && faissCache?.generated_at_utc && !faissCache?.stale ? "faiss" : null,
-    });
-  };
-
-  const openRevisaoFatores = () => {
-    navigate(`/revisao-fatores?cnpj=${cnpj}`);
-  };
-
-  const handleDownloadRevisao = async () => {
-    if (!cnpj) return;
-    setDownloadingRevisao(true);
-    try {
-      await downloadRevisaoManualExcel(cnpj);
-      toast.success("Planilha de revisao final baixada.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao baixar a planilha.");
-    } finally {
-      setDownloadingRevisao(false);
-    }
-  };
-
-  const handleRebuildProdutos = async () => {
-    if (!cnpj) return;
-    setRuntimeLoading(true);
-    try {
-      const response = await rebuildRuntimeProdutos(cnpj);
-      toast.success("Pipeline de produtos reprocessado.", {
-        description: `${formatCount(response.rows)} grupos atualizados no runtime.`,
-      });
-      await Promise.all([metaQuery.refetch(), statusQuery.refetch(), runtimeQuery.refetch()]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao reprocessar a base.");
-    } finally {
-      setRuntimeLoading(false);
-    }
-  };
-
-  const handleGenerateSuggestions = async () => {
-    if (!cnpj || suggestionMode === "off") return;
-    setSuggestionLoading(true);
-    try {
-      const response = await getParesGruposSimilares(cnpj, suggestionMode === "faiss" ? "faiss" : "light", true, {
-        topK: Math.max(2, Math.min(20, Number(suggestionTopK) || 8)),
-        minScore: Math.max(0.3, Math.min(0.98, Number(suggestionMinScore) || (suggestionMode === "faiss" ? 0.62 : 0.72))),
-        page: 1,
-        pageSize: 25,
-        showAnalyzed: false,
-      });
-      toast.success(`Sugestoes ${suggestionMode === "faiss" ? "FAISS" : "leves"} geradas.`, {
-        description: `${formatCount(Number(response.total_filtered ?? response.total ?? 0))} visiveis de ${formatCount(Number(response.total_file ?? response.total ?? 0))} no arquivo.`,
-      });
-      await Promise.all([vectorStatusQuery.refetch(), activeSummaryQuery.refetch()]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao gerar sugestoes.");
-    } finally {
-      setSuggestionLoading(false);
-    }
-  };
-
-  const handleClearSuggestions = async () => {
-    if (!cnpj || suggestionMode === "off") return;
-    setSuggestionLoading(true);
-    try {
-      await clearVectorizacaoCache(cnpj, suggestionMode === "faiss" ? "faiss" : "light");
-      toast.success("Cache de sugestoes removido.");
-      await Promise.all([vectorStatusQuery.refetch(), activeSummaryQuery.refetch()]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao limpar cache.");
-    } finally {
-      setSuggestionLoading(false);
-    }
-  };
-
-  const suggestionFilePath = normalizeText(activeSummaryQuery.data?.file_path || "");
-  const totalActiveVisible = Number(activeSummaryQuery.data?.total_filtered ?? activeSummaryQuery.data?.total ?? 0);
-  const totalActiveFile = Number(activeSummaryQuery.data?.total_file ?? activeSummaryQuery.data?.total ?? 0);
-  const modeMessage = suggestionMode === "faiss"
-    ? faissModeStatus?.message || "FAISS so roda quando solicitado."
-    : lightModeStatus?.message || "Modo leve pronto para uso sob demanda.";
+  const {
+    activeTab,
+    statusResumo,
+    runtimeStatus,
+    runtimeFiles,
+    availableRuntimeFiles,
+    totalRuntimeFiles,
+    fatoresMissing,
+    fatoresIssues,
+    fatoresCriticos,
+    fatoresAltos,
+    faissModeStatus,
+    lightModeStatus,
+    activeCache,
+    metaQuery,
+    fatoresQuery,
+    activeSummaryQuery,
+    suggestionMode,
+    setSuggestionMode,
+    suggestionTopK,
+    setSuggestionTopK,
+    suggestionMinScore,
+    setSuggestionMinScore,
+    suggestionLoading,
+    suggestionFilePath,
+    totalActiveVisible,
+    totalActiveFile,
+    modeMessage,
+    downloadingRevisao,
+    runtimeLoading,
+    openParquetInNewTab,
+    openWorkspaceTab,
+    openRevisaoFinal,
+    openRevisaoFatores,
+    handleDownloadRevisao,
+    handleRebuildProdutos,
+    handleGenerateSuggestions,
+    handleClearSuggestions,
+  } = useProdutoWorkspace(cnpj, navigate);
 
   if (!cnpj) {
     return (
