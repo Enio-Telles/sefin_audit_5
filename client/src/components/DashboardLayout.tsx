@@ -23,13 +23,16 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   Boxes,
+  ClipboardList,
   Database,
   FileSpreadsheet,
   FileText,
+  FolderTree,
   Layers,
   LayoutDashboard,
   LogOut,
   PanelLeft,
+  PlayCircle,
   Puzzle,
   Settings,
   Shield,
@@ -47,7 +50,10 @@ const LOGO_URL =
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Shield, label: "Auditar CNPJ", path: "/auditar" },
+  { icon: Shield, label: "Auditoria", path: "/auditoria" },
+  { icon: PlayCircle, label: "Execuções", path: "/auditoria/execucoes" },
+  { icon: ClipboardList, label: "Casos Auditados", path: "/auditoria/casos" },
+  { icon: FolderTree, label: "Tratamento Produtos", path: "/tratamento-produtos" },
   { icon: Layers, label: "Processamento em Lote", path: "/lote" },
   { icon: Database, label: "Extracao Oracle", path: "/extracao" },
   { icon: Table2, label: "Visualizar Tabelas", path: "/tabelas" },

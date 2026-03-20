@@ -20,6 +20,10 @@ import RevisaoFatores from "./pages/RevisaoFatores";
 import UnificarProdutoPage from "./pages/UnificarProdutoPage";
 import MultiUnificarProdutoPage from "./pages/MultiUnificarProdutoPage";
 import DesagregarProdutoPage from "./pages/DesagregarProdutoPage";
+import AuditoriaWorkspace from "./pages/AuditoriaWorkspace";
+import AuditoriaExecucoes from "./pages/AuditoriaExecucoes";
+import AuditoriaCasos from "./pages/AuditoriaCasos";
+import TratamentoProdutosHub from "./pages/TratamentoProdutosHub";
 
 function Router() {
   return (
@@ -31,6 +35,10 @@ function Router() {
         <DashboardLayout>
           <Switch>
             <Route path="/" component={Home} />
+            <Route path="/auditoria" component={AuditoriaWorkspace} />
+            <Route path="/auditoria/execucoes" component={AuditoriaExecucoes} />
+            <Route path="/auditoria/casos" component={AuditoriaCasos} />
+            <Route path="/tratamento-produtos" component={TratamentoProdutosHub} />
             <Route path="/auditar" component={AuditarCNPJ} />
             <Route path="/lote" component={LoteAuditoria} />
             <Route path="/extracao" component={Extracao} />
