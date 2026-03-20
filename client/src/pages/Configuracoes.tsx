@@ -60,24 +60,27 @@ export default function Configuracoes() {
         <CardContent className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Host</Label>
+              <Label htmlFor="oracle-host" className="text-xs">Host</Label>
               <Input
+                id="oracle-host"
                 value={oracleConfig.host}
                 onChange={(e) => setOracleConfig((p) => ({ ...p, host: e.target.value }))}
                 className="h-8 text-xs font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Porta</Label>
+              <Label htmlFor="oracle-port" className="text-xs">Porta</Label>
               <Input
+                id="oracle-port"
                 value={oracleConfig.port}
                 onChange={(e) => setOracleConfig((p) => ({ ...p, port: e.target.value }))}
                 className="h-8 text-xs font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Serviço</Label>
+              <Label htmlFor="oracle-service" className="text-xs">Serviço</Label>
               <Input
+                id="oracle-service"
                 value={oracleConfig.service}
                 onChange={(e) => setOracleConfig((p) => ({ ...p, service: e.target.value }))}
                 className="h-8 text-xs font-mono"
@@ -100,8 +103,9 @@ export default function Configuracoes() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Pasta de Consultas SQL</Label>
+            <Label htmlFor="path-sql-dir" className="text-xs">Pasta de Consultas SQL</Label>
             <Input
+              id="path-sql-dir"
               value={paths.sqlDir}
               onChange={(e) => setPaths((p) => ({ ...p, sqlDir: e.target.value }))}
               className="h-8 text-xs font-mono"
@@ -109,8 +113,9 @@ export default function Configuracoes() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Pasta de Saída Padrão</Label>
+            <Label htmlFor="path-default-output" className="text-xs">Pasta de Saída Padrão</Label>
             <Input
+              id="path-default-output"
               value={paths.defaultOutput}
               onChange={(e) => setPaths((p) => ({ ...p, defaultOutput: e.target.value }))}
               className="h-8 text-xs font-mono"
@@ -131,12 +136,13 @@ export default function Configuracoes() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm">Salvar automaticamente</Label>
+              <Label htmlFor="pref-auto-save" className="text-sm">Salvar automaticamente</Label>
               <p className="text-xs text-muted-foreground">
                 Salvar alterações em tabelas automaticamente
               </p>
             </div>
             <Switch
+              id="pref-auto-save"
               checked={preferences.autoSave}
               onCheckedChange={(v) => setPreferences((p) => ({ ...p, autoSave: v }))}
             />
@@ -144,12 +150,13 @@ export default function Configuracoes() {
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm">Normalizar colunas</Label>
+              <Label htmlFor="pref-normalize" className="text-sm">Normalizar colunas</Label>
               <p className="text-xs text-muted-foreground">
                 Converter nomes de colunas para minúsculas ao extrair
               </p>
             </div>
             <Switch
+              id="pref-normalize"
               checked={preferences.normalizeColumns}
               onCheckedChange={(v) => setPreferences((p) => ({ ...p, normalizeColumns: v }))}
             />
@@ -157,12 +164,13 @@ export default function Configuracoes() {
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm">Incluir tabelas auxiliares</Label>
+              <Label htmlFor="pref-include-aux" className="text-sm">Incluir tabelas auxiliares</Label>
               <p className="text-xs text-muted-foreground">
                 Extrair tabelas auxiliares por padrão
               </p>
             </div>
             <Switch
+              id="pref-include-aux"
               checked={preferences.includeAuxiliary}
               onCheckedChange={(v) => setPreferences((p) => ({ ...p, includeAuxiliary: v }))}
             />
