@@ -8,6 +8,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -32,8 +34,21 @@ def fail(message: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
-def command_exists(command: str) -> bool:
-    return shutil.which(command) is not None
+def command_exists(command: str, conda_env: str | None = None) -> bool:
+    if shutil.which(command) is not None:
+        return True
+    if conda_env:
+        try:
+            result = subprocess.run(
+                ["conda", "run", "-n", conda_env, command, "--version"],
+                capture_output=True,
+                text=True,
+                shell=(os.name == "nt"),
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+    return False
 
 
 def resolve_executable(command: str) -> str:
@@ -51,6 +66,20 @@ def wait_for_port(port: int, host: str = "127.0.0.1", timeout_s: float = 20.0) -
     while time.time() - start < timeout_s:
         if is_port_open(port, host):
             return True
+        time.sleep(0.5)
+    return False
+
+
+def wait_for_http(url: str, timeout_s: float = 30.0) -> bool:
+    start = time.time()
+    while time.time() - start < timeout_s:
+        try:
+            with urllib.request.urlopen(url, timeout=2.0) as response:
+                status = getattr(response, "status", 200)
+                if 200 <= status < 500:
+                    return True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            pass
         time.sleep(0.5)
     return False
 
@@ -127,12 +156,13 @@ def ensure_env_file() -> None:
 
 
 def check_prerequisites(conda_env: str) -> None:
-    if not command_exists("node"):
-        fail("Node.js não encontrado no PATH.")
-    if not command_exists("pnpm"):
-        fail("pnpm não encontrado no PATH.")
     if not command_exists("conda"):
         fail("conda não encontrado no PATH.")
+
+    if not command_exists("node", conda_env):
+        fail(f"Node.js não encontrado no PATH nem no ambiente Conda '{conda_env}'.")
+    if not command_exists("pnpm", conda_env):
+        fail(f"pnpm não encontrado no PATH nem no ambiente Conda '{conda_env}'.")
 
     envs_cmd = ["conda", "env", "list"]
     result = subprocess.run(envs_cmd, capture_output=True, text=True, shell=(os.name == "nt"))
@@ -155,12 +185,16 @@ def build_python_command(conda_env: str, python_port: int) -> str:
     )
 
 
-def build_node_command() -> str:
+def build_node_command(conda_env: str) -> str:
+    pnpm_cmd = "pnpm"
+    if not command_exists("pnpm"):
+        pnpm_cmd = f"conda run -n {conda_env} --live-stream pnpm"
+
     return (
         "$Host.UI.RawUI.WindowTitle = 'SEFIN Frontend'; "
         f"Set-Location -LiteralPath '{ROOT_DIR}'; "
         "$env:NODE_ENV='development'; "
-        "pnpm dev"
+        f"{pnpm_cmd} dev"
     )
 
 
@@ -254,9 +288,12 @@ def launch_system(conda_env: str, python_port: int, node_port: int, open_browser
     if not node_running:
         info("Iniciando frontend + Node...")
         if inline:
-            start_inline(["pnpm", "dev"], ROOT_DIR)
+            pnpm_args = ["pnpm", "dev"]
+            if not command_exists("pnpm"):
+                pnpm_args = ["conda", "run", "-n", conda_env, "--live-stream", "pnpm", "dev"]
+            start_inline(pnpm_args, ROOT_DIR)
         else:
-            start_in_new_terminal("SEFIN Frontend", build_node_command())
+            start_in_new_terminal("SEFIN Frontend", build_node_command(conda_env))
 
     if not python_running:
         if wait_for_port(python_port, timeout_s=20):
