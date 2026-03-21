@@ -156,106 +156,139 @@ class ServicoAgregacao:
         if len(linhas) < 2:
             raise ValueError("Selecione pelo menos duas linhas para agregar.")
 
-        # Consolidação de Códigos
-        dados_codigos = self._analisar_codigos([r.get("lista_codigos") for r in linhas])
-        if not dados_codigos:
-            # Fallback para cod_normalizado se lista_codigos estiver vazia
-            dados_codigos = self._analisar_codigos([r.get("lista_cod_normalizado") for r in linhas])
-            
-        freq_codigos: Counter[str] = Counter()
-        entradas_originais: dict[str, int] = {}
-        for codigo, freq, _ in dados_codigos:
-            freq_codigos[codigo] += freq
-            entradas_originais[codigo] = max(entradas_originais.get(codigo, 0), freq)
+        # Acumuladores para evitar múltiplas iterações
+        l_codigos = []
+        l_cod_norm = []
+        l_descricoes = []
+        l_itens_id = []
+        l_chv_produtos_brutos = []
+        l_sefin_bruto = []
+
+        # Acumuladores para características (usados em moda e listas)
+        acc_chars = {
+            "ncm": ([], []), "cest": ([], []), "gtin": ([], []),
+            "tipo": ([], []), "unid": ([], [])
+        }
+
+        tot_ent = 0.0
+        tot_sai = 0.0
+        max_palavras = -1
+        desc_padrao = ""
+
+        primeira_linha = linhas[0]
+        possui_compl = "lista_descr_compl" in primeira_linha
+        l_compl_bruto = [] if possui_compl else None
+
+        # Hoist list references for performance
+        acc_ncm_l, acc_ncm_p = acc_chars["ncm"]
+        acc_cest_l, acc_cest_p = acc_chars["cest"]
+        acc_gtin_l, acc_gtin_p = acc_chars["gtin"]
+        acc_tipo_l, acc_tipo_p = acc_chars["tipo"]
+        acc_unid_l, acc_unid_p = acc_chars["unid"]
+
+        for r in linhas:
+            # Códigos
+            l_codigos.append(r.get("lista_codigos"))
+            l_cod_norm.append(r.get("lista_cod_normalizado"))
+
+            # Descrições
+            d_str = str(r.get("descricao") or "")
+            l_descricoes.append(d_str)
+
+            # Descrição Padrão
+            cnt = len(d_str.split())
+            if cnt > max_palavras:
+                max_palavras = cnt
+                desc_padrao = d_str
+
+            # Itens, Chaves e SEFIN
+            l_itens_id.extend(self._garantir_lista(r.get("lista_itens_id")))
+            l_chv_produtos_brutos.extend(self._garantir_lista(r.get("chave_produto")))
+            l_sefin_bruto.extend(self._garantir_lista(r.get("lista_co_sefin_inferido")))
+
+            # Características (lista e padrão) - Unrolled for speed
+            for col, acc in [
+                ("lista_ncm", acc_ncm_l), ("ncm_padrao", acc_ncm_p),
+                ("lista_cest", acc_cest_l), ("cest_padrao", acc_cest_p),
+                ("lista_gtin", acc_gtin_l), ("gtin_padrao", acc_gtin_p),
+                ("lista_tipo_item", acc_tipo_l), ("tipo_item_padrao", acc_tipo_p),
+                ("lista_unids", acc_unid_l), ("unid_padrao", acc_unid_p)
+            ]:
+                v = r.get(col)
+                if v:
+                    if isinstance(v, list): acc.extend(v)
+                    else: acc.append(v)
+
+            if possui_compl:
+                l_compl_bruto.extend(self._garantir_lista(r.get("lista_descr_compl")))
+
+            tot_ent += float(r.get("total_entradas") or 0)
+            tot_sai += float(r.get("total_saidas") or 0)
+
+        # Fallback desc_padrao
+        if not desc_padrao:
+            desc_padrao = primeira_linha.get("descricao_padrao") or primeira_linha.get("descricao") or ""
+
+        # Processamento Pós-Loop
+        dados_codigos = self._analisar_codigos(l_codigos) or self._analisar_codigos(l_cod_norm)
+        freq_codigos = Counter()
+        entradas_originais = {}
+        for cod, freq, _ in dados_codigos:
+            freq_codigos[cod] += freq
+            entradas_originais[cod] = max(entradas_originais.get(cod, 0), freq)
 
         codigo_padrao = "0"
         if freq_codigos:
-            max_freq = max(freq_codigos.values())
-            top_codes = [c for c, f in freq_codigos.items() if f == max_freq]
-            codigo_padrao = sorted(top_codes, key=natural_sort_key)[0]
+            max_f = max(freq_codigos.values())
+            top_c = [c for c, f in freq_codigos.items() if f == max_f]
+            codigo_padrao = sorted(top_c, key=natural_sort_key)[0]
 
-        # Descrições
-        desc = (descricao_resultante or self._escolher_moda([r.get("descricao") for r in linhas]) or linhas[0].get("descricao") or "").strip()
+        desc = (descricao_resultante or self._escolher_moda(l_descricoes) or l_descricoes[0]).strip()
         desc_norm = (descricao_normalizada_resultante or normalize_text(desc)).strip()
 
-        # Descrição Padrão (a que possui mais palavras)
-        desc_padrao = linhas[0].get("descricao_padrao") or linhas[0].get("descricao") or ""
-        max_palavras = 0
-        for r in linhas:
-            dn = str(r.get("descricao") or "")
-            count = len(dn.split())
-            if count > max_palavras:
-                max_palavras = count
-                desc_padrao = dn
+        lista_final_itens = sorted(set(l_itens_id))
 
-        # Unir lista de itens (chave_item_id)
-        todas_chaves_itens = []
-        for r in linhas:
-            todas_chaves_itens.extend(self._garantir_lista(r.get("lista_itens_id")))
-        lista_final_itens = sorted(list(set(todas_chaves_itens)))
+        # Unique lists for characteristics (matching _mesclar_colunas_lista)
+        def _uniq(lst): return sorted(set(lst), key=natural_sort_key)
 
-        # Gerar chave_produto (MD5 das chaves de itens ordenadas)
-        texto_chave = "".join(lista_final_itens)
-        chave_produto = hashlib.md5(texto_chave.encode()).hexdigest()
-
-        mesclados_codigos = [f"[{c}; {entradas_originais[c]}]" for c in sorted(entradas_originais, key=natural_sort_key)]
-
-        # Recalcular valores padrão (moda dos itens originais)
-        def _get_moda_lista(coluna):
-            valores = []
-            for r in linhas:
-                v = r.get(coluna)
-                if v:
-                    if isinstance(v, list):
-                        valores.extend(v)
-                    else:
-                        valores.append(v)
-            return self._escolher_moda(valores)
-
-        # Chaves de produto originais
-        lista_chv_produtos = self._mesclar_colunas_lista(linhas, "chave_produto")
+        lista_chv_produtos = _uniq(l_chv_produtos_brutos)
         if not lista_chv_produtos:
             lista_chv_produtos = [hashlib.md5(str(r).encode()).hexdigest() for r in linhas]
 
-        # Gerar chave_id única (MD5 das chaves originais ordenadas)
-        texto_chave_id = "".join(sorted(lista_chv_produtos))
-        chave_id = hashlib.md5(texto_chave_id.encode()).hexdigest()
-
-        lista_sefin = self._mesclar_colunas_lista(linhas, "lista_co_sefin_inferido")
+        chave_id = hashlib.md5("".join(sorted(lista_chv_produtos)).encode()).hexdigest()
+        lista_sefin = _uniq(l_sefin_bruto)
+        mesclados_codigos = [f"[{c}; {entradas_originais[c]}]" for c in sorted(entradas_originais, key=natural_sort_key)]
 
         agregada = {
             "chave_id": chave_id,
             "lista_chave_produto": lista_chv_produtos,
-            "chave_produto": chave_id, 
+            "chave_produto": chave_id,
             "descricao": desc,
             "descricao_normalizada": desc_norm,
             "lista_itens_id": lista_final_itens,
             "lista_codigos": mesclados_codigos,
             "codigo_padrao": codigo_padrao,
             "descricao_padrao": desc_padrao,
-            "ncm_padrao": _get_moda_lista("lista_ncm") or _get_moda_lista("ncm_padrao"),
-            "cest_padrao": _get_moda_lista("lista_cest") or _get_moda_lista("cest_padrao"),
-            "gtin_padrao": _get_moda_lista("lista_gtin") or _get_moda_lista("gtin_padrao"),
-            "tipo_item_padrao": _get_moda_lista("lista_tipo_item") or _get_moda_lista("tipo_item_padrao"),
-            "unid_padrao": _get_moda_lista("lista_unids") or _get_moda_lista("unid_padrao"),
+            "ncm_padrao": self._escolher_moda(acc_chars["ncm"][0]) or self._escolher_moda(acc_chars["ncm"][1]),
+            "cest_padrao": self._escolher_moda(acc_chars["cest"][0]) or self._escolher_moda(acc_chars["cest"][1]),
+            "gtin_padrao": self._escolher_moda(acc_chars["gtin"][0]) or self._escolher_moda(acc_chars["gtin"][1]),
+            "tipo_item_padrao": self._escolher_moda(acc_chars["tipo"][0]) or self._escolher_moda(acc_chars["tipo"][1]),
+            "unid_padrao": self._escolher_moda(acc_chars["unid"][0]) or self._escolher_moda(acc_chars["unid"][1]),
             "co_sefin_agr": self._escolher_moda(lista_sefin),
             "co_sefin_agr_divergente": len(set([str(s) for s in lista_sefin if s])) > 1,
-            "lista_tipo_item": self._mesclar_colunas_lista(linhas, "lista_tipo_item"),
-            "lista_ncm": self._mesclar_colunas_lista(linhas, "lista_ncm"),
-            "lista_cest": self._mesclar_colunas_lista(linhas, "lista_cest"),
-            "lista_gtin": self._mesclar_colunas_lista(linhas, "lista_gtin"),
-            "lista_unids": self._mesclar_colunas_lista(linhas, "lista_unids"),
+            "lista_tipo_item": _uniq(acc_chars["tipo"][0]),
+            "lista_ncm": _uniq(acc_chars["ncm"][0]),
+            "lista_cest": _uniq(acc_chars["cest"][0]),
+            "lista_gtin": _uniq(acc_chars["gtin"][0]),
+            "lista_unids": _uniq(acc_chars["unid"][0]),
             "lista_co_sefin_inferido": lista_sefin,
-            "total_entradas": sum([float(r.get("total_entradas") or 0) for r in linhas]),
-            "total_saidas": sum([float(r.get("total_saidas") or 0) for r in linhas]),
-            "verificado": True, # Muda para true ao agregar manualmente
+            "total_entradas": tot_ent,
+            "total_saidas": tot_sai,
+            "verificado": True,
         }
-        
-        # Copiar outros campos que podem existir
-        opcionais = ["lista_descr_compl"]
-        for op in opcionais:
-            if op in linhas[0]:
-                agregada[op] = self._mesclar_colunas_lista(linhas, op)
+
+        if possui_compl:
+            agregada["lista_descr_compl"] = _uniq(l_compl_bruto)
 
         return agregada
 
