@@ -348,7 +348,7 @@ export default function Tabelas() {
           size_human: "", 
           rows: 0, 
           columns: 0, 
-          modified: "" 
+          modified: 0
         });
       }
     }
