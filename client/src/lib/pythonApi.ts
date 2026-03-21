@@ -839,7 +839,7 @@ export interface ParesGruposSimilaresItem {
 export interface ParesGruposSimilaresResponse {
   success: boolean;
   available?: boolean;
-  metodo?: "lexical" | "light" | "faiss" | "semantic" | "hybrid";
+  metodo?: "lexical" | "light" | "faiss";
   message?: string;
   cache_metadata?: {
     metodo?: string;
@@ -998,7 +998,7 @@ export async function applyUnificacaoLote(req: UnificacaoLoteApplyRequest) {
 
 export async function getParesGruposSimilares(
   cnpj: string,
-  metodo: "lexical" | "light" | "faiss" | "semantic" | "hybrid" = "lexical",
+  metodo: "lexical" | "light" | "faiss" = "lexical",
   forcarRecalculo = false,
   options?: {
     topK?: number;
@@ -1038,15 +1038,13 @@ export interface VectorizacaoStatusResponse {
     modes?: {
       faiss?: { available: boolean; message: string; model_name?: string; engine?: string | null };
       light?: { available: boolean; message: string; model_name?: string; engine?: string | null };
-      semantic?: { available: boolean; message: string; model_name?: string; engine?: string | null };
-      hybrid?: { available: boolean; message: string; model_name?: string; engine?: string | null };
+
     };
   };
   caches: {
     faiss?: Record<string, unknown> & { stale?: boolean };
     light?: Record<string, unknown> & { stale?: boolean };
-    semantic?: Record<string, unknown> & { stale?: boolean };
-    hybrid?: Record<string, unknown> & { stale?: boolean };
+
   };
 }
 
@@ -1058,8 +1056,7 @@ export interface ProdutoRuntimeStatusResponse {
   success: boolean;
   cnpj: string;
   runtime: {
-    compat_mode: boolean;
-    pipeline_legacy_removed: boolean;
+
     files: Record<string, { path: string; exists: boolean; size_bytes?: number }>;
   };
 }
@@ -1078,7 +1075,7 @@ export async function rebuildRuntimeProdutos(cnpj: string) {
   );
 }
 
-export async function clearVectorizacaoCache(cnpj: string, metodo: "faiss" | "light" | "semantic" | "hybrid" | "all" = "all") {
+export async function clearVectorizacaoCache(cnpj: string, metodo: "faiss" | "light" | "all" = "all") {
   return request<{ success: boolean; message: string; removed: string[] }>(
     `/produtos/vectorizacao-clear-cache?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}`,
     { method: "POST" }
