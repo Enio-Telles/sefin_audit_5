@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from core.utils import _human_size
 from core.models import ParquetReadRequest, ParquetWriteRequest, ParquetAddRowRequest, ParquetAddColumnRequest
 import polars as pl
 import logging
@@ -242,18 +243,37 @@ async def list_parquet_files(directory: str = Query(...)):
     if not _is_allowed(path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not path.exists() or not path.is_dir():
-        return {"files": []}
+        return {"files": [], "count": 0, "directory": directory}
     try:
         files = []
         for f in path.glob("*.parquet"):
             stats = f.stat()
+
+            # Obtém metadados leves (evita coletar o arquivo todo)
+            rows = 0
+            columns = 0
+            try:
+                # Ler o schema é instantâneo e não carrega dados
+                lf = pl.scan_parquet(str(f))
+                columns = len(lf.collect_schema().names())
+                # ler apenas pl.len() é rápido para recuperar a contagem de linhas
+                rows = lf.select(pl.len()).collect().item()
+            except Exception as e:
+                logger.error(f"Erro ao ler metadados do Parquet {f.name}: {e}")
+                pass
+
             files.append({
                 "name": f.name,
                 "path": str(f.absolute()),
                 "size": stats.st_size,
+                "size_human": _human_size(stats.st_size),
+                "rows": rows,
+                "columns": columns,
                 "modified": stats.st_mtime,
+                "relative_path": f.name
             })
-        return {"files": sorted(files, key=lambda x: x["name"])}
+        sorted_files = sorted(files, key=lambda x: x["name"])
+        return {"files": sorted_files, "count": len(sorted_files), "directory": directory}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

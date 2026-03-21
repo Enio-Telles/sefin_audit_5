@@ -68,7 +68,7 @@ function triggerDownload(blob: Blob, filename: string) {
 // ============================================================
 
 export async function checkHealth() {
-  return request<{ status: string; version: string; engine: string }>("/health");
+  return request<{ status: string; version: string }>("/health");
 }
 
 // ============================================================
@@ -209,7 +209,10 @@ export async function getAvailableQueries() {
 export type BrowseEntry = {
   name: string;
   path: string;
-  has_children: boolean;
+  type: "directory" | "file";
+  size?: number;
+  human_size?: string;
+  modified?: number;
 };
 
 export type BrowseResponse = {
@@ -317,7 +320,7 @@ export type ParquetFileInfo = {
   size_human: string;
   rows: number;
   columns: number;
-  modified: string;
+  modified: number;
   relative_path: string;
   error?: boolean;
 };
@@ -367,20 +370,17 @@ export async function writeParquetCell(params: {
 }
 
 export async function addParquetRow(file_path: string) {
-  return request<{ success: boolean; new_row_count: number }>("/parquet/add-row", {
+  return request<{ success: boolean; new_index: number }>("/parquet/add-row", {
     method: "POST",
     body: JSON.stringify({ file_path }),
   });
 }
 
 export async function addParquetColumn(file_path: string, column_name: string, default_value = "") {
-  return request<{ success: boolean; column_name: string; total_columns: number }>(
-    "/parquet/add-column",
-    {
-      method: "POST",
-      body: JSON.stringify({ file_path, column_name, default_value }),
-    }
-  );
+  return request<{ success: boolean }>("/parquet/add-column", {
+    method: "POST",
+    body: JSON.stringify({ file_path, column_name, default_value }),
+  });
 }
 
 export async function getUniqueValues(file_path: string, column: string) {
