@@ -1187,21 +1187,24 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
         return work.drop("descricao_normalizada")
 
     replacements: dict[str, str] = {}
-    for row in code_groups.to_dicts():
-        codigo = str(row.get("codigo") or "").strip()
-        groups = [str(item or "").strip() for item in (row.get("__descricoes_norm") or []) if str(item or "").strip()]
+    for cod, desc_norm_list in zip(code_groups["codigo"], code_groups["__descricoes_norm"]):
+        codigo = str(cod or "").strip()
+        raw_list = desc_norm_list.to_list() if hasattr(desc_norm_list, "to_list") else desc_norm_list
+        groups = [str(item or "").strip() for item in (raw_list or []) if str(item or "").strip()]
         for index, descricao_norm in enumerate(groups, start=1):
             replacements[f"{codigo}|{descricao_norm}"] = f"{codigo}_SEPARADO_{index:02d}"
+
+    replacements_df = pl.DataFrame(
+        {"__desagregacao_key": list(replacements.keys()), "__codigo_desagregado": list(replacements.values())},
+        schema={"__desagregacao_key": pl.Utf8, "__codigo_desagregado": pl.Utf8}
+    )
 
     return (
         work.with_columns(
             pl.concat_str(["codigo", "descricao_normalizada"], separator="|").alias("__desagregacao_key")
         )
-        .with_columns(
-            pl.col("__desagregacao_key")
-            .map_elements(lambda key: replacements.get(str(key), ""), return_dtype=pl.Utf8)
-            .alias("__codigo_desagregado")
-        )
+        .join(replacements_df, on="__desagregacao_key", how="left")
+        .with_columns(pl.col("__codigo_desagregado").fill_null(""))
         .with_columns(
             pl.when(pl.col("__codigo_desagregado") != "")
             .then(pl.col("__codigo_desagregado"))
@@ -1254,13 +1257,20 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
                 canon_expr.replace_strict(unions, default=clean_expr).alias("descricao")
             )
         except (AttributeError, TypeError, Exception):
-            # Fallback for older Polars versions
-            df_base = df_base.with_columns(
-                pl.col("descricao").map_elements(
-                    lambda value: unions.get(_canon_text(value, ""), _clean_value(value)),
-                    return_dtype=pl.Utf8
-                ).alias("descricao")
+            # Fallback for older Polars versions using join instead of map_elements
+            # Convert unions dict to DataFrame and do a left join
+            unions_df = pl.DataFrame(
+                {"__canon_desc": list(unions.keys()), "__replaced_desc": list(unions.values())},
+                schema={"__canon_desc": pl.Utf8, "__replaced_desc": pl.Utf8}
             )
+            df_base = df_base.with_columns(
+                canon_expr.alias("__canon_desc"),
+                clean_expr.alias("__clean_desc")
+            ).join(
+                unions_df, on="__canon_desc", how="left"
+            ).with_columns(
+                pl.coalesce(["__replaced_desc", "__clean_desc"]).alias("descricao")
+            ).drop(["__canon_desc", "__clean_desc", "__replaced_desc"], strict=False)
 
     if mapa_manual_path.exists():
         mapa = pl.read_parquet(str(mapa_manual_path))
