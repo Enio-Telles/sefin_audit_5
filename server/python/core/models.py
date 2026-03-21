@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional
 
 class OracleConnectionConfig(BaseModel):
     host: str = "exa01-scan.sefin.ro.gov.br"

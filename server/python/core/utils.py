@@ -1,7 +1,7 @@
 import re
 import logging
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional
 import polars as pl
 
 logger = logging.getLogger("sefin_audit_python")

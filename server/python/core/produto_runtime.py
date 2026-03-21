@@ -9,6 +9,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+import difflib
+from functools import lru_cache
+
 import polars as pl
 from core.produto_classification import (
     choose_consensus as doc_choose_consensus,
@@ -17,8 +20,6 @@ from core.produto_classification import (
     clean_cest as doc_clean_cest,
     clean_gtin as doc_clean_gtin,
     clean_ncm as doc_clean_ncm,
-    description_similarity as doc_description_similarity,
-    metric_score as doc_metric_score,
     normalize_description_key as doc_normalize_description_key,
     normalize_unit as doc_normalize_unit,
 )
@@ -107,9 +108,6 @@ def _join_unique(values: list[str], sep: str = ", ") -> str:
     uniq = sorted({_clean_value(value) for value in values if _clean_value(value)})
     return sep.join(uniq)
 
-
-import difflib
-from functools import lru_cache
 
 _STOP_WORDS = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "SEM", "PARA", "UN", "PCT", "CX", "KG", "LT", "ML", "GR", "PC", "LATA", "LITRO", "LITROS", "GARRAFA"}
 
@@ -206,8 +204,10 @@ def _sequence_match(a: str, b: str) -> float:
 
 @lru_cache(maxsize=10000)
 def _similarity_score(a: str, b: str) -> float:
-    if not a and not b: return 1.0
-    if not a or not b: return 0.0
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
 
     a_str = str(a)
     b_str = str(b)
