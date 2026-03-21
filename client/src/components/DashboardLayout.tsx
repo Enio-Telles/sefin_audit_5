@@ -87,13 +87,18 @@ export default function DashboardLayout({
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <div className="flex w-full max-w-md flex-col items-center gap-8 p-8">
-          <img src={LOGO_URL} alt="Sistema de Auditoria e Analise Fiscal" className="h-16 w-16" />
+          <img
+            src={LOGO_URL}
+            alt="Sistema de Auditoria e Analise Fiscal"
+            className="h-16 w-16"
+          />
           <div className="flex flex-col items-center gap-3">
             <h1 className="bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-center text-2xl font-bold tracking-tight text-transparent">
               Sistema de Auditoria e Analise Fiscal
             </h1>
             <p className="max-w-sm text-center text-sm text-muted-foreground">
-              Sistema de Extracao e Analise de Dados Fiscais. Faca login para continuar.
+              Sistema de Extracao e Analise de Dados Fiscais. Faca login para
+              continuar.
             </p>
           </div>
           <Button
@@ -118,7 +123,9 @@ export default function DashboardLayout({
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>{children}</DashboardLayoutContent>
+      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+        {children}
+      </DashboardLayoutContent>
     </SidebarProvider>
   );
 }
@@ -138,7 +145,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find((item) => item.path === location);
+  const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -179,13 +186,22 @@ function DashboardLayoutContent({
   return (
     <>
       <div className="relative" ref={sidebarRef}>
-        <Sidebar collapsible="icon" className="border-r-0" disableTransition={isResizing}>
+        <Sidebar
+          collapsible="icon"
+          className="border-r-0"
+          disableTransition={isResizing}
+        >
           <SidebarHeader className="h-16 justify-center">
             <div className="flex w-full items-center gap-3 px-2 transition-all">
               <button
                 onClick={toggleSidebar}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Alternar navegacao"
+                aria-label={
+                  isCollapsed ? "Expandir navegação" : "Recolher navegação"
+                }
+                title={
+                  isCollapsed ? "Expandir navegação" : "Recolher navegação"
+                }
               >
                 {isCollapsed ? (
                   <img src={LOGO_URL} alt="SEFIN" className="h-5 w-5 rounded" />
@@ -196,7 +212,9 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div className="flex min-w-0 items-center gap-2">
                   <img src={LOGO_URL} alt="SEFIN" className="h-6 w-6 rounded" />
-                  <span className="truncate text-sm font-bold tracking-tight">Sistema de Auditoria e Analise Fiscal</span>
+                  <span className="truncate text-sm font-bold tracking-tight">
+                    Sistema de Auditoria e Analise Fiscal
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -204,7 +222,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map((item) => {
+              {menuItems.map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -214,7 +232,9 @@ function DashboardLayoutContent({
                       tooltip={item.label}
                       className="h-10 font-normal transition-all"
                     >
-                      <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
+                      <item.icon
+                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                      />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -233,13 +253,20 @@ function DashboardLayoutContent({
                     </AvatarFallback>
                   </Avatar>
                   <div className="group-data-[collapsible=icon]:hidden min-w-0 flex-1">
-                    <p className="truncate text-sm leading-none font-medium">{user?.name || "-"}</p>
-                    <p className="mt-1.5 truncate text-xs text-muted-foreground">{user?.email || "-"}</p>
+                    <p className="truncate text-sm leading-none font-medium">
+                      {user?.name || "-"}
+                    </p>
+                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                      {user?.email || "-"}
+                    </p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
+                <DropdownMenuItem
+                  onClick={logout}
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sair</span>
                 </DropdownMenuItem>
@@ -262,7 +289,9 @@ function DashboardLayoutContent({
           <div className="flex items-center gap-2">
             {!isMobile && <SidebarTrigger className="-ml-1" />}
             <div className="flex items-center gap-2 px-2">
-              <span className="text-sm font-medium text-muted-foreground">{activeMenuItem?.label ?? "Dashboard"}</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                {activeMenuItem?.label ?? "Dashboard"}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-4">
