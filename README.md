@@ -1,159 +1,93 @@
 # SEFIN Audit Tool 🔍
 
-Uma ferramenta técnica avançada de auditoria fiscal desenvolvida para a **Secretaria de Estado de Finanças (SEFIN)**. Projetada com uma arquitetura de alta performance focada na extração, manipulação e análise vetorial/volumétrica de dados fiscais (Oracle/SPED) combinando o ecossistema Node.js (orquestração e interface) com Python (processamento de dados brutos e Machine Learning).
+Uma ferramenta técnica de auditoria fiscal desenvolvida para a **Secretaria de Estado de Finanças (SEFIN)**. Projetada com uma arquitetura de alta performance focada na extração, manipulação e análise vetorial/volumétrica de dados fiscais (Oracle/SPED) combinando o ecossistema Node.js (orquestração e interface) com Python (processamento de dados brutos e Machine Learning).
+
+## 📊 Visão Geral
+
+O sistema permite a extração de dados fiscais diretamente do DW Corporativo da SEFIN e realiza o processamento pesado desses dados, estruturando-os de forma eficiente em arquivos Parquet organizados por CNPJ. Através de uma interface web, auditores podem configurar extrações, visualizar análises e gerar relatórios.
+
+> **⚠️ Status do Projeto em Transição:** O repositório encontra-se em uma transição de arquitetura. O sistema original era uma aplicação desktop construída com PySide6 e `orquestrador.py` CLI (ainda presente na pasta `src/`). A **arquitetura principal atual e ativa** é a aplicação web híbrida (descrita abaixo), que substitui a interface gráfica antiga.
 
 ## 🏗️ Arquitetura do Sistema
 
 O sistema utiliza uma arquitetura híbrida de múltiplos serviços otimizada para lidar com grandes volumes de dados sem onerar a Thread Pool do Node.js:
 
 1. **Frontend (Client)**:
-   - SPA construída com **React 19**, **TypeScript**, **Vite**, **Tailwind CSS v4** e **shadcn/ui** (baseado em Radix UI).
-   - Gerenciamento de estado global e cache com **TanStack React Query**, comunicação fortemente tipada via **tRPC**.
-   - Design System Minimalista ("Night Ledger") focado na ergonomia do auditor, com tema escuro nativo e `framer-motion` para micro-interações.
+   - SPA construída com **React 19**, **TypeScript**, **Vite**, **Tailwind CSS v4** e **shadcn/ui**.
+   - Gerenciamento de estado e cache com **TanStack React Query**; comunicação via **tRPC**.
+   - Design System "Night Ledger" focado na ergonomia do auditor (tema escuro nativo).
 
 2. **Backend Gateway e Orquestrador (Node.js)**:
-   - Servidor **Express.js** que atua como API Gateway, servindo rotas tRPC sob `/api/trpc`.
-   - Gerenciamento de metadados transacionais (perfil de usuários, configurações de extração, relatórios) utilizando **Drizzle ORM** com suporte nativo a SQLite/MySQL.
-   - Proxy reverso (Reverse Proxy) nativo em stream para rotas que exigem processamento pesado (`/api/python/*`).
+   - Servidor **Express.js** atuando como API Gateway (`server/_core/index.ts`).
+   - Gerenciamento de metadados de autenticação e estado da sessão utilizando **Drizzle ORM** (limitado ao escopo de metadados, armazenado em SQLite local `sefin_audit.db`).
+   - Proxy reverso (Reverse Proxy) nativo em stream: roteia requisições pesadas (`/api/python/*`) diretamente para o backend Python.
 
 3. **Backend de Processamento de Dados (Python/FastAPI)**:
-   - Microsserviço robusto em **Python 3.12+** rodando **FastAPI** / **Uvicorn**.
-   - **Polars**: Engine principal (substituindo o Pandas) para data wrangling, cruzamentos FFI-boundless e conversão de DataFrames em arquivos `.parquet` para máxima eficiência I/O.
-   - Conectividade direta com DW Corporativo usando **oracledb** e geração vetorial de similaridade semântica utilizando o modelo local `SentenceTransformer`.
+   - Microsserviço robusto em **Python 3.12+** rodando **FastAPI** / **Uvicorn** (`server/python/api.py`).
+   - **Polars**: Engine principal para data wrangling ultra-rápido, cruzamentos sem FFI-bounds e persistência eficiente utilizando o formato `.parquet`.
+   - Conectividade direta com DW Corporativo via **oracledb**.
+   - *Opcional*: Geração vetorial de similaridade semântica utilizando modelo local `SentenceTransformer` / `FAISS` (se as dependências opcionais estiverem configuradas).
 
----
+## 🔄 Fluxo de Execução (Reverse Proxy)
 
-## 🔄 Fluxo Node → Python (Reverse Proxy)
+Para isolar o processamento pesado de dados operacionais do Node.js, foi implementada uma ponte via Proxy Streaming:
 
-Para isolar o processamento pesado de dados operacionais do Event Loop do Node.js, foi implementada uma ponte em Proxy Streaming:
+1. O cliente (Frontend) requisita uma operação de dados (ex: `/api/python/extract-sped`).
+2. O middleware no `server/_core/index.ts` intercepta requests com prefixo `/api/python/*`.
+3. O Node.js atua como Proxy: faz o repasse transparente (convertendo buffers de stream) para a porta interna do FastAPI (padrão: `8001`).
+4. A resposta (JSON ou um Blob binário como Excel gerado sob demanda) é retornada mantendo o content-type.
 
-1. O cliente requisita um processamento (ex: `/api/python/extract-sped`) via fetch/Axios.
-2. O middleware no `server/_core/index.ts` intercepta qualquer request com prefixo `/api/python/*`.
-3. O Node.js atua como um Proxy transparente: clona os headers (removendo `host`), converte verbos HTTP e faz um *Pipe* do buffer de stream `req` do Express para um `fetch()` apontando para a porta interna do FastAPI (padrão: `8001`).
-4. A resposta (seja um JSON de status ou um Blob de arquivo Excel gerado sob demanda) é parseada via `response.arrayBuffer()` e retornada via `res.send()`, mantendo o content-type intacto.
+## 📂 Estrutura Principal de Diretórios
 
----
+- `client/`: Código Frontend React (Componentes, Páginas, Cliente tRPC).
+- `server/`: Código Backend unificado.
+  - `server/_core/`: Orquestrador Node.js Express, gateway proxy e autenticação.
+  - `server/routers/`: Controladores do tRPC (para a camada Node).
+  - `server/python/`: Microsserviço FastAPI e lógica de processamento Polars.
+- `shared/`: Tipos TypeScript dinâmicos e esquemas (Zod) compartilhados.
+- `drizzle/`: Definições de Schemas do banco de metadados SQLite.
+- `CNPJ/`: Diretório persistente local para armazenamento em cache e output de arquivos Parquet e análises geradas, estruturado por número de CNPJ.
+- `src/`: *(Legado)* Contém o código da antiga versão desktop PySide6 e orquestrador CLI (em processo de descontinuação).
 
-## 📦 Dependências Necessárias
+## 📦 Requisitos e Dependências Reais
 
-Para configurar o ambiente de desenvolvimento, você precisará dos seguintes artefatos instalados e em seu `PATH`:
+- **Node.js**: v18.0.0+
+- **pnpm**: Gerenciador de pacotes para o frontend e Node backend (`npm install -g pnpm`)
+- **Python**: 3.11+ (Recomendado 3.12)
+- **Oracle Instant Client**: Obrigatório e deve estar configurado na variável de ambiente de sistema (`PATH`) para o driver `oracledb` conectar ao DW corporativo da SEFIN.
 
-- **Node.js** (`v18.0.0` ou superior)
-- **pnpm** (Gerenciador de pacotes otimizado: `npm install -g pnpm`)
-- **Python** (`3.11` ou superior, recomendado `3.12`)
-- **Oracle Instant Client** (configurado na variável de ambiente de sistema para o driver `oracledb` conectar ao banco SEFIN).
+## 🚀 Instalação e Execução (Desenvolvimento)
 
----
+A aplicação possui um script para orquestrar a inicialização do ecossistema de forma autônoma.
 
-## 🚀 Instruções Completas de Instalação
-
-A aplicação foi desenhada para orquestrar sua própria inicialização de forma autônoma através do `start.js`.
-
-### 1. Clone o repositório
+### 1. Clonar o repositório
 ```bash
 git clone <url-do-repositorio>
-cd sefin-audit-tool
+cd sefin_audit_5
 ```
 
-### 2. Inicialização Automática (Start Script)
-O script automatiza a instalação das dependências Node e Python, criação do arquivo `.env` e inicialização do SQLite via Drizzle.
+### 2. Inicialização Completa Automática
+O script raiz gerencia a verificação de requisitos, instalação de dependências Node/Python (`pnpm` e `requirements.txt`), criação do `.env` padrão e execução dos servidores Node (Porta `3000`) e FastAPI (Porta `8001`).
 
 ```bash
-# Executa as validações, instala dependências e inicia os serviços em paralelo
+# Inicia toda a stack: Node.js gateway e Python backend
 node start.js
-
-# Ou alternativamente, via package.json:
-pnpm run start:all
 ```
 
-*Nota: Em ambientes controlados, você pode instalar manualmente via `pnpm install` e `python -m pip install -r requirements.txt`, rodando as migrações via `pnpm db:push` e os servidores separadamente (`pnpm dev` e `uvicorn api:app --port 8001`).*
+> Alternativamente, utilizando scripts do pacote:
+> ```bash
+> pnpm run start:all
+> ```
 
----
+### 3. Execução Manual / Separada (Caso necessário)
+Se preferir rodar os serviços isolados:
+1. Instale as dependências: `pnpm install` e `python -m pip install -r requirements.txt`.
+2. Configure o banco SQLite: `pnpm db:push`
+3. Inicie o Frontend + Node Gateway: `pnpm dev`
+4. Inicie o Python API (em outro terminal): `cd server/python && uvicorn api:app --port 8001`
 
-## 📂 Estrutura de Diretórios
+## ⚠️ Observações Importantes
 
-O *monorepo* está organizado nas seguintes camadas:
-
-- `client/`: Todo o código Frontend React. Contém `src/components` (shadcn/ui), `src/pages` (rotas wouter), e `src/lib` (utilitários e tRPC client).
-- `server/`: Backend unificado.
-  - `server/_core/`: Orquestrador Express, proxy Node->Python, integração Vite (para modo dev) e provedores OAuth.
-  - `server/routers/`: Controladores e definições de rotas do tRPC.
-  - `server/python/`: Microsserviço FastAPI (`api.py`), manipulação de DB Oracle e lógica vetorial.
-- `shared/`: Tipos TypeScript (`*.ts`) e esquemas de validação (Zod) compartilhados dinamicamente entre Client e Server.
-- `drizzle/`: Definição de Schemas (`schema.ts`) e arquivos de migração relacional.
-- `cruzamentos/`: Diretório persistente local destinado ao armazenamento em cache e output de arquivos gerados (arquivos Parquet de grandes extrações, logs).
-
----
-
-## ⚙️ Variáveis de Ambiente Necessárias
-
-Crie um arquivo `.env` na raiz do projeto contendo as variáveis obrigatórias. *Caso não exista, o `start.js` criará um default automaticamente.*
-
-```env
-# Configurações do Banco de Dados (Metadados/SQLite/MySQL)
-DATABASE_URL=file:./sefin_audit.db
-
-# Configurações de Rede
-PORT=3000                     # Porta do Gateway Node.js/Frontend
-PYTHON_API_PORT=8001          # Porta interna do microsserviço Python
-
-# Autenticação e Criptografia
-JWT_SECRET=sua_chave_secreta_aqui # Obrigatório em produção para cookies seguros
-OAUTH_SERVER_URL=http://localhost:3000/mock-oauth
-VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
-
-# Configurações do Frontend
-VITE_APP_ID=sefin-audit-tool
-
-# Opcional - Credenciais Oracle (Dependente de configuração do OS)
-# ORACLE_USER=...
-# ORACLE_PASSWORD=...
-# ORACLE_DSN=...
-```
-=======
-# Fiscal Parquet Analyzer
-
-Sistema para extração, análise e agregação de dados fiscais (Oracle -> Parquet -> UI).
-
-## 🚀 Como Iniciar
-
-### Pré-requisitos
-- Python 3.10+
-- Oracle Client / VPN ativa (para extração)
-- Dependências: `pip install polars oracledb PySide6 rich python-dotenv openpyxl python-docx`
-
-### Executando a Interface Gráfica
-```bash
-python src/interface_grafica/main.py
-```
-
-### Executando o Pipeline (Linha de Comando)
-```bash
-python -m src.orquestrador --cnpj <CNPJ>
-```
-
-## 📁 Estrutura do Projeto
-
-- `src/`: Código fonte principal.
-  - `extracao/`: Módulos de conexão Oracle e execução SQL.
-  - `transformacao/`: Lógica de processamento e consolidação de dados.
-    - `analise_produtos/`: Itens, Produtos e Enriquecimento.
-  - `interface_grafica/`: Componentes UI (PySide6).
-  - `servicos/`: Camada de serviços e regras de negócio.
-  - `utilitarios/`: Funções auxiliares, validações e exportação.
-- `sql/`: Consultas SQL para extração de dados brutos.
-- `dados/`: Armazenamento de dados (Parquet).
-  - `CNPJ/`: Dados extraídos organizados por CNPJ.
-  - `referencias/`: Tabelas de referência (NCM, SEFIN, CFOP).
-- `docs/`: Documentação técnica e planos de projeto.
-- `workspace/`: Arquivos temporários e estado da aplicação.
-
-## 🛠️ Tecnologias
-- **Polars**: Processamento ultra-rápido de dados.
-- **OracleDB**: Conectividade robusta com banco de dados.
-- **PySide6**: Interface gráfica moderna.
-- **Parquet**: Armazenamento eficiente de grandes volumes de dados.
-
-## 📄 Documentação
-Veja a pasta `docs/` para detalhes sobre o mapeamento de colunas e o plano de refatoração.
->>>>>>> funcoes/master
+- **Drizzle e SQLite**: São utilizados **exclusivamente** para controle de sessão, perfis de usuários (auth) e pequenos metadados da ferramenta. Não armazenam os dados operacionais ou fiscais brutos das consultas (estes ficam em arquivos `.parquet` dentro da pasta `CNPJ/`).
+- **Análises Vetoriais**: O uso do `SentenceTransformer` e `faiss` é opcional e modular. Caso as dependências (`numpy`, `faiss-cpu`) não estejam presentes no ambiente ou o hardware não suporte bem, o sistema tem *fallbacks* para similaridade por sequências textuais comuns (`difflib`).
+- **Tratamento de Arquivos**: O diretório `CNPJ/` pode crescer consideravelmente de acordo com o volume de extrações Oracle realizadas. Monitore o disco local.
