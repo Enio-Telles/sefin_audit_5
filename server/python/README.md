@@ -28,8 +28,8 @@ pip install -r requirements.txt
 O módulo de produtos consegue rodar em três modos:
 
 - `lexical`: sem dependências extras
-- `semantic`: requer `sentence-transformers`
-- `hybrid`: requer `sentence-transformers` e usa `FAISS` quando disponível
+- `light`: não requer dependências extras, vetorização por char n-grams usando string matching
+- `faiss`: requer `sentence-transformers` e `faiss-cpu` para busca semântica
 
 Para o ambiente Conda `audit`, instale assim:
 

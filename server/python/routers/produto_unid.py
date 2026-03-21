@@ -40,8 +40,6 @@ from core.produto_runtime import (
     compute_file_sha1,
     construir_tabela_pares_descricoes_faiss,
     construir_tabela_pares_descricoes_light,
-    construir_tabela_pares_descricoes_hibridos,
-    construir_tabela_pares_descricoes_semanticos,
     construir_tabela_pares_descricoes_similares,
     merge_mapa_descricoes_manual,
     obter_runtime_produtos_status,
@@ -1185,197 +1183,6 @@ async def get_pares_grupos_similares(
             selected_message = "Sugestoes leves carregadas."
             selected_available = True
             selected_method = "light"
-        elif metodo_norm == "semantic":
-            status_vector = obter_status_vectorizacao()
-            semantic_mode = (status_vector.get("modes") or {}).get("semantic") or {}
-            pares_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet"
-            metadata_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json"
-            if not semantic_mode.get("available"):
-                return {
-                    "success": False,
-                    "available": False,
-                    "metodo": "semantic",
-                    "message": semantic_mode.get("message") or status_vector["message"],
-                    "file_path": str(pares_path),
-                    "cache_metadata": read_vector_cache_metadata(metadata_path),
-                    "data": [],
-                    "page": page_norm,
-                    "page_size": page_size_norm,
-                    "total_file": 0,
-                    "total_filtered": 0,
-                    "total": 0,
-                    "total_pages": 1,
-                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
-                }
-
-            metadata = read_vector_cache_metadata(metadata_path)
-            cache_ok = pares_path.exists() and cache_metadata_matches(
-                metadata,
-                metodo="semantic",
-                input_base_hash=base_hash,
-                top_k=params_top_k,
-                min_semantic_score=params_threshold,
-                model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-            )
-
-            if (forcar_recalculo or not cache_ok) and agregados_path.exists():
-                df_agregados = pl.read_parquet(str(agregados_path))
-                construir_tabela_pares_descricoes_semanticos(
-                    df_agregados,
-                    top_k=params_top_k,
-                    min_semantic_score=params_threshold,
-                ).write_parquet(str(pares_path))
-                write_vector_cache_metadata(
-                    metadata_path,
-                    build_vector_cache_metadata(
-                        metodo="semantic",
-                        model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-                        engine=semantic_mode.get("engine") or status_vector.get("engine"),
-                        input_base_hash=base_hash,
-                        top_k=params_top_k,
-                        min_semantic_score=params_threshold,
-                        batch_size=32,
-                    ),
-                )
-                metadata = read_vector_cache_metadata(metadata_path)
-
-            if not pares_path.exists():
-                return {
-                    "success": True,
-                    "available": True,
-                    "metodo": "semantic",
-                    "message": "Nenhum par semantico gerado.",
-                    "file_path": str(pares_path),
-                    "cache_metadata": metadata,
-                    "data": [],
-                    "page": page_norm,
-                    "page_size": page_size_norm,
-                    "total_file": 0,
-                    "total_filtered": 0,
-                    "total": 0,
-                    "total_pages": 1,
-                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
-                }
-
-            df = pl.read_parquet(str(pares_path))
-            selected_path = pares_path
-            selected_metadata = metadata
-            selected_message = "Pares semanticos carregados."
-            selected_available = True
-            selected_method = "semantic"
-        elif metodo_norm == "hybrid":
-            status_vector = obter_status_vectorizacao()
-            hybrid_mode = (status_vector.get("modes") or {}).get("hybrid") or {}
-            semantic_mode = (status_vector.get("modes") or {}).get("semantic") or {}
-            lexical_path = dir_analises / f"pares_descricoes_similares_{cnpj_limpo}.parquet"
-            semantic_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet"
-            hybrid_path = dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.parquet"
-            metadata_path = dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.json"
-            if not hybrid_mode.get("available"):
-                return {
-                    "success": False,
-                    "available": False,
-                    "metodo": "hybrid",
-                    "message": hybrid_mode.get("message") or status_vector["message"],
-                    "file_path": str(hybrid_path),
-                    "cache_metadata": read_vector_cache_metadata(metadata_path),
-                    "data": [],
-                    "page": page_norm,
-                    "page_size": page_size_norm,
-                    "total_file": 0,
-                    "total_filtered": 0,
-                    "total": 0,
-                    "total_pages": 1,
-                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
-                }
-
-            hybrid_metadata = read_vector_cache_metadata(metadata_path)
-            semantic_metadata_path = dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json"
-            semantic_metadata = read_vector_cache_metadata(semantic_metadata_path)
-
-            if (forcar_recalculo or not lexical_path.exists()) and agregados_path.exists():
-                df_agregados = pl.read_parquet(str(agregados_path))
-                construir_tabela_pares_descricoes_similares(df_agregados).write_parquet(str(lexical_path))
-
-            semantic_cache_ok = semantic_path.exists() and cache_metadata_matches(
-                semantic_metadata,
-                metodo="semantic",
-                input_base_hash=base_hash,
-                top_k=params_top_k,
-                min_semantic_score=params_threshold,
-                model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-            )
-            if (forcar_recalculo or not semantic_cache_ok) and agregados_path.exists():
-                df_agregados = pl.read_parquet(str(agregados_path))
-                construir_tabela_pares_descricoes_semanticos(
-                    df_agregados,
-                    top_k=params_top_k,
-                    min_semantic_score=params_threshold,
-                ).write_parquet(str(semantic_path))
-                write_vector_cache_metadata(
-                    semantic_metadata_path,
-                    build_vector_cache_metadata(
-                        metodo="semantic",
-                        model_name=str(semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-                        engine=semantic_mode.get("engine") or status_vector.get("engine"),
-                        input_base_hash=base_hash,
-                        top_k=params_top_k,
-                        min_semantic_score=params_threshold,
-                        batch_size=32,
-                    ),
-                )
-                semantic_metadata = read_vector_cache_metadata(semantic_metadata_path)
-
-            hybrid_cache_ok = hybrid_path.exists() and cache_metadata_matches(
-                hybrid_metadata,
-                metodo="hybrid",
-                input_base_hash=base_hash,
-                top_k=params_top_k,
-                min_semantic_score=params_threshold,
-                model_name=str(hybrid_mode.get("model_name") or semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-            )
-            if (forcar_recalculo or not hybrid_cache_ok) and lexical_path.exists() and semantic_path.exists():
-                df_lexical = pl.read_parquet(str(lexical_path))
-                df_semantic = pl.read_parquet(str(semantic_path))
-                construir_tabela_pares_descricoes_hibridos(df_lexical, df_semantic).write_parquet(str(hybrid_path))
-                write_vector_cache_metadata(
-                    metadata_path,
-                    build_vector_cache_metadata(
-                        metodo="hybrid",
-                        model_name=str(hybrid_mode.get("model_name") or semantic_mode.get("model_name") or status_vector.get("model_name") or "semantic"),
-                        engine=hybrid_mode.get("engine") or status_vector.get("engine"),
-                        input_base_hash=base_hash,
-                        top_k=params_top_k,
-                        min_semantic_score=params_threshold,
-                        batch_size=32,
-                    ),
-                )
-                hybrid_metadata = read_vector_cache_metadata(metadata_path)
-
-            if not hybrid_path.exists():
-                return {
-                    "success": True,
-                    "available": True,
-                    "metodo": "hybrid",
-                    "message": "Nenhum par hibrido gerado.",
-                    "file_path": str(hybrid_path),
-                    "cache_metadata": hybrid_metadata,
-                    "data": [],
-                    "page": page_norm,
-                    "page_size": page_size_norm,
-                    "total_file": 0,
-                    "total_filtered": 0,
-                    "total": 0,
-                    "total_pages": 1,
-                    "quick_filter_counts": {"todos": 0, "unirAutomatico": 0, "bloqueios": 0, "revisar": 0},
-                }
-
-            df = pl.read_parquet(str(hybrid_path))
-            selected_path = hybrid_path
-            selected_metadata = hybrid_metadata
-            selected_message = "Pares hibridos carregados."
-            selected_available = True
-            selected_method = "hybrid"
         else:
             pares_path = dir_analises / f"pares_descricoes_similares_{cnpj_limpo}.parquet"
 
@@ -1532,8 +1339,6 @@ async def get_vectorizacao_status(cnpj: str = Query(...)):
         current_base_hash = compute_file_sha1(agregados_path) if agregados_path.exists() else None
         faiss_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_faiss_{cnpj_limpo}.json")
         light_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.json")
-        semantic_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json")
-        hybrid_cache = read_vector_cache_metadata(dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.json")
         return {
             "success": True,
             "status": obter_status_vectorizacao(),
@@ -1546,14 +1351,6 @@ async def get_vectorizacao_status(cnpj: str = Query(...)):
                 "light": {
                     **light_cache,
                     "stale": bool(current_base_hash and light_cache and light_cache.get("input_base_hash") != current_base_hash),
-                },
-                "semantic": {
-                    **semantic_cache,
-                    "stale": bool(current_base_hash and semantic_cache and semantic_cache.get("input_base_hash") != current_base_hash),
-                },
-                "hybrid": {
-                    **hybrid_cache,
-                    "stale": bool(current_base_hash and hybrid_cache and hybrid_cache.get("input_base_hash") != current_base_hash),
                 },
             },
         }
@@ -1619,7 +1416,7 @@ async def clear_vectorizacao_cache(cnpj: str = Query(...), metodo: str = Query("
     metodo_norm = str(metodo or "all").strip().lower()
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
-    if metodo_norm not in {"faiss", "light", "semantic", "hybrid", "all"}:
+    if metodo_norm not in {"faiss", "light", "all"}:
         raise HTTPException(status_code=400, detail="Metodo invalido")
     try:
         import importlib.util
@@ -1643,20 +1440,6 @@ async def clear_vectorizacao_cache(cnpj: str = Query(...), metodo: str = Query("
                 [
                     dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.parquet",
                     dir_analises / f"pares_descricoes_similares_light_{cnpj_limpo}.json",
-                ]
-            )
-        if metodo_norm in {"semantic", "all"}:
-            targets.extend(
-                [
-                    dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.parquet",
-                    dir_analises / f"pares_descricoes_similares_semanticos_{cnpj_limpo}.json",
-                ]
-            )
-        if metodo_norm in {"hybrid", "all"}:
-            targets.extend(
-                [
-                    dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.parquet",
-                    dir_analises / f"pares_descricoes_similares_hibridos_{cnpj_limpo}.json",
                 ]
             )
 

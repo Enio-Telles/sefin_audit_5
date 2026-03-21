@@ -99,7 +99,7 @@ export default function Tabelas() {
   const [localRows, setLocalRows] = useState<Record<string, unknown>[]>([]);
   const [localColumns, setLocalColumns] = useState<string[]>([]);
   const [suggestionSummary, setSuggestionSummary] = useState<{
-    metodo: "lexical" | "light" | "faiss" | "semantic" | "hybrid";
+    metodo: "lexical" | "light" | "faiss";
     totalFile: number;
     totalVisible: number;
   } | null>(null);
@@ -196,10 +196,6 @@ export default function Tabelas() {
     if (match) return { metodo: "light" as const, cnpj: match[1] };
     match = normalized.match(/pares_descricoes_similares_faiss_(\d{14})\.parquet$/i);
     if (match) return { metodo: "faiss" as const, cnpj: match[1] };
-    match = normalized.match(/pares_descricoes_similares_semanticos_(\d{14})\.parquet$/i);
-    if (match) return { metodo: "semantic" as const, cnpj: match[1] };
-    match = normalized.match(/pares_descricoes_similares_hibridos_(\d{14})\.parquet$/i);
-    if (match) return { metodo: "hybrid" as const, cnpj: match[1] };
     match = normalized.match(/pares_descricoes_similares_(\d{14})\.parquet$/i);
     if (match) return { metodo: "lexical" as const, cnpj: match[1] };
     return null;
@@ -383,9 +379,7 @@ export default function Tabelas() {
             ? status.caches?.light
             : suggestionContext.metodo === "faiss"
               ? status.caches?.faiss
-              : suggestionContext.metodo === "semantic"
-                ? status.caches?.semantic
-                : status.caches?.hybrid;
+                : undefined;
           topK = Number(cache?.top_k ?? topK);
           if (suggestionContext.metodo === "light" || suggestionContext.metodo === "faiss") {
             minScore = Number(cache?.min_semantic_score ?? minScore);

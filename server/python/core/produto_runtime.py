@@ -58,10 +58,6 @@ _DETAIL_COLUMNS = [
 ]
 
 
-def produto_pipeline_em_modo_compatibilidade() -> bool:
-    return False
-
-
 def obter_runtime_produtos_status(dir_analises: Path, cnpj: str) -> dict[str, Any]:
     artefatos = {
         "produtos_agregados": dir_analises / f"produtos_agregados_{cnpj}.parquet",
@@ -80,8 +76,6 @@ def obter_runtime_produtos_status(dir_analises: Path, cnpj: str) -> dict[str, An
         files[key] = info
 
     return {
-        "compat_mode": produto_pipeline_em_modo_compatibilidade(),
-        "pipeline_legacy_removed": True,
         "files": files,
     }
 
@@ -465,18 +459,6 @@ def obter_status_vectorizacao() -> dict[str, Any]:
                 "model_name": _FAISS_VECTOR_MODEL_NAME,
                 "engine": "faiss",
             },
-            "semantic": {
-                "available": False,
-                "message": "Modo semantic legado substituido pela opcao FAISS.",
-                "model_name": _FAISS_VECTOR_MODEL_NAME,
-                "engine": "faiss",
-            },
-            "hybrid": {
-                "available": False,
-                "message": "Modo hibrido ainda nao esta habilitado neste runtime.",
-                "model_name": _FAISS_VECTOR_MODEL_NAME,
-                "engine": None,
-            },
         },
     }
 
@@ -543,24 +525,6 @@ def cache_metadata_matches(
         and str(metadata.get("input_base_hash") or "") == str(input_base_hash or "")
         and int(metadata.get("top_k") or 0) == int(top_k)
         and float(metadata.get("min_semantic_score") or 0.0) == float(min_semantic_score)
-    )
-
-
-def construir_tabela_pares_descricoes_semanticos(
-    df_agregados: pl.DataFrame,
-    top_k: int = 8,
-    min_semantic_score: float = 0.32,
-) -> pl.DataFrame:
-    lexical = construir_tabela_pares_descricoes_similares(df_agregados)
-    if lexical.is_empty():
-        return lexical
-    return lexical.with_columns(
-        [
-            pl.lit(None).cast(pl.Float64).alias("score_semantico"),
-            pl.lit("DOCUMENTAL").alias("metodo_similaridade"),
-            pl.lit("DOCUMENT_FLOW_V1").alias("modelo_vetorizacao"),
-            pl.lit("mesmo_fluxo_deterministico").alias("origem_par_hibrido"),
-        ]
     )
 
 
@@ -897,18 +861,6 @@ def construir_tabela_pares_descricoes_light(
         "modelo_vetorizacao": pl.Utf8,
         "origem_par_hibrido": pl.Utf8,
     })
-
-
-def construir_tabela_pares_descricoes_hibridos(df_lexical: pl.DataFrame, df_semantic: pl.DataFrame) -> pl.DataFrame:
-    base = df_semantic if not df_semantic.is_empty() else df_lexical
-    if base.is_empty():
-        return base
-    return base.with_columns(
-        [
-            pl.lit("DOCUMENTAL").alias("metodo_similaridade"),
-            pl.lit("mesmo_fluxo_deterministico").alias("origem_par_hibrido"),
-        ]
-    )
 
 
 def _empty_produtos_result() -> pl.DataFrame:
