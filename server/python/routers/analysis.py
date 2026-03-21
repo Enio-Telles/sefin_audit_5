@@ -93,7 +93,7 @@ import traceback
 import json
 from fastapi import BackgroundTasks
 
-async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_parquet, dir_analises, dir_relatorios):
+async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_parquet, dir_analises, dir_relatorios, dir_sql):
     try:
         import os
         from dotenv import load_dotenv
@@ -115,7 +115,15 @@ async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_
         with conexao.cursor() as cursor:
             cursor.execute("ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'")
             
-            sql_files = sorted(DIR_SQL.glob("*.sql"))
+            from pathlib import Path
+            if not isinstance(dir_sql, Path):
+                dir_sql = Path(dir_sql)
+            if not dir_sql.exists() or not dir_sql.is_dir():
+                raise Exception(f"Diretório SQL inválido ou não encontrado: {dir_sql}")
+
+            sql_files = sorted(dir_sql.glob("*.sql"))
+            if not sql_files:
+                raise Exception(f"Nenhum arquivo .sql encontrado no diretório: {dir_sql}")
             arquivos_extraidos = []
             erros = []
             for sql_file in [f for f in sql_files if f.is_file()]:
@@ -314,7 +322,7 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         DIR_SQL = _sefin_config.DIR_SQL
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
-        background_tasks.add_task(run_audit_pipeline_bg, req, cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
+        background_tasks.add_task(run_audit_pipeline_bg, req, cnpj_limpo, dir_parquet, dir_analises, dir_relatorios, DIR_SQL)
 
         return {
             "success": True, 
