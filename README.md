@@ -21,41 +21,35 @@ O sistema utiliza uma arquitetura híbrida de múltiplos serviços otimizada par
    - **Polars**: Engine principal (substituindo o Pandas) para data wrangling, cruzamentos FFI-boundless e conversão de DataFrames em arquivos `.parquet` para máxima eficiência I/O.
    - Conectividade direta com DW Corporativo usando **oracledb** e geração vetorial de similaridade semântica utilizando o modelo local `SentenceTransformer`.
 
----
-
 ## 🔄 Fluxo Node → Python (Reverse Proxy)
 
 Para isolar o processamento pesado de dados operacionais do Event Loop do Node.js, foi implementada uma ponte em Proxy Streaming:
 
-1. O cliente requisita um processamento (ex: `/api/python/extract-sped`) via fetch/Axios.
+1. O cliente requisita um processamento pesado via fetch/Axios.
 2. O middleware no `server/_core/index.ts` intercepta qualquer request com prefixo `/api/python/*`.
-3. O Node.js atua como um Proxy transparente: clona os headers (removendo `host`), converte verbos HTTP e faz um *Pipe* do buffer de stream `req` do Express para um `fetch()` apontando para a porta interna do FastAPI (padrão: `8001`).
-4. A resposta (seja um JSON de status ou um Blob de arquivo Excel gerado sob demanda) é parseada via `response.arrayBuffer()` e retornada via `res.send()`, mantendo o content-type intacto.
+3. O Node.js atua como um Proxy transparente, fazendo um *Pipe* do buffer de stream `req` do Express para um `fetch()` apontando para a porta interna do FastAPI (padrão: `8001`).
+4. A resposta é parseada e retornada via `res.send()`, mantendo o content-type intacto.
 
----
-
-## 📦 Dependências Necessárias
+## 📦 Pré-requisitos e Instalação
 
 Para configurar o ambiente de desenvolvimento, você precisará dos seguintes artefatos instalados e em seu `PATH`:
 
 - **Node.js** (`v18.0.0` ou superior)
-- **pnpm** (Gerenciador de pacotes otimizado: `npm install -g pnpm`)
+- **pnpm** (`npm install -g pnpm`)
 - **Python** (`3.11` ou superior, recomendado `3.12`)
-- **Oracle Instant Client** (configurado na variável de ambiente de sistema para o driver `oracledb` conectar ao banco SEFIN).
+- **Oracle Instant Client** (configurado no sistema para o driver `oracledb` conectar ao banco SEFIN).
 
----
-
-## 🚀 Instruções Completas de Instalação
+### Instalação e Execução (Desenvolvimento)
 
 A aplicação foi desenhada para orquestrar sua própria inicialização de forma autônoma através do `start.js`.
 
-### 1. Clone o repositório
+1. **Clone o repositório:**
 ```bash
 git clone <url-do-repositorio>
 cd sefin-audit-tool
 ```
 
-### 2. Inicialização Automática (Start Script)
+2. **Inicialização Automática (Start Script):**
 O script automatiza a instalação das dependências Node e Python, criação do arquivo `.env` e inicialização do SQLite via Drizzle.
 
 ```bash
@@ -66,26 +60,9 @@ node start.js
 pnpm run start:all
 ```
 
-*Nota: Em ambientes controlados, você pode instalar manualmente via `pnpm install` e `python -m pip install -r requirements.txt`, rodando as migrações via `pnpm db:push` e os servidores separadamente (`pnpm dev` e `uvicorn api:app --port 8001`).*
+*Nota: Em ambientes controlados, você pode instalar manualmente via `pnpm install` e `python -m pip install -r requirements.txt`, rodando as migrações via `pnpm db:push` e os servidores separadamente (`pnpm dev` para o Node/Vite e `uvicorn api:app --port 8001` no diretório `server/python/`).*
 
----
-
-## 📂 Estrutura de Diretórios
-
-O *monorepo* está organizado nas seguintes camadas:
-
-- `client/`: Todo o código Frontend React. Contém `src/components` (shadcn/ui), `src/pages` (rotas wouter), e `src/lib` (utilitários e tRPC client).
-- `server/`: Backend unificado.
-  - `server/_core/`: Orquestrador Express, proxy Node->Python, integração Vite (para modo dev) e provedores OAuth.
-  - `server/routers/`: Controladores e definições de rotas do tRPC.
-  - `server/python/`: Microsserviço FastAPI (`api.py`), manipulação de DB Oracle e lógica vetorial.
-- `shared/`: Tipos TypeScript (`*.ts`) e esquemas de validação (Zod) compartilhados dinamicamente entre Client e Server.
-- `drizzle/`: Definição de Schemas (`schema.ts`) e arquivos de migração relacional.
-- `cruzamentos/`: Diretório persistente local destinado ao armazenamento em cache e output de arquivos gerados (arquivos Parquet de grandes extrações, logs).
-
----
-
-## ⚙️ Variáveis de Ambiente Necessárias
+## ⚙️ Configuração de Ambiente
 
 Crie um arquivo `.env` na raiz do projeto contendo as variáveis obrigatórias. *Caso não exista, o `start.js` criará um default automaticamente.*
 
@@ -104,56 +81,24 @@ VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
 
 # Configurações do Frontend
 VITE_APP_ID=sefin-audit-tool
-
-# Opcional - Credenciais Oracle (Dependente de configuração do OS)
-# ORACLE_USER=...
-# ORACLE_PASSWORD=...
-# ORACLE_DSN=...
-```
-=======
-# Fiscal Parquet Analyzer
-
-Sistema para extração, análise e agregação de dados fiscais (Oracle -> Parquet -> UI).
-
-## 🚀 Como Iniciar
-
-### Pré-requisitos
-- Python 3.10+
-- Oracle Client / VPN ativa (para extração)
-- Dependências: `pip install polars oracledb PySide6 rich python-dotenv openpyxl python-docx`
-
-### Executando a Interface Gráfica
-```bash
-python src/interface_grafica/main.py
 ```
 
-### Executando o Pipeline (Linha de Comando)
-```bash
-python -m src.orquestrador --cnpj <CNPJ>
-```
+## 📂 Estrutura de Diretórios
 
-## 📁 Estrutura do Projeto
+O projeto está organizado nas seguintes camadas principais:
 
-- `src/`: Código fonte principal.
-  - `extracao/`: Módulos de conexão Oracle e execução SQL.
-  - `transformacao/`: Lógica de processamento e consolidação de dados.
-    - `analise_produtos/`: Itens, Produtos e Enriquecimento.
-  - `interface_grafica/`: Componentes UI (PySide6).
-  - `servicos/`: Camada de serviços e regras de negócio.
-  - `utilitarios/`: Funções auxiliares, validações e exportação.
-- `sql/`: Consultas SQL para extração de dados brutos.
-- `dados/`: Armazenamento de dados (Parquet).
-  - `CNPJ/`: Dados extraídos organizados por CNPJ.
-  - `referencias/`: Tabelas de referência (NCM, SEFIN, CFOP).
-- `docs/`: Documentação técnica e planos de projeto.
-- `workspace/`: Arquivos temporários e estado da aplicação.
+- `client/`: Todo o código Frontend React (shadcn/ui, tRPC client, páginas).
+- `server/`: Backend unificado.
+  - `server/_core/`: Orquestrador Express, proxy Node->Python e integração Vite.
+  - `server/routers/`: Controladores e definições de rotas do tRPC.
+  - `server/python/`: Microsserviço FastAPI (`api.py`), manipulação de DB Oracle e lógica com Polars.
+- `shared/`: Tipos TypeScript (`*.ts`) e esquemas de validação (Zod) compartilhados entre Client e Server.
+- `drizzle/`: Definição de Schemas e migrações do banco de metadados.
+- `cruzamentos/`: Armazenamento em cache e output de arquivos (Parquet, resultados de extrações).
+- `src/`: *Contexto de Legado* - Contém código antigo (como interfaces em PySide6 e scripts CLI autônomos). Esta arquitetura transicional não faz parte do fluxo web principal e é mantida apenas para referência ou migração pontual de rotinas.
 
-## 🛠️ Tecnologias
-- **Polars**: Processamento ultra-rápido de dados.
-- **OracleDB**: Conectividade robusta com banco de dados.
-- **PySide6**: Interface gráfica moderna.
-- **Parquet**: Armazenamento eficiente de grandes volumes de dados.
+## ⚠️ Observações e Limitações
 
-## 📄 Documentação
-Veja a pasta `docs/` para detalhes sobre o mapeamento de colunas e o plano de refatoração.
->>>>>>> funcoes/master
+- **Múltiplos Bancos de Dados:** Lembre-se que dados de negócio e extrações pesadas provêm do Oracle e são salvos como Parquet, enquanto os metadados do sistema (logins, histórico de relatórios) residem no SQLite gerido via Drizzle.
+- **Isolamento de Performance:** Operações que travam a CPU e manipulam DataFrames **devem** ser alocadas no backend Python e chamadas assincronamente (ex: usando `BackgroundTasks` no FastAPI) para não impactar o tempo de resposta da API principal.
+- **Legado:** O antigo "Fiscal Parquet Analyzer" (executado via terminal ou PySide6) encontra-se deprecado na arquitetura atual de microserviços baseada em web. O fluxo oficial de uso é acessar a aplicação pelo navegador em `http://localhost:3000`.
