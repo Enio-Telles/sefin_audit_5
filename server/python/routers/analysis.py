@@ -325,12 +325,23 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         background_tasks.add_task(run_audit_pipeline_bg, req, cnpj_limpo, dir_parquet, dir_analises, dir_relatorios, DIR_SQL)
 
         return {
-            "success": True, 
-            "message": "Auditoria agendada em segundo plano. Verifique o status posteriormente.",
+            "success": True,
             "cnpj": cnpj_limpo,
+            "etapas": [
+                {"etapa": "Extração de Dados", "status": "agendada"},
+                {"etapa": "Cruzamentos e Análises", "status": "agendada"},
+                {"etapa": "Análise de Produtos", "status": "agendada"},
+                {"etapa": "Geração de Relatórios", "status": "agendada"}
+            ],
+            "arquivos_extraidos": [],
+            "arquivos_analises": [],
+            "arquivos_produtos": [],
+            "arquivos_relatorios": [],
+            "erros": [],
             "dir_parquet": str(dir_parquet),
             "dir_analises": str(dir_analises),
-            "dir_relatorios": str(dir_relatorios)
+            "dir_relatorios": str(dir_relatorios),
+            "message": "Auditoria agendada em segundo plano. Verifique o status posteriormente."
         }
     except HTTPException:
         raise
