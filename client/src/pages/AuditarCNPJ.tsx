@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Play, Loader2, Shield, Clock, History, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { useAuditHistory, useAuditDetails, useRunAudit } from "@/hooks/useAuditoria";
+import { useAuditHistory, useAuditDetails, useRunAudit, useAuditPolling } from "@/hooks/useAuditoria";
 import { AuditHistoryList } from "@/components/auditoria/AuditHistoryList";
 import { AuditResultView } from "@/components/auditoria/AuditResultView";
 import type { AuditPipelineResponse } from "@/lib/pythonApi";
@@ -25,11 +25,13 @@ export default function AuditarCNPJ() {
     const [elapsed, setElapsed] = useState<string>("");
     const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
     const [executionResult, setExecutionResult] = useState<AuditPipelineResponse | null>(null);
+    const [activeAuditCnpj, setActiveAuditCnpj] = useState<string | null>(null);
 
     // React Query Hooks
     const { data: history = [], isLoading: isLoadingHistory } = useAuditHistory();
     const { data: historyDetail, isLoading: isLoadingDetail } = useAuditDetails(viewingHistoryCnpj);
     const runAuditMutation = useRunAudit();
+    const pollingQuery = useAuditPolling(activeAuditCnpj);
 
     const formatCnpj = (value: string) => {
         const digits = value.replace(/\D/g, "").slice(0, 14);
@@ -46,6 +48,39 @@ export default function AuditarCNPJ() {
             if (timerInterval) clearInterval(timerInterval);
         };
     }, [timerInterval]);
+
+    // Handle polling results
+    useEffect(() => {
+        if (!activeAuditCnpj || !pollingQuery.data) return;
+
+        const data = pollingQuery.data;
+        const status = data.job_status;
+
+        if (status === "executando") {
+             setCurrentStep(data.message || "Executando auditoria...");
+        } else if (status === "agendada") {
+             setCurrentStep(data.message || "Auditoria agendada...");
+        } else if (status === "concluida") {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                setTimerInterval(null);
+            }
+            setCurrentStep("");
+            setActiveAuditCnpj(null);
+            setExecutionResult(data);
+            toast.success("Auditoria concluída!", {
+                description: `${data.arquivos_extraidos?.length || 0} consultas + ${data.arquivos_analises?.length || 0} análises + ${data.arquivos_relatorios?.length || 0} relatórios`,
+            });
+        } else if (status === "erro") {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                setTimerInterval(null);
+            }
+            setCurrentStep("");
+            setActiveAuditCnpj(null);
+            toast.error("Erro na auditoria", { description: data.message || "Falha no processamento em segundo plano." });
+        }
+    }, [pollingQuery.data, activeAuditCnpj, timerInterval]);
 
     const handleAudit = () => {
         const cnpjLimpo = cnpj.replace(/\D/g, "");
@@ -70,24 +105,17 @@ export default function AuditarCNPJ() {
             { cnpj: cnpjLimpo, dataLimite: dataLimiteProcessamento },
             {
                 onSuccess: (data) => {
-                    clearInterval(interval);
-                    setTimerInterval(null);
-                    const finalDiff = Math.floor((Date.now() - start) / 1000);
-                    const finalMin = Math.floor(finalDiff / 60);
-                    const finalSec = finalDiff % 60;
-                    setElapsed(finalMin > 0 ? `${finalMin}m ${finalSec}s` : `${finalSec}s`);
-                    setCurrentStep("");
-
-                    toast.success("Auditoria completa!", {
-                        description: `${data.arquivos_extraidos.length} consultas + ${data.arquivos_analises.length} análises + ${data.arquivos_relatorios.length} relatórios`,
-                    });
-                    setExecutionResult(data);
+                    // Do not stop timer or show success toast here.
+                    // Just set the active CNPJ to start polling.
+                    setActiveAuditCnpj(cnpjLimpo);
+                    setCurrentStep("Auditoria agendada. Aguardando processamento...");
                 },
                 onError: (err: any) => {
                     clearInterval(interval);
                     setTimerInterval(null);
                     setCurrentStep("");
-                    toast.error("Erro na auditoria", { description: err.message });
+                    setActiveAuditCnpj(null);
+                    toast.error("Erro ao agendar auditoria", { description: err.message });
                 }
             }
         );
@@ -157,14 +185,14 @@ export default function AuditarCNPJ() {
                                     size="lg"
                                     className="h-12 px-8 gap-2"
                                     onClick={handleAudit}
-                                    disabled={runAuditMutation.isPending || cnpj.replace(/\D/g, "").length !== 14}
+                                    disabled={runAuditMutation.isPending || !!activeAuditCnpj || cnpj.replace(/\D/g, "").length !== 14}
                                 >
-                                    {runAuditMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                                    {runAuditMutation.isPending ? "Processando..." : "Iniciar Auditoria"}
+                                    {runAuditMutation.isPending || !!activeAuditCnpj ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
+                                    {runAuditMutation.isPending || !!activeAuditCnpj ? "Processando..." : "Iniciar Auditoria"}
                                 </Button>
                             </div>
 
-                            {runAuditMutation.isPending && (
+                            {(runAuditMutation.isPending || !!activeAuditCnpj) && (
                                 <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 animate-in fade-in">
                                     <div className="flex items-center gap-3">
                                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -180,7 +208,7 @@ export default function AuditarCNPJ() {
                         </CardContent>
                     </Card>
 
-                    {executionResult && !runAuditMutation.isPending && (
+                    {executionResult && !runAuditMutation.isPending && !activeAuditCnpj && (
                         <div className="mt-6">
                             <AuditResultView result={executionResult} elapsed={elapsed} />
                         </div>
