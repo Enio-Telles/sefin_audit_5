@@ -68,7 +68,7 @@ function triggerDownload(blob: Blob, filename: string) {
 // ============================================================
 
 export async function checkHealth() {
-  return request<{ status: string; version: string }>("/health");
+  return request<{ status: string; version: string; engine: string }>("/health");
 }
 
 // ============================================================
