@@ -1962,3 +1962,6 @@ def _build_variacoes_produtos(df_base: pl.DataFrame) -> pl.DataFrame:
         )
         .sort(["qtd_codigos", "qtd_ncm", "qtd_gtin"], descending=[True, True, True])
     )
+
+def produto_pipeline_em_modo_compatibilidade() -> bool:
+    return False
