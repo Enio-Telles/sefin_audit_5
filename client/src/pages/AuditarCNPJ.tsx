@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Loader2, Shield, Clock, History, ArrowLeft } from "lucide-react";
+import { Shield, Play, History, Loader2, Clock, ArrowLeft, CheckCircle2, AlertCircle, XCircle, Circle } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAuditHistory,
@@ -223,7 +223,7 @@ export default function AuditarCNPJ() {
               </div>
 
               {(runAuditMutation.isPending || !!activeAuditCnpj) && (
-                <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 animate-in fade-in">
+                <div className="mt-4 space-y-4 rounded-lg bg-primary/5 border border-primary/20 p-4 animate-in fade-in">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     <div>
@@ -233,6 +233,44 @@ export default function AuditarCNPJ() {
                       </p>
                     </div>
                   </div>
+
+                  {pollingQuery.data?.etapas && pollingQuery.data.etapas.length > 0 && (
+                    <div className="mt-4 space-y-2 border-t border-primary/10 pt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Progresso do Pipeline</p>
+                      {pollingQuery.data.etapas.map((etapa, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm">
+                          {etapa.status === "concluida" ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : etapa.status === "executando" ? (
+                            <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                          ) : etapa.status === "erro" ? (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          ) : (
+                            <Circle className="h-4 w-4 text-muted-foreground/30" />
+                          )}
+                          <span className={etapa.status === "pendente" ? "text-muted-foreground" : "font-medium"}>
+                            {etapa.etapa}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {pollingQuery.data?.erros && pollingQuery.data.erros.length > 0 && (
+                    <div className="mt-4 border-t border-primary/10 pt-4">
+                      <div className="flex items-center gap-2 text-red-500 mb-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-xs font-semibold uppercase tracking-wider">Erros Registrados</span>
+                      </div>
+                      <div className="space-y-1">
+                        {pollingQuery.data.erros.map((erro, idx) => (
+                          <p key={idx} className="text-xs font-mono text-red-400 bg-red-500/10 p-1.5 rounded">
+                            {erro}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
