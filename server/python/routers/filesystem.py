@@ -427,14 +427,22 @@ async def detalhes_historico_cnpj(cnpj: str):
             for f in d.glob(pattern):
                 if f.is_file():
                     st = f.stat()
-                    out.append(
-                        {
-                            "name": f.name,
-                            "path": str(f.resolve()),
-                            "size": st.st_size,
-                            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
-                        }
-                    )
+                    item = {
+                        "name": f.name,
+                        "path": str(f.resolve()),
+                        "size": st.st_size,
+                        "modified": datetime.fromtimestamp(st.st_mtime).isoformat(),
+                    }
+                    if f.suffix == ".parquet":
+                        try:
+                            # Tenta ler schema e row_count do parquet de forma eficiente
+                            schema = pl.scan_parquet(str(f)).collect_schema()
+                            row_count = pl.scan_parquet(str(f)).select(pl.len()).collect().item()
+                            item["columns"] = len(schema.names())
+                            item["rows"] = row_count
+                        except Exception:
+                            pass # Fallback: envia sem rows/columns
+                    out.append(item)
             return sorted(out, key=lambda x: x["name"])
 
         # Separar análises gerais de arquivos de produtos

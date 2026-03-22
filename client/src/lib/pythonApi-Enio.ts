@@ -84,10 +84,12 @@ export async function getProjectPaths() {
 export type AuditFileResult = {
   name: string;
   path: string;
-  rows: number;
-  columns: number;
+  rows?: number;
+  columns?: number;
   query?: string;
   analise?: string;
+  size?: number;
+  modified?: string;
 };
 
 export type AuditReportResult = {
