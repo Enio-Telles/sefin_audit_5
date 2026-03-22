@@ -95,6 +95,10 @@ from fastapi import BackgroundTasks
 
 async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_parquet, dir_analises, dir_relatorios, dir_sql):
     try:
+        status_file = dir_analises / "status_pipeline.json"
+        with open(status_file, "w") as f:
+            json.dump({"status": "executando", "message": "Auditoria em andamento."}, f)
+
         import os
         from dotenv import load_dotenv
         import keyring
@@ -288,7 +292,7 @@ async def run_audit_pipeline_bg(req: AuditPipelineRequest, cnpj_limpo: str, dir_
 
         status_file = dir_analises / "status_pipeline.json"
         with open(status_file, "w") as f:
-            json.dump({"status": "concluido", "arquivos": len(arquivos_extraidos), "detalhes": "Verifique a aba de arquivos gerados"}, f)
+            json.dump({"status": "concluida", "arquivos": len(arquivos_extraidos), "detalhes": "Verifique a aba de arquivos gerados"}, f)
     except Exception as e:
         logger.error(f"[pipeline bg] Erro: {e}\n{traceback.format_exc()}")
         status_file = dir_analises / "status_pipeline.json"
@@ -322,11 +326,16 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         DIR_SQL = _sefin_config.DIR_SQL
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
+        status_file = dir_analises / "status_pipeline.json"
+        with open(status_file, "w") as f:
+            json.dump({"status": "agendada", "message": "Auditoria agendada em segundo plano. Verifique o status posteriormente."}, f)
+
         background_tasks.add_task(run_audit_pipeline_bg, req, cnpj_limpo, dir_parquet, dir_analises, dir_relatorios, DIR_SQL)
 
         return {
             "success": True,
             "cnpj": cnpj_limpo,
+            "job_status": "agendada",
             "etapas": [
                 {"etapa": "Extração de Dados", "status": "agendada"},
                 {"etapa": "Cruzamentos e Análises", "status": "agendada"},
@@ -465,3 +474,60 @@ async def diagnostico_fatores_excel(cnpj: str = Query(...)):
     except Exception as e:
         logger.error("[diagnostico_fatores_excel] Erro: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro ao diagnosticar fatores: {e}")
+
+@router.get("/auditoria/status/{cnpj}")
+async def get_audit_status(cnpj: str):
+    """Retorna o status atual da auditoria baseada no status_pipeline.json e arquivos em disco."""
+    cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
+    if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
+        raise HTTPException(status_code=400, detail="CNPJ inválido")
+
+    import importlib.util
+    import json
+    from routers.filesystem import detalhes_historico_cnpj
+
+    try:
+        _config_path = _PROJETO_DIR / "config.py"
+        _spec = importlib.util.spec_from_file_location("sefin_config", str(_config_path))
+        _sefin_config = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_sefin_config)
+        obter_diretorios_cnpj = _sefin_config.obter_diretorios_cnpj
+        dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
+
+        # Read the current status from json
+        status_file = dir_analises / "status_pipeline.json"
+
+        job_status = "agendada"
+        message = "Auditoria agendada em segundo plano."
+        if status_file.exists():
+            try:
+                with open(status_file, "r") as f:
+                    data = json.load(f)
+                    job_status = data.get("status", job_status)
+                    message = data.get("message", data.get("motivo", data.get("detalhes", message)))
+            except Exception:
+                pass
+
+        # Call the existing filesystem function to get the lists of files
+        detalhes = await detalhes_historico_cnpj(cnpj_limpo)
+
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "job_status": job_status,
+            "message": message,
+            "etapas": detalhes.get("etapas", []),
+            "erros": detalhes.get("erros", []),
+            "arquivos_extraidos": detalhes.get("arquivos_extraidos", []),
+            "arquivos_analises": detalhes.get("arquivos_analises", []),
+            "arquivos_produtos": detalhes.get("arquivos_produtos", []),
+            "arquivos_relatorios": detalhes.get("arquivos_relatorios", []),
+            "dir_parquet": detalhes.get("dir_parquet", str(dir_parquet)),
+            "dir_analises": detalhes.get("dir_analises", str(dir_analises)),
+            "dir_relatorios": detalhes.get("dir_relatorios", str(dir_relatorios)),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[status] Erro: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))

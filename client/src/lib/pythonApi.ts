@@ -126,6 +126,8 @@ export type AuditEtapa = {
 export type AuditPipelineResponse = {
   success: boolean;
   cnpj: string;
+  job_status?: "agendada" | "executando" | "concluida" | "erro";
+  message?: string;
   etapas: AuditEtapa[];
   arquivos_extraidos: AuditFileResult[];
   arquivos_analises: AuditFileResult[];
@@ -142,6 +144,10 @@ export async function runAuditPipeline(cnpj: string, data_limite_processamento?:
     method: "POST",
     body: JSON.stringify({ cnpj, data_limite_processamento: data_limite_processamento || "" }),
   });
+}
+
+export async function getAuditStatus(cnpj: string) {
+  return request<AuditPipelineResponse>(`/auditoria/status/${encodeURIComponent(cnpj)}`);
 }
 
 export type AuditHistorySummary = {

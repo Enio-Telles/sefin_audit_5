@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAuditHistory, getAuditDetails, runAuditPipeline } from "@/lib/pythonApi";
+import { getAuditHistory, getAuditDetails, runAuditPipeline, getAuditStatus } from "@/lib/pythonApi";
 import { toast } from "sonner";
 
 export function useAuditHistory() {
@@ -34,6 +34,24 @@ export function useRunAudit() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auditHistory"] });
+        },
+    });
+}
+
+export function useAuditPolling(cnpj: string | null) {
+    return useQuery({
+        queryKey: ["auditPolling", cnpj],
+        queryFn: async () => {
+            if (!cnpj) return null;
+            return await getAuditStatus(cnpj);
+        },
+        enabled: !!cnpj,
+        refetchInterval: (query) => {
+            const data = query.state.data as any;
+            if (!data) return 3000;
+            const status = data.job_status;
+            if (status === "agendada" || status === "executando") return 3000;
+            return false;
         },
     });
 }
