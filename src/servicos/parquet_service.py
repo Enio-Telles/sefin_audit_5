@@ -17,6 +17,15 @@ class FilterCondition:
 
 
 @dataclass
+class PageRequest:
+    parquet_path: Path
+    conditions: list[FilterCondition]
+    visible_columns: list[str] | None
+    page: int
+    page_size: int = DEFAULT_PAGE_SIZE
+
+
+@dataclass
 class PageResult:
     total_rows: int
     df_all_columns: pl.DataFrame
@@ -117,22 +126,18 @@ class ParquetService:
             lf = self.apply_filters(lf, conditions)
         return lf
 
-    def get_page(
-        self,
-        parquet_path: Path,
-        conditions: list[FilterCondition],
-        visible_columns: list[str] | None,
-        page: int,
-        page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> PageResult:
-        page = max(page, 1)
-        lf_all = self.build_lazyframe(parquet_path, conditions)
+    def get_page(self, request: PageRequest) -> PageResult:
+        page = max(request.page, 1)
+        lf_all = self.build_lazyframe(request.parquet_path, request.conditions)
         total_rows = int(lf_all.select(pl.len().alias("n")).collect().item())
-        all_columns = self.get_schema(parquet_path)
+        all_columns = self.get_schema(request.parquet_path)
+
+        visible_columns = request.visible_columns
         if not visible_columns:
             visible_columns = all_columns[:]
-        offset = (page - 1) * page_size
-        df_all = lf_all.slice(offset, page_size).collect()
+
+        offset = (page - 1) * request.page_size
+        df_all = lf_all.slice(offset, request.page_size).collect()
         df_visible = df_all.select([c for c in visible_columns if c in df_all.columns])
         return PageResult(
             total_rows=total_rows,
