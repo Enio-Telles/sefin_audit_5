@@ -122,8 +122,10 @@ export type AuditFileResult = {
 export type AuditReportResult = {
   name: string;
   path: string;
-  tipo: string;
+  tipo?: string;
   template?: string;
+  size?: number;
+  modified?: string;
 };
 
 export type AuditEtapa = {
@@ -548,6 +550,7 @@ export type AgrupamentoProdutosResponse = {
   qtd_discrepancias?: number;
   qtd_duplicidades?: number;
   qtd_coincidencias?: number;
+  mensagem?: string;
 };
 
 export async function runAgrupamentoProdutos(cnpj: string) {
@@ -561,8 +564,16 @@ export type FatoresConversaoResponse = {
   success: boolean;
   cnpj: string;
   status: string;
-  arquivo_fatores: string;
-  qtd_registros: number;
+  base_unidades?: string;
+  fatores_conversao?: string;
+  fatores_aplicados?: string;
+  qtd_registros?: number;
+  qtd_fator_1?: number;
+  qtd_fator_calculado?: number;
+  qtd_fator_1_forçado?: number;
+  qtd_fator_1_nfe?: number;
+  qtd_sem_fator?: number;
+  mensagem?: string;
 };
 
 export async function calcularFatoresConversao(cnpj: string) {
@@ -577,31 +588,36 @@ export type FatorDiagnosticoItem = {
   severidade: string;
   chave_produto: string;
   ano_referencia?: number | null;
-  unidade_origem: string;
+  unidade_origem?: string;
   fator?: number | null;
-  detalhes: string;
-  sugestao: string;
+  detalhes?: string;
+  sugestao?: string;
 };
 
 export type FatoresDiagnosticoResponse = {
   success: boolean;
   available: boolean;
   cnpj: string;
-  file: string;
+  file?: string;
   message?: string;
-  stats: {
-    total_registros: number;
-    produtos_unicos: number;
-    anos_unicos: number;
-    unidades_unicas: number;
-    editados_manual: number;
-    fatores_invalidos: number;
-    fatores_extremos_altos: number;
-    fatores_extremos_baixos: number;
-    grupos_muitas_unidades: number;
-    grupos_alta_variacao: number;
+  rows?: number;
+  columns?: number;
+  size?: number;
+  modified?: string;
+  sample?: FatorDiagnosticoItem[];
+  issues?: FatorDiagnosticoItem[];
+  stats?: {
+    total_linhas?: number;
+    linhas_com_fator?: number;
+    linhas_com_fator_calculado?: number;
+    anomalias_fator_1?: number;
+    anomalias_fator_extremo?: number;
+    total_registros?: number;
+    produtos_unicos?: number;
+    editados_manual?: number;
+    grupos_alta_variacao?: number;
+    grupos_muitas_unidades?: number;
   };
-  issues: FatorDiagnosticoItem[];
 };
 
 export async function diagnosticarFatoresConversao(cnpj: string) {
@@ -612,8 +628,10 @@ export async function diagnosticarFatoresConversao(cnpj: string) {
 
 export type AplicarAgrupamentoResult = {
   arquivo: string;
-  linhas: number;
+  linhas?: number;
   path: string;
+  size?: number;
+  modified?: string;
 };
 
 export type AplicarAgrupamentoResponse = {
@@ -633,8 +651,10 @@ export type ResolverLoteResponse = {
   success: boolean;
   cnpj: string;
   status: string;
-  mensagem: string;
-  resolvidos: number;
+  mensagem?: string;
+  resolvidos?: number;
+  falhas?: number;
+  erros?: string[];
 };
 
 export async function resolverEmLote(
@@ -651,10 +671,13 @@ export async function resolverEmLote(
 export type ProdutoUnidResponse = {
   success: boolean;
   cnpj: string;
-  file: string;
-  rows: number;
-  columns: number;
-  status: string;
+  file?: string;
+  rows?: number;
+  columns?: number;
+  size?: number;
+  modified?: string;
+  message?: string;
+  error?: string;
 };
 
 export async function unificarProdutosUnidades(cnpj: string) {
@@ -770,15 +793,15 @@ export async function generateDETNotification(
 // ============================================================
 
 export interface DetalhesCodigoItem {
-  fonte: string;
-  codigo: string;
-  descricao: string;
-  ncm: string;
-  cest: string;
-  gtin: string;
-  tipo_item: string;
+  fonte?: string;
+  codigo?: string;
+  descricao?: string;
+  ncm?: string;
+  cest?: string;
+  gtin?: string;
+  tipo_item?: string;
   co_emitente?: string;
-  descr_compl_c170: string;
+  descr_compl_c170?: string;
   [key: string]: any;
 }
 
@@ -922,13 +945,13 @@ export interface UnificacaoLoteApplyResponse {
   cnpj: string;
   action: "UNIFICAR" | "MANTER_SEPARADO";
   rule_id: BatchRuleId;
-  applied_count: number;
-  affected_groups_count: number;
-  skipped_count: number;
-  skipped: Array<{ proposal_id: string; reason: string }>;
-  status_updates_count: number;
+  applied_count?: number;
+  failed_count?: number;
+  status_updates_count?: number;
   mapa_manual_path?: string;
   status_path?: string;
+  message?: string;
+  error?: string;
 }
 
 export interface ParesGruposSimilaresItem {

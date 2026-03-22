@@ -624,7 +624,7 @@ export default function AnaliseProdutos() {
                 <KpiCard label="Altos" value={fatoresAltos} helper="Casos relevantes, mas abaixo do nivel critico." />
                 <KpiCard
                   label="Registros"
-                  value={fatoresQuery.data?.stats.total_registros || 0}
+                  value={fatoresQuery.data?.stats?.total_registros || 0}
                   helper="Total de linhas analisadas no parquet de fatores."
                 />
               </div>

@@ -475,6 +475,16 @@ def obter_arquivos_auditoria(cnpj_limpo: str, dir_parquet: Path, dir_analises: P
                         item["rows"] = row_count
                     except Exception:
                         pass # Fallback: envia sem rows/columns
+
+                # Para arquivos de relatório, tenta inferir tipo
+                if d == dir_relatorios:
+                    if f.suffix == ".docx":
+                        item["tipo"] = "Word (DOCX)"
+                    elif f.suffix in (".txt", ".html"):
+                        item["tipo"] = "Texto/HTML"
+                    else:
+                        item["tipo"] = "Outro"
+
                 # add query derived from name (e.g. name_00000000000191.parquet -> name)
                 if f.stem.endswith(f"_{cnpj_limpo}"):
                     item["query"] = f.stem.replace(f"_{cnpj_limpo}", "")

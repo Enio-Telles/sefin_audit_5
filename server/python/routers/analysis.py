@@ -722,7 +722,7 @@ async def get_audit_status(cnpj: str):
 
     import importlib.util
     import json
-    from routers.filesystem import detalhes_historico_cnpj
+    from routers.filesystem import obter_arquivos_auditoria
 
     try:
         _config_path = _PROJETO_DIR / "config.py"
@@ -739,6 +739,8 @@ async def get_audit_status(cnpj: str):
 
         job_status = "agendada"
         message = "Auditoria agendada em segundo plano."
+        etapas = []
+        erros = []
         if status_file.exists():
             try:
                 with open(status_file, "r") as f:
@@ -747,26 +749,27 @@ async def get_audit_status(cnpj: str):
                     message = data.get(
                         "message", data.get("motivo", data.get("detalhes", message))
                     )
+                    etapas = data.get("etapas", [])
+                    erros = data.get("erros", [])
             except Exception:
                 pass
 
-        # Call the existing filesystem function to get the lists of files
-        detalhes = await detalhes_historico_cnpj(cnpj_limpo)
+        arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
 
         return {
             "success": True,
             "cnpj": cnpj_limpo,
             "job_status": job_status,
             "message": message,
-            "etapas": detalhes.get("etapas", []),
-            "erros": detalhes.get("erros", []),
-            "arquivos_extraidos": detalhes.get("arquivos_extraidos", []),
-            "arquivos_analises": detalhes.get("arquivos_analises", []),
-            "arquivos_produtos": detalhes.get("arquivos_produtos", []),
-            "arquivos_relatorios": detalhes.get("arquivos_relatorios", []),
-            "dir_parquet": detalhes.get("dir_parquet", str(dir_parquet)),
-            "dir_analises": detalhes.get("dir_analises", str(dir_analises)),
-            "dir_relatorios": detalhes.get("dir_relatorios", str(dir_relatorios)),
+            "etapas": etapas,
+            "erros": erros,
+            "arquivos_extraidos": arquivos.get("arquivos_extraidos", []),
+            "arquivos_analises": arquivos.get("arquivos_analises", []),
+            "arquivos_produtos": arquivos.get("arquivos_produtos", []),
+            "arquivos_relatorios": arquivos.get("arquivos_relatorios", []),
+            "dir_parquet": str(dir_parquet),
+            "dir_analises": str(dir_analises),
+            "dir_relatorios": str(dir_relatorios),
         }
     except HTTPException:
         raise

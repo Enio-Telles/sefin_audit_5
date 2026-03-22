@@ -426,17 +426,17 @@ export default function RevisaoFatores() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <StatCard
               label="Registros"
-              value={diagnostico.stats.total_registros}
+              value={diagnostico.stats?.total_registros ?? 0}
               helper="Total de linhas avaliadas no parquet de fatores."
             />
             <StatCard
               label="Produtos"
-              value={diagnostico.stats.produtos_unicos}
+              value={diagnostico.stats?.produtos_unicos ?? 0}
               helper="Produtos distintos com fatores cadastrados."
             />
             <StatCard
               label="Editados manual"
-              value={diagnostico.stats.editados_manual}
+              value={diagnostico.stats?.editados_manual ?? 0}
               helper="Linhas ja alteradas fora do calculo automatico."
               accent
             />
@@ -447,12 +447,12 @@ export default function RevisaoFatores() {
             />
             <StatCard
               label="Alta variacao"
-              value={diagnostico.stats.grupos_alta_variacao}
+              value={diagnostico.stats?.grupos_alta_variacao ?? 0}
               helper="Produto/ano com divergencia relevante entre fatores."
             />
             <StatCard
               label="Muitas unidades"
-              value={diagnostico.stats.grupos_muitas_unidades}
+              value={diagnostico.stats?.grupos_muitas_unidades ?? 0}
               helper="Produto/ano com excesso de unidades concorrentes."
             />
           </div>
