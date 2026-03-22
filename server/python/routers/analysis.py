@@ -98,6 +98,59 @@ import json
 from fastapi import BackgroundTasks
 
 
+
+def atualizar_status_pipeline(
+    dir_analises,
+    status: str,
+    message: str,
+    etapas: list[dict] = None,
+    erros: list[str] = None,
+):
+    import json
+    from datetime import datetime
+
+    status_file = dir_analises / "status_pipeline.json"
+
+    current_data = {
+        "status": "agendada",
+        "message": "Auditoria agendada em segundo plano.",
+        "etapas": [
+            {"etapa": "Extração de Dados", "status": "pendente"},
+            {"etapa": "Cruzamentos e Análises", "status": "pendente"},
+            {"etapa": "Análise de Produtos", "status": "pendente"},
+            {"etapa": "Geração de Relatórios", "status": "pendente"},
+        ],
+        "erros": [],
+    }
+
+    if status_file.exists():
+        try:
+            with open(status_file, "r") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    current_data.update(loaded)
+        except Exception:
+            pass
+
+    current_data["status"] = status
+    current_data["message"] = message
+    if etapas is not None:
+        for idx, current_etapa in enumerate(current_data["etapas"]):
+            for new_etapa in etapas:
+                if current_etapa["etapa"] == new_etapa["etapa"]:
+                    current_data["etapas"][idx].update(new_etapa)
+
+    if erros is not None:
+        current_data["erros"] = erros
+
+    current_data["updated_at"] = datetime.now().isoformat()
+
+    try:
+        with open(status_file, "w") as f:
+            json.dump(current_data, f, indent=2)
+    except Exception as e:
+        logger.error(f"[pipeline] Erro ao atualizar status: {e}")
+
 async def run_audit_pipeline_bg(
     req: AuditPipelineRequest,
     cnpj_limpo: str,
@@ -107,9 +160,18 @@ async def run_audit_pipeline_bg(
     dir_sql,
 ):
     try:
-        status_file = dir_analises / "status_pipeline.json"
-        with open(status_file, "w") as f:
-            json.dump({"status": "executando", "message": "Auditoria em andamento."}, f)
+        erros = []
+        atualizar_status_pipeline(
+            dir_analises,
+            "executando",
+            "Auditoria em andamento.",
+            etapas=[
+                {"etapa": "Extração de Dados", "status": "executando"},
+                {"etapa": "Cruzamentos e Análises", "status": "pendente"},
+                {"etapa": "Análise de Produtos", "status": "pendente"},
+                {"etapa": "Geração de Relatórios", "status": "pendente"},
+            ]
+        )
 
         import os
         from dotenv import load_dotenv
@@ -225,11 +287,43 @@ async def run_audit_pipeline_bg(
 
         conexao.close()
 
+        if erros:
+            atualizar_status_pipeline(
+                dir_analises,
+                "executando",
+                "Erros detectados na extração. Prosseguindo...",
+                etapas=[{"etapa": "Extração de Dados", "status": "erro", "motivo": "Ver erros"}],
+                erros=erros
+            )
+        else:
+            atualizar_status_pipeline(
+                dir_analises,
+                "executando",
+                "Extração concluída.",
+                etapas=[{"etapa": "Extração de Dados", "status": "concluida"}],
+            )
+
+        atualizar_status_pipeline(
+            dir_analises,
+            "executando",
+            "Iniciando cruzamentos e análises...",
+            etapas=[{"etapa": "Cruzamentos e Análises", "status": "executando"}]
+        )
+
         # ETAPA 2: Análises
         from gerar_relatorio import gerar_relatorio_jinja, gerar_resumo_txt
 
         arquivos_analises = []
         arquivos_produtos = []
+        atualizar_status_pipeline(
+            dir_analises,
+            "executando",
+            "Iniciando unificação de produtos...",
+            etapas=[
+                {"etapa": "Cruzamentos e Análises", "status": "concluida"},
+                {"etapa": "Análise de Produtos", "status": "executando"}
+            ]
+        )
 
         try:
             # 1. Unificação Master (único pipeline de produtos — produto_unid.py)
@@ -335,13 +429,33 @@ async def run_audit_pipeline_bg(
                             }
                         )
 
+
+            atualizar_status_pipeline(
+                dir_analises,
+                "executando",
+                "Unificação Master e Produtos concluída.",
+                etapas=[{"etapa": "Análise de Produtos", "status": "concluida"}],
+            )
         except HTTPException:
             raise
         except Exception as e:
             erros.append(f"Processamento de Produtos: {str(e)}")
             logger.error(f"[audit_pipeline] Erro em Produtos: {e}")
+            atualizar_status_pipeline(
+                dir_analises,
+                "executando",
+                "Erro no processamento de produtos.",
+                etapas=[{"etapa": "Análise de Produtos", "status": "erro", "motivo": str(e)}],
+                erros=erros
+            )
 
         # ETAPA 3: Relatórios
+        atualizar_status_pipeline(
+            dir_analises,
+            "executando",
+            "Iniciando geração de relatórios...",
+            etapas=[{"etapa": "Geração de Relatórios", "status": "executando"}]
+        )
         arquivos_relatorios = []
         try:
             dir_modelos = _PROJETO_DIR / "modelos_word"
@@ -361,22 +475,24 @@ async def run_audit_pipeline_bg(
         except Exception as e:
             erros.append(f"Relatórios: {str(e)}")
 
-        status_file = dir_analises / "status_pipeline.json"
-        with open(status_file, "w") as f:
-            json.dump(
-                {
-                    "status": "concluida",
-                    "arquivos": len(arquivos_extraidos),
-                    "detalhes": "Verifique a aba de arquivos gerados",
-                },
-                f,
-            )
+        atualizar_status_pipeline(
+            dir_analises,
+            "concluida" if not erros else "erro",
+            "Verifique a aba de arquivos gerados" if not erros else "Auditoria concluída com erros.",
+            etapas=[{"etapa": "Geração de Relatórios", "status": "concluida" if not any("Relatórios" in e for e in erros) else "erro"}],
+            erros=erros
+        )
     except Exception as e:
         logger.error(f"[pipeline bg] Erro: {e}\n{traceback.format_exc()}")
-        status_file = dir_analises / "status_pipeline.json"
         try:
-            with open(status_file, "w") as f:
-                json.dump({"status": "erro", "motivo": str(e)}, f)
+            erros_final = erros if 'erros' in locals() else []
+            erros_final.append(str(e))
+            atualizar_status_pipeline(
+                dir_analises,
+                "erro",
+                str(e),
+                erros=erros_final
+            )
         except Exception:
             pass
 

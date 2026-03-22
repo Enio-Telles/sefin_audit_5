@@ -422,11 +422,24 @@ async def detalhes_historico_cnpj(cnpj: str):
 
         arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
 
+        import json
+        etapas_salvas = []
+        erros_salvos = []
+        status_file = dir_analises / "status_pipeline.json"
+        if status_file.exists():
+            try:
+                with open(status_file, "r") as f:
+                    data = json.load(f)
+                    etapas_salvas = data.get("etapas", [])
+                    erros_salvos = data.get("erros", [])
+            except Exception:
+                pass
+
         return {
             "success": True,
             "cnpj": cnpj_limpo,
-            "etapas": [],
-            "erros": [],
+            "etapas": etapas_salvas,
+            "erros": erros_salvos,
             **arquivos,
             "dir_parquet": str(dir_parquet),
             "dir_analises": str(dir_analises),
