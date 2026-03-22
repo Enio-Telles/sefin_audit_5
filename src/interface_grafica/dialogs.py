@@ -1,12 +1,9 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
