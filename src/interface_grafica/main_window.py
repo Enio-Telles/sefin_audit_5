@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import polars as pl
 from PySide6.QtCore import QDate, QThread, Qt, Signal, QUrl
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -29,7 +27,6 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabWidget,
     QTableView,
-    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -57,7 +54,7 @@ from src.interface_grafica.dialogs import (
     DialogoSelecaoConsultas,
     DialogoSelecaoTabelas,
 )
-from src.utilitarios.text import display_cell, normalize_text, remove_accents
+from src.utilitarios.text import remove_accents
 
 
 class PipelineWorker(QThread):
@@ -680,16 +677,19 @@ class MainWindow(QMainWindow):
             return
 
         consultas_disp = self.servico_pipeline_funcoes.servico_extracao.listar_consultas()
-        if not consultas_disp: return
+        if not consultas_disp:
+            return
         
         ui_state = self.state_service.load_state()
         last_sqls = ui_state.get("last_sqls", [])
         dlg_sql = DialogoSelecaoConsultas(consultas_disp, pre_selecionados=last_sqls, parent=self)
-        if not dlg_sql.exec(): return
+        if not dlg_sql.exec():
+            return
         sql_selecionados = dlg_sql.consultas_selecionadas()
         self.state_service.save_state({"last_sqls": [p.stem for p in sql_selecionados]})
 
-        if not sql_selecionados: return
+        if not sql_selecionados:
+            return
 
         self.status.showMessage(f"Extraindo dados para {cnpj}...")
         data_limite = self.date_input.date().toString("dd/MM/yyyy")
@@ -704,7 +704,7 @@ class MainWindow(QMainWindow):
         if not cnpj:
             try:
                 cnpj = self.servico_pipeline_funcoes.servico_extracao.sanitizar_cnpj(self.cnpj_input.text())
-            except:
+            except Exception:
                 self.show_error("Erro", "Selecione um CNPJ ou digite no campo.")
                 return
 
@@ -712,11 +712,13 @@ class MainWindow(QMainWindow):
         ui_state = self.state_service.load_state()
         last_tabs = ui_state.get("last_tabelas", [])
         dlg_tab = DialogoSelecaoTabelas(tabelas_disp, pre_selecionados=last_tabs, parent=self)
-        if not dlg_tab.exec(): return
+        if not dlg_tab.exec():
+            return
         tabelas_selecionadas = dlg_tab.tabelas_selecionadas()
         self.state_service.save_state({"last_tabelas": tabelas_selecionadas})
 
-        if not tabelas_selecionadas: return
+        if not tabelas_selecionadas:
+            return
 
         self.status.showMessage(f"Processando dados localmente para {cnpj}...")
         self.pipeline_worker = PipelineWorker(
@@ -726,7 +728,8 @@ class MainWindow(QMainWindow):
 
     def delete_processed_data(self) -> None:
         cnpj = self.state.current_cnpj
-        if not cnpj: return
+        if not cnpj:
+            return
         
         ans = QMessageBox.question(self, "Confirmar exclusão", f"Deseja excluir apenas as tabelas geradas (pasta analises) do CNPJ {cnpj}?", QMessageBox.Yes | QMessageBox.No)
         if ans == QMessageBox.Yes:
@@ -738,7 +741,8 @@ class MainWindow(QMainWindow):
 
     def delete_cnpj_full(self) -> None:
         cnpj = self.state.current_cnpj
-        if not cnpj: return
+        if not cnpj:
+            return
         
         ans = QMessageBox.warning(self, "PERIGO", f"Deseja excluir TODOS os dados (Extrações + Análises) do CNPJ {cnpj}?\nEsta ação não pode ser desfeita.", QMessageBox.Yes | QMessageBox.No)
         if ans == QMessageBox.Yes:
@@ -1245,12 +1249,14 @@ class MainWindow(QMainWindow):
     def recalcular_padroes_agregacao(self) -> None:
         """Invoca o serviço para recalcular todos os padrões do CNPJ atual."""
         cnpj = self.state.current_cnpj
-        if not cnpj: return
+        if not cnpj:
+            return
         
         ret = QMessageBox.question(self, "Recalcular Padrões", 
                                    "Isso irá atualizar NCM, CEST, GTIN, UNID e SEFIN de TODOS os grupos baseando-se na moda dos itens originais.\nProsseguir?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if ret == QMessageBox.StandardButton.No: return
+        if ret == QMessageBox.StandardButton.No:
+            return
         
         try:
             ok = self.servico_agregacao.recalcular_todos_padroes(cnpj)
@@ -1265,12 +1271,14 @@ class MainWindow(QMainWindow):
     def recalcular_totais_agregacao(self) -> None:
         """Invoca o serviço para recalcular totais de entrada/saída do CNPJ atual."""
         cnpj = self.state.current_cnpj
-        if not cnpj: return
+        if not cnpj:
+            return
         
         ret = QMessageBox.question(self, "Recalcular Totais", 
                                    "Isso irá calcular os totais de Entrada (C170) e Saída (NFe) para todos os produtos (apenas operações mercantis).\nProsseguir?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if ret == QMessageBox.StandardButton.No: return
+        if ret == QMessageBox.StandardButton.No:
+            return
         
         self.status.showMessage("Calculando totais de valores...")
         try:
@@ -1295,7 +1303,8 @@ class MainWindow(QMainWindow):
     def atualizar_tabelas_agregacao(self) -> None:
         """Atualiza os modelos das tabelas de agregação."""
         cnpj = self.state.current_cnpj
-        if not cnpj: return
+        if not cnpj:
+            return
         
         path = self.servico_agregacao.caminho_tabela_editavel(cnpj)
         if path.exists():
