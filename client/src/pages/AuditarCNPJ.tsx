@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Loader2, Shield, Clock, History, ArrowLeft } from "lucide-react";
+import { Play, Loader2, Shield, Clock, History, ArrowLeft, CheckCircle2, XCircle, Circle } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAuditHistory,
@@ -224,7 +224,7 @@ export default function AuditarCNPJ() {
 
               {(runAuditMutation.isPending || !!activeAuditCnpj) && (
                 <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 animate-in fade-in">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-4">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     <div>
                       <p className="text-sm font-medium">{currentStep}</p>
@@ -233,6 +233,40 @@ export default function AuditarCNPJ() {
                       </p>
                     </div>
                   </div>
+
+                  {pollingQuery.data?.etapas && pollingQuery.data.etapas.length > 0 && (
+                    <div className="space-y-3 pl-2 border-l-2 border-border/50 ml-2">
+                      {pollingQuery.data.etapas.map((etapa: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          {etapa.status === "concluida" ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : etapa.status === "executando" ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          ) : etapa.status === "erro" ? (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          ) : (
+                            <Circle className="h-4 w-4 text-muted-foreground/30" />
+                          )}
+                          <span
+                            className={`text-sm ${etapa.status === "executando" ? "font-medium text-foreground" : etapa.status === "pendente" ? "text-muted-foreground" : "text-foreground"}`}
+                          >
+                            {etapa.etapa}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {pollingQuery.data?.erros && pollingQuery.data.erros.length > 0 && (
+                    <div className="mt-4 p-3 rounded-md bg-red-500/10 border border-red-500/20">
+                      <p className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">Erros acumulados:</p>
+                      <ul className="text-xs text-red-600 dark:text-red-400 list-disc pl-4 space-y-1">
+                        {pollingQuery.data.erros.map((erro: string, idx: number) => (
+                          <li key={idx}>{erro}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

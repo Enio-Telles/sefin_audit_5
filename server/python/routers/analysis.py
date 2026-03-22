@@ -98,7 +98,27 @@ import json
 from fastapi import BackgroundTasks
 
 
+
+def atualizar_status_pipeline(status_file: 'pathlib.Path', **kwargs):
+    import pathlib
+    """Atualiza o arquivo de status do pipeline de forma mesclada, preservando campos não mencionados."""
+    import json
+    data = {}
+    if status_file.exists():
+        try:
+            with open(status_file, "r") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    data.update(kwargs)
+    try:
+        with open(status_file, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"[audit_pipeline] Erro ao salvar status_pipeline.json: {e}")
+
 async def run_audit_pipeline_bg(
+
     req: AuditPipelineRequest,
     cnpj_limpo: str,
     dir_parquet,
@@ -108,8 +128,21 @@ async def run_audit_pipeline_bg(
 ):
     try:
         status_file = dir_analises / "status_pipeline.json"
-        with open(status_file, "w") as f:
-            json.dump({"status": "executando", "message": "Auditoria em andamento."}, f)
+        etapas = [
+            {"etapa": "Extração de Dados", "status": "pendente"},
+            {"etapa": "Cruzamentos e Análises", "status": "pendente"},
+            {"etapa": "Análise de Produtos", "status": "pendente"},
+            {"etapa": "Geração de Relatórios", "status": "pendente"},
+        ]
+        erros_pipeline = []
+
+        atualizar_status_pipeline(
+            status_file,
+            status="executando",
+            message="Iniciando auditoria...",
+            etapas=etapas,
+            erros=erros_pipeline
+        )
 
         import os
         from dotenv import load_dotenv
@@ -117,6 +150,8 @@ async def run_audit_pipeline_bg(
         import oracledb
 
         # ETAPA 1: Extração
+        etapas[0]["status"] = "executando"
+        atualizar_status_pipeline(status_file, message="Extraindo dados do Oracle...", etapas=etapas)
         load_dotenv(dotenv_path=str(_PROJETO_DIR / ".env"), override=True)
         saved_user = os.getenv("SAVED_ORACLE_USER", "").strip().strip("'").strip('"')
         if not saved_user:
@@ -225,7 +260,18 @@ async def run_audit_pipeline_bg(
 
         conexao.close()
 
+        if erros:
+            erros_pipeline.extend(erros)
+
+        etapas[0]["status"] = "erro" if not arquivos_extraidos and erros else "concluida"
+        atualizar_status_pipeline(status_file, etapas=etapas, erros=erros_pipeline)
+
         # ETAPA 2: Análises
+        etapas[1]["status"] = "executando"
+        etapas[2]["status"] = "executando" # Ambas rodam no mesmo bloco atual
+        atualizar_status_pipeline(status_file, message="Processando análises e produtos...", etapas=etapas)
+
+        erros_etapa2 = []
         from gerar_relatorio import gerar_relatorio_jinja, gerar_resumo_txt
 
         arquivos_analises = []
@@ -338,10 +384,23 @@ async def run_audit_pipeline_bg(
         except HTTPException:
             raise
         except Exception as e:
-            erros.append(f"Processamento de Produtos: {str(e)}")
+            erros_etapa2.append(f"Processamento de Produtos: {str(e)}")
             logger.error(f"[audit_pipeline] Erro em Produtos: {e}")
 
+        if erros_etapa2:
+            erros_pipeline.extend(erros_etapa2)
+            etapas[1]["status"] = "erro" if not arquivos_produtos and not arquivos_analises else "concluida"
+            etapas[2]["status"] = "erro" if not arquivos_produtos else "concluida"
+        else:
+            etapas[1]["status"] = "concluida"
+            etapas[2]["status"] = "concluida"
+
+        atualizar_status_pipeline(status_file, etapas=etapas, erros=erros_pipeline)
+
         # ETAPA 3: Relatórios
+        etapas[3]["status"] = "executando"
+        atualizar_status_pipeline(status_file, message="Gerando relatórios e resumos...", etapas=etapas)
+        erros_etapa3 = []
         arquivos_relatorios = []
         try:
             dir_modelos = _PROJETO_DIR / "modelos_word"
@@ -359,26 +418,39 @@ async def run_audit_pipeline_bg(
             if res_txt:
                 arquivos_relatorios.append(res_txt)
         except Exception as e:
-            erros.append(f"Relatórios: {str(e)}")
+            erros_etapa3.append(f"Relatórios: {str(e)}")
 
-        status_file = dir_analises / "status_pipeline.json"
-        with open(status_file, "w") as f:
-            json.dump(
-                {
-                    "status": "concluida",
-                    "arquivos": len(arquivos_extraidos),
-                    "detalhes": "Verifique a aba de arquivos gerados",
-                },
-                f,
-            )
+        if erros_etapa3:
+            erros_pipeline.extend(erros_etapa3)
+            etapas[3]["status"] = "erro" if not arquivos_relatorios else "concluida"
+        else:
+            etapas[3]["status"] = "concluida"
+
+        atualizar_status_pipeline(
+            status_file,
+            status="concluida" if not erros_pipeline else "erro",
+            message="Auditoria finalizada com alertas" if erros_pipeline else "Auditoria concluída com sucesso.",
+            arquivos=len(arquivos_extraidos),
+            detalhes="Verifique a aba de arquivos gerados",
+            etapas=etapas,
+            erros=erros_pipeline
+        )
     except Exception as e:
         logger.error(f"[pipeline bg] Erro: {e}\n{traceback.format_exc()}")
-        status_file = dir_analises / "status_pipeline.json"
-        try:
-            with open(status_file, "w") as f:
-                json.dump({"status": "erro", "motivo": str(e)}, f)
-        except Exception:
-            pass
+        erros_pipeline.append(str(e))
+        # Marcar qualquer etapa 'executando' ou 'pendente' como 'erro'
+        for etapa in etapas:
+            if etapa["status"] in ["executando", "pendente"]:
+                etapa["status"] = "erro"
+
+        atualizar_status_pipeline(
+            status_file,
+            status="erro",
+            motivo=str(e),
+            message=f"Falha na auditoria: {str(e)}",
+            etapas=etapas,
+            erros=erros_pipeline
+        )
 
 
 @router.post("/auditoria/pipeline")
@@ -623,6 +695,8 @@ async def get_audit_status(cnpj: str):
 
         job_status = "agendada"
         message = "Auditoria agendada em segundo plano."
+        etapas_json = []
+        erros_json = []
         if status_file.exists():
             try:
                 with open(status_file, "r") as f:
@@ -631,6 +705,8 @@ async def get_audit_status(cnpj: str):
                     message = data.get(
                         "message", data.get("motivo", data.get("detalhes", message))
                     )
+                    etapas_json = data.get("etapas", [])
+                    erros_json = data.get("erros", [])
             except Exception:
                 pass
 
@@ -642,8 +718,8 @@ async def get_audit_status(cnpj: str):
             "cnpj": cnpj_limpo,
             "job_status": job_status,
             "message": message,
-            "etapas": detalhes.get("etapas", []),
-            "erros": detalhes.get("erros", []),
+            "etapas": etapas_json or detalhes.get("etapas", []),
+            "erros": erros_json or detalhes.get("erros", []),
             "arquivos_extraidos": detalhes.get("arquivos_extraidos", []),
             "arquivos_analises": detalhes.get("arquivos_analises", []),
             "arquivos_produtos": detalhes.get("arquivos_produtos", []),
