@@ -22,7 +22,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-async function downloadFile(path: string, options?: RequestInit): Promise<Blob> {
+async function downloadFile(
+  path: string,
+  options?: RequestInit
+): Promise<Blob> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
@@ -55,7 +58,9 @@ function triggerDownload(blob: Blob, filename: string) {
 // ============================================================
 
 export async function checkHealth() {
-  return request<{ status: string; version: string; engine: string }>("/health");
+  return request<{ status: string; version: string; engine: string }>(
+    "/health"
+  );
 }
 
 // ============================================================
@@ -101,23 +106,48 @@ export type AuditEtapa = {
   analises?: { nome: string; status: string; motivo?: string }[];
 };
 
-export type AuditPipelineResponse = {
+export type AuditPipelineBaseResponse = {
   success: boolean;
   cnpj: string;
-  etapas: AuditEtapa[];
-  arquivos_extraidos: AuditFileResult[];
-  arquivos_analises: AuditFileResult[];
-  arquivos_relatorios: AuditReportResult[];
-  erros: string[];
+  message?: string;
   dir_parquet: string;
   dir_analises: string;
   dir_relatorios: string;
 };
 
-export async function runAuditPipeline(cnpj: string, data_limite_processamento?: string) {
-  return request<AuditPipelineResponse>("/auditoria/pipeline", {
+export type AuditPipelineStartResponse = AuditPipelineBaseResponse & {
+  job_status: "agendada";
+};
+
+export type AuditPipelineStatusResponse = AuditPipelineBaseResponse & {
+  job_status: "agendada" | "executando" | "concluida" | "erro";
+  etapas: AuditEtapa[];
+  erros: string[];
+  arquivos_extraidos: AuditFileResult[];
+  arquivos_analises: AuditFileResult[];
+  arquivos_produtos: AuditFileResult[];
+  arquivos_relatorios: AuditReportResult[];
+};
+
+export type AuditPipelineFinalResult = AuditPipelineBaseResponse & {
+  etapas: AuditEtapa[];
+  erros: string[];
+  arquivos_extraidos: AuditFileResult[];
+  arquivos_analises: AuditFileResult[];
+  arquivos_produtos: AuditFileResult[];
+  arquivos_relatorios: AuditReportResult[];
+};
+
+export async function runAuditPipeline(
+  cnpj: string,
+  data_limite_processamento?: string
+) {
+  return request<AuditPipelineStartResponse>("/auditoria/pipeline", {
     method: "POST",
-    body: JSON.stringify({ cnpj, data_limite_processamento: data_limite_processamento || "" }),
+    body: JSON.stringify({
+      cnpj,
+      data_limite_processamento: data_limite_processamento || "",
+    }),
   });
 }
 
@@ -131,11 +161,15 @@ export type AuditHistorySummary = {
 };
 
 export async function getAuditHistory() {
-  return request<{ success: boolean; historico: AuditHistorySummary[] }>("/auditoria/historico");
+  return request<{ success: boolean; historico: AuditHistorySummary[] }>(
+    "/auditoria/historico"
+  );
 }
 
 export async function getAuditDetails(cnpj: string) {
-  return request<AuditPipelineResponse>(`/auditoria/historico/${encodeURIComponent(cnpj)}`);
+  return request<AuditPipelineFinalResult>(
+    `/auditoria/historico/${encodeURIComponent(cnpj)}`
+  );
 }
 
 // ============================================================
@@ -176,7 +210,10 @@ export async function runBatchAudit(data: LoteCNPJRequest) {
 }
 
 export async function getAvailableQueries() {
-  return request<{ success: boolean; consultas: { id: string; nome: string }[] }>("/auditoria/consultas");
+  return request<{
+    success: boolean;
+    consultas: { id: string; nome: string }[];
+  }>("/auditoria/consultas");
 }
 
 // ============================================================
@@ -233,27 +270,42 @@ export type OracleConnectionConfig = {
 };
 
 export async function testOracleConnection(config: OracleConnectionConfig) {
-  return request<{ success: boolean; message: string }>("/oracle/test-connection", {
-    method: "POST",
-    body: JSON.stringify(config),
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/test-connection",
+    {
+      method: "POST",
+      body: JSON.stringify(config),
+    }
+  );
 }
 
 export async function getOracleCredentials() {
-  return request<{ success: boolean; has_credentials: boolean; user?: string; password?: string; message?: string }>("/oracle/credentials");
+  return request<{
+    success: boolean;
+    has_credentials: boolean;
+    user?: string;
+    password?: string;
+    message?: string;
+  }>("/oracle/credentials");
 }
 
 export async function saveOracleCredentials(config: OracleConnectionConfig) {
-  return request<{ success: boolean; message: string }>("/oracle/save-credentials", {
-    method: "POST",
-    body: JSON.stringify(config),
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/save-credentials",
+    {
+      method: "POST",
+      body: JSON.stringify(config),
+    }
+  );
 }
 
 export async function clearOracleCredentials() {
-  return request<{ success: boolean; message: string }>("/oracle/clear-credentials", {
-    method: "DELETE",
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/clear-credentials",
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 export type ExtractionRequest = {
@@ -277,10 +329,11 @@ export type ExtractionResult = {
 };
 
 export async function extractOracleData(req: ExtractionRequest) {
-  return request<{ success: boolean; results: ExtractionResult[]; output_dir: string }>(
-    "/oracle/extract",
-    { method: "POST", body: JSON.stringify(req) }
-  );
+  return request<{
+    success: boolean;
+    results: ExtractionResult[];
+    output_dir: string;
+  }>("/oracle/extract", { method: "POST", body: JSON.stringify(req) });
 }
 
 // ============================================================
@@ -300,9 +353,11 @@ export type ParquetFileInfo = {
 };
 
 export async function listParquetFiles(directory: string) {
-  return request<{ directory: string; files: ParquetFileInfo[]; count: number }>(
-    `/parquet/list?directory=${encodeURIComponent(directory)}`
-  );
+  return request<{
+    directory: string;
+    files: ParquetFileInfo[];
+    count: number;
+  }>(`/parquet/list?directory=${encodeURIComponent(directory)}`);
 }
 
 export type ParquetReadResponse = {
@@ -344,20 +399,28 @@ export async function writeParquetCell(params: {
 }
 
 export async function addParquetRow(file_path: string) {
-  return request<{ success: boolean; new_row_count: number }>("/parquet/add-row", {
-    method: "POST",
-    body: JSON.stringify({ file_path }),
-  });
-}
-
-export async function addParquetColumn(file_path: string, column_name: string, default_value = "") {
-  return request<{ success: boolean; column_name: string; total_columns: number }>(
-    "/parquet/add-column",
+  return request<{ success: boolean; new_row_count: number }>(
+    "/parquet/add-row",
     {
       method: "POST",
-      body: JSON.stringify({ file_path, column_name, default_value }),
+      body: JSON.stringify({ file_path }),
     }
   );
+}
+
+export async function addParquetColumn(
+  file_path: string,
+  column_name: string,
+  default_value = ""
+) {
+  return request<{
+    success: boolean;
+    column_name: string;
+    total_columns: number;
+  }>("/parquet/add-column", {
+    method: "POST",
+    body: JSON.stringify({ file_path, column_name, default_value }),
+  });
 }
 
 export async function getUniqueValues(file_path: string, column: string) {
@@ -406,16 +469,31 @@ export async function validateCnpj(cnpj: string) {
 // Export Excel
 // ============================================================
 
-export async function exportToExcel(source_files: string[], output_dir: string) {
-  return request<{ success: boolean; results: { file: string; output?: string; rows?: number; status: string; message?: string }[] }>(
-    "/export/excel",
-    { method: "POST", body: JSON.stringify({ source_files, output_dir }) }
-  );
+export async function exportToExcel(
+  source_files: string[],
+  output_dir: string
+) {
+  return request<{
+    success: boolean;
+    results: {
+      file: string;
+      output?: string;
+      rows?: number;
+      status: string;
+      message?: string;
+    }[];
+  }>("/export/excel", {
+    method: "POST",
+    body: JSON.stringify({ source_files, output_dir }),
+  });
 }
 
 export async function downloadExcel(file_path: string) {
-  const blob = await downloadFile(`/export/excel-download?file_path=${encodeURIComponent(file_path)}`);
-  const filename = file_path.split("/").pop()?.replace(".parquet", ".xlsx") || "export.xlsx";
+  const blob = await downloadFile(
+    `/export/excel-download?file_path=${encodeURIComponent(file_path)}`
+  );
+  const filename =
+    file_path.split("/").pop()?.replace(".parquet", ".xlsx") || "export.xlsx";
   triggerDownload(blob, filename);
 }
 
@@ -492,7 +570,11 @@ export type ResolverLoteResponse = {
   resolvidos: number;
 };
 
-export async function resolverEmLote(cnpj: string, tipo: 'discrepancias' | 'duplicidades', nivel_minimo: number) {
+export async function resolverEmLote(
+  cnpj: string,
+  tipo: "discrepancias" | "duplicidades",
+  nivel_minimo: number
+) {
   return request<ResolverLoteResponse>("/produtos/resolver-em-lote", {
     method: "POST",
     body: JSON.stringify({ cnpj, tipo, nivel_minimo }),
@@ -581,14 +663,23 @@ export type DETNotificationRequest = {
   matricula?: string;
 };
 
-export async function generateDETNotification(data: DETNotificationRequest, format: "html" | "txt" = "html") {
-  const endpoint = format === "txt" ? "/reports/det-notification-txt" : "/reports/det-notification";
+export async function generateDETNotification(
+  data: DETNotificationRequest,
+  format: "html" | "txt" = "html"
+) {
+  const endpoint =
+    format === "txt"
+      ? "/reports/det-notification-txt"
+      : "/reports/det-notification";
   const blob = await downloadFile(endpoint, {
     method: "POST",
     body: JSON.stringify(data),
   });
   const cnpjClean = data.cnpj.replace(/\D/g, "");
-  triggerDownload(blob, `notificacao_det_${cnpjClean}.${format === "txt" ? "txt" : "html"}`);
+  triggerDownload(
+    blob,
+    `notificacao_det_${cnpjClean}.${format === "txt" ? "txt" : "html"}`
+  );
 }
 
 // ============================================================
@@ -607,19 +698,31 @@ export interface ResolverManualResponse {
 }
 
 export async function getProdutoDetalhes(cnpj: string, codigo: string) {
-  return request<DetalhesCodigoResponse>(`/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`);
+  return request<DetalhesCodigoResponse>(
+    `/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`
+  );
 }
 
-export async function resolverManualUnificar(cnpj: string, itens: any[], decisao: any) {
+export async function resolverManualUnificar(
+  cnpj: string,
+  itens: any[],
+  decisao: any
+) {
   return request<ResolverManualResponse>("/produtos/resolver-manual-unificar", {
     method: "POST",
     body: JSON.stringify({ cnpj, itens, decisao }),
   });
 }
 
-export async function resolverManualDesagregar(cnpj: string, itensDecididos: any[]) {
-  return request<ResolverManualResponse>("/produtos/resolver-manual-desagregar", {
-    method: "POST",
-    body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
-  });
+export async function resolverManualDesagregar(
+  cnpj: string,
+  itensDecididos: any[]
+) {
+  return request<ResolverManualResponse>(
+    "/produtos/resolver-manual-desagregar",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
+    }
+  );
 }
