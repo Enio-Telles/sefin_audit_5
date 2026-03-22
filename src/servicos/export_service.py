@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +12,15 @@ from openpyxl import Workbook
 from src.config import MAX_DOCX_ROWS
 from src.utilitarios.text import display_cell
 
+
+
+@dataclass
+class ReportConfig:
+    title: str
+    cnpj: str
+    table_name: str
+    filters_text: str
+    visible_columns: list[str]
 
 class ExportService:
     @staticmethod
@@ -34,12 +44,8 @@ class ExportService:
 
     def build_html_report(
         self,
-        title: str,
-        cnpj: str,
-        table_name: str,
         df: pl.DataFrame,
-        filters_text: str,
-        visible_columns: list[str],
+        config: ReportConfig,
     ) -> str:
         headers = "".join(f"<th>{html.escape(col)}</th>" for col in df.columns)
         body_rows = []
@@ -52,7 +58,7 @@ class ExportService:
 <html lang=\"pt-BR\">
 <head>
 <meta charset=\"utf-8\">
-<title>{html.escape(title)}</title>
+<title>{html.escape(config.title)}</title>
 <style>
 body {{ font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }}
 h1, h2 {{ margin-bottom: 8px; }}
@@ -63,13 +69,13 @@ th {{ background: #eef2f7; position: sticky; top: 0; }}
 </style>
 </head>
 <body>
-<h1>{html.escape(title)}</h1>
+<h1>{html.escape(config.title)}</h1>
 <div class=\"meta\">
-<p><strong>CNPJ:</strong> {html.escape(cnpj)}</p>
-<p><strong>Tabela:</strong> {html.escape(table_name)}</p>
+<p><strong>CNPJ:</strong> {html.escape(config.cnpj)}</p>
+<p><strong>Tabela:</strong> {html.escape(config.table_name)}</p>
 <p><strong>Gerado em:</strong> {generated_at}</p>
-<p><strong>Filtros:</strong> {html.escape(filters_text or 'Sem filtros')}</p>
-<p><strong>Colunas visíveis:</strong> {html.escape(', '.join(visible_columns) if visible_columns else 'Todas')}</p>
+<p><strong>Filtros:</strong> {html.escape(config.filters_text or 'Sem filtros')}</p>
+<p><strong>Colunas visíveis:</strong> {html.escape(', '.join(config.visible_columns) if config.visible_columns else 'Todas')}</p>
 <p><strong>Linhas no relatório:</strong> {df.height}</p>
 </div>
 <h2>Dados</h2>
@@ -90,20 +96,16 @@ th {{ background: #eef2f7; position: sticky; top: 0; }}
     def export_docx(
         self,
         target: Path,
-        title: str,
-        cnpj: str,
-        table_name: str,
         df: pl.DataFrame,
-        filters_text: str,
-        visible_columns: list[str],
+        config: ReportConfig,
     ) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         doc = Document()
-        doc.add_heading(title, level=1)
-        doc.add_paragraph(f"CNPJ: {cnpj}")
-        doc.add_paragraph(f"Tabela: {table_name}")
-        doc.add_paragraph(f"Filtros: {filters_text or 'Sem filtros'}")
-        doc.add_paragraph(f"Colunas visíveis: {', '.join(visible_columns) if visible_columns else 'Todas'}")
+        doc.add_heading(config.title, level=1)
+        doc.add_paragraph(f"CNPJ: {config.cnpj}")
+        doc.add_paragraph(f"Tabela: {config.table_name}")
+        doc.add_paragraph(f"Filtros: {config.filters_text or 'Sem filtros'}")
+        doc.add_paragraph(f"Colunas visíveis: {', '.join(config.visible_columns) if config.visible_columns else 'Todas'}")
         doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         doc.add_paragraph(f"Linhas incluídas: {df.height}")
 

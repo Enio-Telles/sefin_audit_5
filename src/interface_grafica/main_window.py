@@ -40,7 +40,7 @@ from src.config import (
 )
 from src.interface_grafica.modelos.table_model import PolarsTableModel
 from src.servicos.aggregation_service import ServicoAgregacao
-from src.servicos.export_service import ExportService
+from src.servicos.export_service import ExportService, ReportConfig
 from src.servicos.parquet_service import FilterCondition, ParquetService
 from src.servicos.pipeline_funcoes_service import ConfiguracaoPipeline, ResultadoPipeline, ServicoPipelineCompleto
 from src.servicos.pipeline_service import PipelineService
@@ -997,15 +997,14 @@ class MainWindow(QMainWindow):
             target = self._save_dialog("Salvar relatório Word", "Word (*.docx)")
             if not target:
                 return
-            self.export_service.export_docx(
-                target,
+            config = ReportConfig(
                 title="Relatório Padronizado de Análise Fiscal",
                 cnpj=self.state.current_cnpj or "",
                 table_name=self.state.current_file.name,
-                df=df,
                 filters_text=self._filters_text(),
                 visible_columns=self.state.visible_columns or [],
             )
+            self.export_service.export_docx(target, df, config)
             self.show_info("Relatório gerado", f"Arquivo gerado em:\n{target}")
         except Exception as exc:
             self.show_error("Falha na exportação para Word", str(exc))
@@ -1015,14 +1014,14 @@ class MainWindow(QMainWindow):
             if self.state.current_file is None:
                 raise ValueError("Nenhum arquivo selecionado.")
             df = self.parquet_service.load_dataset(self.state.current_file, self.state.filters or [], self.state.visible_columns or [])
-            html_report = self.export_service.build_html_report(
+            config = ReportConfig(
                 title="Relatório Padronizado de Análise Fiscal",
                 cnpj=self.state.current_cnpj or "",
                 table_name=self.state.current_file.name,
-                df=df,
                 filters_text=self._filters_text(),
                 visible_columns=self.state.visible_columns or [],
             )
+            html_report = self.export_service.build_html_report(df, config)
             target = self._save_dialog("Salvar TXT com HTML", "TXT (*.txt)")
             if not target:
                 return
