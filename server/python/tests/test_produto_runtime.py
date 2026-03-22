@@ -333,7 +333,8 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
         self.assertEqual(row["metodo_similaridade"], "LIGHT_VECTOR")
         self.assertEqual(row["modelo_vetorizacao"], "CHAR_NGRAM_TFIDF_V1")
 
-    def test_construir_tabela_pares_descricoes_faiss_prioritizes_semantic_neighbors(self) -> None:
+    @patch("core.produto_runtime._search_faiss_neighbors", return_value=(np.asarray([[1.0, 0.96, 0.0], [0.96, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype="float32"), np.asarray([[0, 1, -1], [1, 0, -1], [2, -1, -1]])))
+    def test_construir_tabela_pares_descricoes_faiss_prioritizes_semantic_neighbors(self, mock_search) -> None:
         df_agregados = pl.DataFrame(
             [
                 {

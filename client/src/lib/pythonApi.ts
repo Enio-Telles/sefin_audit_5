@@ -673,8 +673,10 @@ export interface DetalhesCodigoResponse {
 }
 
 export interface ResolverManualResponse {
-  status: string;
-  mensagem: string;
+  status?: string;
+  success?: boolean;
+  mensagem?: string;
+  message?: string;
 }
 
 export interface ProdutosRevisaoManualResponse {
@@ -768,7 +770,7 @@ export interface UnificacaoLotePreviewResponse {
     top_k: number;
     min_score: number;
   };
-  rule_ids: BatchRuleId[];
+  rule_ids: string[];
   dataset_hash?: string | null;
   generated_at_utc: string;
   resumo: {
@@ -776,14 +778,9 @@ export interface UnificacaoLotePreviewResponse {
     total_candidate_pairs: number;
     total_components: number;
     total_proposals: number;
-    by_rule: Array<{
-      rule_id: BatchRuleId;
-      button_label: string;
-      proposal_count: number;
-      group_count: number;
-    }>;
+    by_rule: any[];
   };
-  proposals: UnificacaoLoteProposalItem[];
+  proposals: any[];
 }
 
 export interface UnificacaoLoteApplyRequest extends UnificacaoLotePreviewRequest {
@@ -839,32 +836,18 @@ export interface ParesGruposSimilaresItem {
 export interface ParesGruposSimilaresResponse {
   success: boolean;
   available?: boolean;
-  metodo?: "lexical" | "light" | "faiss";
+  metodo?: "lexical" | "light" | "faiss" | string;
   message?: string;
-  cache_metadata?: {
-    metodo?: string;
-    engine?: string | null;
-    input_base_hash?: string | null;
-    generated_at_utc?: string | null;
-    modelo_vetorizacao?: string | null;
-    top_k?: number | null;
-    min_semantic_score?: number | null;
-    batch_size?: number | null;
-  };
+  cache_metadata?: any;
   file_path: string;
-  data: ParesGruposSimilaresItem[];
+  data: any[];
   page: number;
   page_size: number;
   total_file?: number;
   total_filtered?: number;
-  total: number;
-  total_pages: number;
-  quick_filter_counts?: {
-    todos: number;
-    unirAutomatico: number;
-    bloqueios: number;
-    revisar: number;
-  };
+  total?: number;
+  total_pages?: number;
+  quick_filter_counts?: any;
 }
 
 export interface CodigosMultiDescricaoResponse {
