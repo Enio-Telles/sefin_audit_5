@@ -6,7 +6,6 @@ Serviço de pipeline que orquestra:
 from __future__ import annotations
 
 import re
-import sys
 import importlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +13,7 @@ from typing import Any, Callable
 
 import polars as pl
 
-from src.config import CNPJ_ROOT, CONSULTAS_FONTE_DIR, TABELA_PRODUTOS_DIR
+from src.config import CNPJ_ROOT, CONSULTAS_FONTE_DIR
 from src.extracao.conexao import conectar as conectar_oracle
 from src.extracao.leitor_sql import ler_sql
 from src.extracao.extrair_parametros import extrair_parametros_sql
@@ -22,6 +21,16 @@ from src.extracao.extrair_parametros import extrair_parametros_sql
 # ──────────────────────────────────────────────
 # Tipos
 # ──────────────────────────────────────────────
+
+@dataclass
+class ConfiguracaoPipeline:
+    """Configuração para a execução do pipeline completo."""
+    cnpj: str
+    consultas: list[Path]
+    tabelas: list[str]
+    data_limite: str | None = None
+    progresso: Callable[[str], None] | None = None
+
 @dataclass
 class ResultadoPipeline:
     """Resultado da execução do pipeline."""
@@ -213,7 +222,8 @@ class ServicoTabelas:
 
         for tab_id in tabelas_selecionadas:
             info = next((t for t in TABELAS_DISPONIVEIS if t["id"] == tab_id), None)
-            if info is None: continue
+            if info is None:
+                continue
 
             _msg(f"Processando {info['nome']}...")
             try:
@@ -255,30 +265,27 @@ class ServicoPipelineCompleto:
 
     def executar_completo(
         self,
-        cnpj: str,
-        consultas: list[Path],
-        tabelas: list[str],
-        data_limite: str | None = None,
-        progresso: Callable[[str], None] | None = None,
+        config: ConfiguracaoPipeline,
     ) -> ResultadoPipeline:
-        cnpj = ServicoExtracao.sanitizar_cnpj(cnpj)
+        cnpj = ServicoExtracao.sanitizar_cnpj(config.cnpj)
         resultado = ResultadoPipeline(ok=True, cnpj=cnpj)
 
         def _msg(texto: str):
             resultado.mensagens.append(texto)
-            if progresso: progresso(texto)
+            if config.progresso:
+                config.progresso(texto)
 
-        if consultas:
+        if config.consultas:
             try:
-                arquivos = self.servico_extracao.executar_consultas(cnpj, consultas, data_limite, _msg)
+                arquivos = self.servico_extracao.executar_consultas(cnpj, config.consultas, config.data_limite, _msg)
                 resultado.arquivos_gerados.extend(arquivos)
             except Exception as exc:
                 resultado.erros.append(str(exc))
                 resultado.ok = False
                 return resultado
 
-        if tabelas:
-            geradas = self.servico_tabelas.gerar_tabelas(cnpj, tabelas, _msg)
+        if config.tabelas:
+            geradas = self.servico_tabelas.gerar_tabelas(cnpj, config.tabelas, _msg)
             resultado.arquivos_gerados.extend(geradas)
 
         return resultado

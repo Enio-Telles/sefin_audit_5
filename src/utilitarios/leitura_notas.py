@@ -1,6 +1,5 @@
 from pathlib import Path
 import polars as pl
-from rich import print as rprint
 
 def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame | None = None, print_status: bool = False) -> pl.DataFrame | None:
     """Lê NFe ou NFCe, filtra pelo CNPJ emitente e mapeia colunas."""

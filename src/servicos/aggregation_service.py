@@ -8,14 +8,14 @@ import hashlib
 import json
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 
-from src.config import AGGREGATION_LOG_FILE, CNPJ_ROOT, CFOP_BI_PATH, DIR_REFERENCIAS
+from src.config import AGGREGATION_LOG_FILE, CNPJ_ROOT
 from src.utilitarios.text import natural_sort_key, normalize_text
 
 CODE_ENTRY_RE = re.compile(r"\[(.*?);\s*(\d+)\]")
