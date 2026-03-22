@@ -1,13 +1,19 @@
 import polars as pl
 from rich import print as rprint
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class ClassifMercParams:
+    col_ncm: str = "ncm"
+    col_cest: str = "cest"
+    col_sefin_adicional: Optional[str] = None
+    col_dhemi: Optional[str] = None
+    col_dhsaient: Optional[str] = None
 
 def aux_classif_merc(
     df: pl.DataFrame,
-    col_ncm: str = "ncm",
-    col_cest: str = "cest",
-    col_sefin_adicional: str = None,
-    col_dhemi: str = None,
-    col_dhsaient: str = None
+    params: Optional[ClassifMercParams] = None
 ) -> pl.DataFrame:
     """
     Função auxiliar para identificar o co_sefin (co_sefin_inferido) cruzando
@@ -23,6 +29,16 @@ def aux_classif_merc(
     não-nula entre as duas colunas como referência para o intervalo
     [it_da_inicio, it_da_final].
     """
+
+    if params is None:
+        params = ClassifMercParams()
+
+    col_ncm = params.col_ncm
+    col_cest = params.col_cest
+    col_sefin_adicional = params.col_sefin_adicional
+    col_dhemi = params.col_dhemi
+    col_dhsaient = params.col_dhsaient
+
     import importlib.util
     from pathlib import Path
     
