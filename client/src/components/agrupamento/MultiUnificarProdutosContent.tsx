@@ -88,10 +88,10 @@ export function MultiUnificarProdutosContent({
                 if (res.itens && res.itens.length > 0) {
                     setDecisao({
                         codigo: getMinCodeWithSuffix(codigos),
-                        descricao: res.itens[0].descricao || "",
-                        ncm: res.itens[0].ncm || "",
-                        cest: res.itens[0].cest || "",
-                        gtin: res.itens[0].gtin || "",
+                        descricao: (res.itens[0].descricao as string) || "",
+                        ncm: (res.itens[0].ncm as string) || "",
+                        cest: (res.itens[0].cest as string) || "",
+                        gtin: (res.itens[0].gtin as string) || "",
                     });
                 }
             }

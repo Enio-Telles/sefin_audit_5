@@ -386,7 +386,7 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
 
         with patch("core.produto_runtime._semantic_runtime_available", return_value=True), patch(
             "core.produto_runtime._encode_faiss_rows", return_value=mock_vectors
-        ):
+        ), patch("core.produto_runtime._search_faiss_neighbors", return_value=(np.asarray([[1.0, 0.95, 0.0], [0.95, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype="float32"), np.asarray([[0, 1, -1], [1, 0, -1], [2, -1, -1]], dtype="int64"))):
             df_pairs = construir_tabela_pares_descricoes_faiss(df_agregados, top_k=4, min_score=0.80)
 
         self.assertEqual(df_pairs.height, 1)

@@ -666,20 +666,38 @@ export async function generateDETNotification(data: DETNotificationRequest, form
 // Agrupamento de Produtos - Resoluções Manuais
 // ============================================================
 
+export interface DetalhesCodigoItem {
+  fonte: string;
+  codigo: string;
+  descricao: string;
+  ncm: string;
+  cest: string;
+  gtin: string;
+  tipo_item: string;
+  co_emitente?: string;
+  descr_compl_c170: string;
+  [key: string]: any;
+}
+
 export interface DetalhesCodigoResponse {
   success: boolean;
   codigo: string;
-  itens: any[];
+  itens: DetalhesCodigoItem[];
 }
 
 export interface ResolverManualResponse {
   status: string;
   mensagem: string;
+  qtd_regras_removidas?: number;
+}
+
+export interface RevisaoManualRow {
+  [key: string]: unknown;
 }
 
 export interface ProdutosRevisaoManualResponse {
   success: boolean;
-  data: Record<string, unknown>[];
+  data: RevisaoManualRow[];
 }
 
 export interface ProdutosRevisaoFinalResponse {
@@ -1109,20 +1127,20 @@ export async function getCodigoMultiDescricaoResumo(cnpj: string, codigo: string
 }
 
 export async function getProdutosDetalhesMulti(cnpj: string, codigos: string[]) {
-  return request<{ success: boolean; itens: any[] }>("/produtos/detalhes-multi-codigo", {
+  return request<{ success: boolean; itens: Record<string, unknown>[] }>("/produtos/detalhes-multi-codigo", {
     method: "POST",
     body: JSON.stringify({ cnpj, codigos }),
   });
 }
 
-export async function resolverManualUnificar(cnpj: string, itens: any[], decisao: any) {
+export async function resolverManualUnificar(cnpj: string, itens: Record<string, unknown>[], decisao: Record<string, unknown>) {
   return request<ResolverManualResponse>("/produtos/resolver-manual-unificar", {
     method: "POST",
     body: JSON.stringify({ cnpj, itens, decisao }),
   });
 }
 
-export async function resolverManualDesagregar(cnpj: string, itensDecididos: any[]) {
+export async function resolverManualDesagregar(cnpj: string, itensDecididos: Record<string, unknown>[]) {
   return request<ResolverManualResponse>("/produtos/resolver-manual-desagregar", {
     method: "POST",
     body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),

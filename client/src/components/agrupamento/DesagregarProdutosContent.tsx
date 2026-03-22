@@ -350,7 +350,7 @@ export function DesagregarProdutosContent({
 
     setSaving(true);
     try {
-      const detalhes = await getProdutoDetalhes(cnpj, codigo);
+      const detalhes = await getProdutoDetalhes(cnpj, codigo) as any;
       if (!detalhes.success) {
         toast.error("Nao foi possivel carregar os detalhes brutos do codigo.");
         return;
