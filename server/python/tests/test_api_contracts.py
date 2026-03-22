@@ -252,3 +252,54 @@ def test_produtos_codigo_multidescricao_resumo_contract(mock_exists, mock_spec, 
     assert "grupos_descricao" in data
     assert "opcoes_consenso" in data
     assert "resumo" in data
+
+@patch("routers.filesystem.obter_arquivos_auditoria")
+@patch("importlib.util.spec_from_file_location")
+def test_auditoria_historico_contract(mock_spec, mock_obter):
+    mock_module = MagicMock()
+    mock_module.DIR_CNPJS = Path("/tmp/CNPJ")
+
+    mock_spec_instance = MagicMock()
+    mock_spec_instance.loader.exec_module = lambda m: None
+    mock_spec.return_value = mock_spec_instance
+
+    mock_obter.return_value = {
+        "arquivos_extraidos": [{"name": "file.parquet", "path": "/tmp/file.parquet", "size": 1024, "modified": "2024-01-01T00:00:00", "columns": 5, "rows": 100}],
+        "arquivos_analises": [{"name": "file.parquet", "path": "/tmp/file.parquet", "size": 1024, "modified": "2024-01-01T00:00:00", "columns": 5, "rows": 100}],
+        "arquivos_produtos": [{"name": "file.parquet", "path": "/tmp/file.parquet", "size": 1024, "modified": "2024-01-01T00:00:00", "columns": 5, "rows": 100}],
+        "arquivos_relatorios": [{"name": "file.pdf", "path": "/tmp/file.pdf", "size": 1024, "modified": "2024-01-01T00:00:00"}]
+    }
+
+    with patch("importlib.util.module_from_spec", return_value=mock_module):
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("pathlib.Path.is_dir", return_value=True):
+                with patch("builtins.open", MagicMock()):
+                    response = client.get("/api/python/auditoria/historico/00000000000191")
+
+                    assert response.status_code == 200
+                    data = response.json()
+
+                    assert "success" in data
+                    assert data["success"] is True
+                    assert "cnpj" in data
+                    assert data["cnpj"] == "00000000000191"
+                    assert "arquivos_extraidos" in data
+                    assert isinstance(data["arquivos_extraidos"], list)
+                    assert "arquivos_analises" in data
+                    assert isinstance(data["arquivos_analises"], list)
+                    assert "arquivos_produtos" in data
+                    assert isinstance(data["arquivos_produtos"], list)
+                    assert "arquivos_relatorios" in data
+                    assert isinstance(data["arquivos_relatorios"], list)
+                    assert "dir_parquet" in data
+                    assert "dir_analises" in data
+                    assert "dir_relatorios" in data
+
+                    for key in ["arquivos_extraidos", "arquivos_analises", "arquivos_produtos", "arquivos_relatorios"]:
+                        items = data[key]
+                        assert len(items) > 0
+                        item = items[0]
+                        assert "name" in item
+                        assert "path" in item
+                        assert "size" in item
+                        assert "modified" in item
