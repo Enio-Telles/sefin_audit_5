@@ -41,7 +41,7 @@ from src.config import (
 from src.interface_grafica.modelos.table_model import PolarsTableModel
 from src.servicos.aggregation_service import ServicoAgregacao
 from src.servicos.export_service import ExportService, ReportConfig
-from src.servicos.parquet_service import FilterCondition, ParquetService
+from src.servicos.parquet_service import FilterCondition, ParquetService, PageRequest
 from src.servicos.pipeline_funcoes_service import ConfiguracaoPipeline, ResultadoPipeline, ServicoPipelineCompleto
 from src.servicos.pipeline_service import PipelineService
 from src.servicos.query_worker import QueryWorker
@@ -862,13 +862,14 @@ class MainWindow(QMainWindow):
         if self.state.current_file is None:
             return
         try:
-            page_result = self.parquet_service.get_page(
+            page_request = PageRequest(
                 parquet_path=self.state.current_file,
                 conditions=self.state.filters or [],
                 visible_columns=self.state.visible_columns or [],
                 page=self.state.current_page,
                 page_size=self.state.page_size,
             )
+            page_result = self.parquet_service.get_page(page_request)
             self.state.total_rows = page_result.total_rows
             self.current_page_df_all = page_result.df_all_columns
             self.current_page_df_visible = page_result.df_visible
