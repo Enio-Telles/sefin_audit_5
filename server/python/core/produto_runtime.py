@@ -64,9 +64,12 @@ def obter_runtime_produtos_status(dir_analises: Path, cnpj: str) -> dict[str, An
         "base_detalhes": dir_analises / f"base_detalhes_produtos_{cnpj}.parquet",
         "status_analise": dir_analises / f"status_analise_produtos_{cnpj}.parquet",
         "mapa_agregados": dir_analises / f"mapa_auditoria_agregados_{cnpj}.parquet",
-        "mapa_desagregados": dir_analises / f"mapa_auditoria_desagregados_{cnpj}.parquet",
-        "pares_sugeridos_light": dir_analises / f"pares_descricoes_similares_light_{cnpj}.parquet",
-        "pares_sugeridos_faiss": dir_analises / f"pares_descricoes_similares_faiss_{cnpj}.parquet",
+        "mapa_desagregados": dir_analises
+        / f"mapa_auditoria_desagregados_{cnpj}.parquet",
+        "pares_sugeridos_light": dir_analises
+        / f"pares_descricoes_similares_light_{cnpj}.parquet",
+        "pares_sugeridos_faiss": dir_analises
+        / f"pares_descricoes_similares_faiss_{cnpj}.parquet",
     }
     files: dict[str, dict[str, Any]] = {}
     for key, path in artefatos.items():
@@ -103,7 +106,31 @@ def _join_unique(values: list[str], sep: str = ", ") -> str:
     return sep.join(uniq)
 
 
-_STOP_WORDS = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "SEM", "PARA", "UN", "PCT", "CX", "KG", "LT", "ML", "GR", "PC", "LATA", "LITRO", "LITROS", "GARRAFA"}
+_STOP_WORDS = {
+    "DE",
+    "DA",
+    "DO",
+    "DAS",
+    "DOS",
+    "E",
+    "COM",
+    "SEM",
+    "PARA",
+    "UN",
+    "PCT",
+    "CX",
+    "KG",
+    "LT",
+    "ML",
+    "GR",
+    "PC",
+    "LATA",
+    "LITRO",
+    "LITROS",
+    "GARRAFA",
+}
+_RE_NON_ALNUM = re.compile(r"[^A-Z0-9 ]+")
+
 
 @lru_cache(maxsize=10000)
 def _normalize_similarity_text(value: str) -> str:
@@ -125,24 +152,26 @@ def _normalize_similarity_text(value: str) -> str:
         .replace("Ç", "C")
     )
 
+
 @lru_cache(maxsize=10000)
 def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
-    clean_text = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
+    clean_text = _RE_NON_ALNUM.sub(" ", _normalize_similarity_text(value))
     return tuple(
-        token for token in clean_text.split()
+        token
+        for token in clean_text.split()
         if len(token) > 1 and token not in _STOP_WORDS
     )
+
 
 @lru_cache(maxsize=10000)
 def _normalize_similarity_tokens_set(value: str) -> frozenset[str]:
     return frozenset(_normalize_similarity_tokens(value))
 
 
-
 @lru_cache(maxsize=10000)
 def _normalize_ngram_text(value: str) -> str:
-    cleaned = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
-    return re.sub(r"\s+", " ", cleaned).strip()
+    # Use precompiled regex and string split/join to remove extra spaces efficiently
+    return " ".join(_RE_NON_ALNUM.sub(" ", _normalize_similarity_text(value)).split())
 
 
 @lru_cache(maxsize=10000)
@@ -182,6 +211,7 @@ def _char_ngram_cosine(a: str, b: str, size: int = 3) -> float:
         return 0.0
     return dot / (norm_a * norm_b)
 
+
 @lru_cache(maxsize=10000)
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not a and not b:
@@ -189,6 +219,7 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     intersection = len(a & b)
     union = len(a | b)
     return 0.0 if union == 0 else intersection / union
+
 
 @lru_cache(maxsize=10000)
 def _sequence_match(a: str, b: str) -> float:
@@ -200,6 +231,7 @@ def _sequence_match(a: str, b: str) -> float:
         return 0.0
     return difflib.SequenceMatcher(None, str_a, str_b).ratio()
 
+
 @lru_cache(maxsize=10000)
 def _similarity_score(a: str, b: str) -> float:
     if not a and not b:
@@ -210,13 +242,17 @@ def _similarity_score(a: str, b: str) -> float:
     a_str = str(a)
     b_str = str(b)
 
-    token_score = _jaccard(_normalize_similarity_tokens_set(a_str), _normalize_similarity_tokens_set(b_str))
+    token_score = _jaccard(
+        _normalize_similarity_tokens_set(a_str), _normalize_similarity_tokens_set(b_str)
+    )
     sequence_score = _sequence_match(a_str, b_str)
 
     return 0.4 * token_score + 0.6 * sequence_score
 
 
-def _build_description_hash(origem: Any, destino: Any, descricao_par: Any, tipo_regra: Any) -> str:
+def _build_description_hash(
+    origem: Any, destino: Any, descricao_par: Any, tipo_regra: Any
+) -> str:
     payload = "|".join(
         [
             _canon_text(tipo_regra, ""),
@@ -286,27 +322,38 @@ def _prepare_group_rows(df_agregados: pl.DataFrame) -> list[dict[str, Any]]:
     ncm_col = _pick_col(df_agregados, "ncm_consenso", "ncm")
     cest_col = _pick_col(df_agregados, "cest_consenso", "cest")
     gtin_col = _pick_col(df_agregados, "gtin_consenso", "gtin")
-    conflitos_col = _pick_col(df_agregados, "descricoes_conflitantes", "lista_descricoes", "conflitos")
+    conflitos_col = _pick_col(
+        df_agregados, "descricoes_conflitantes", "lista_descricoes", "conflitos"
+    )
     descricao_norm_col = _pick_col(df_agregados, "descricao_normalizada")
     lista_codigos_col = _pick_col(df_agregados, "lista_codigos")
     lista_descr_compl_col = _pick_col(df_agregados, "lista_descr_compl")
 
     rows: list[dict[str, Any]] = []
     for row in df_agregados.to_dicts():
-        raw_codes = str(row.get(lista_codigos_col) or "").strip() if lista_codigos_col else ""
+        raw_codes = (
+            str(row.get(lista_codigos_col) or "").strip() if lista_codigos_col else ""
+        )
         codes = [item.strip() for item in raw_codes.split(",") if item.strip()]
         rows.append(
             {
                 "chave_produto": str(row.get(chave_col) or "").strip(),
                 "descricao": str(row.get(descricao_col) or "").strip(),
-                "descricao_normalizada": str(row.get(descricao_norm_col) or doc_normalize_description_key(row.get(descricao_col))).strip(),
+                "descricao_normalizada": str(
+                    row.get(descricao_norm_col)
+                    or doc_normalize_description_key(row.get(descricao_col))
+                ).strip(),
                 "ncm": str(row.get(ncm_col) or "").strip() if ncm_col else "",
                 "cest": str(row.get(cest_col) or "").strip() if cest_col else "",
                 "gtin": str(row.get(gtin_col) or "").strip() if gtin_col else "",
-                "lista_descr_compl": str(row.get(lista_descr_compl_col) or "").strip() if lista_descr_compl_col else "",
+                "lista_descr_compl": str(row.get(lista_descr_compl_col) or "").strip()
+                if lista_descr_compl_col
+                else "",
                 "codigos": codes,
                 "qtd_codigos": len(codes),
-                "conflitos": str(row.get(conflitos_col) or "").strip() if conflitos_col else "",
+                "conflitos": str(row.get(conflitos_col) or "").strip()
+                if conflitos_col
+                else "",
             }
         )
     return [row for row in rows if row["chave_produto"] and row["descricao"]]
@@ -321,14 +368,18 @@ def _classificar_par(
     b: dict[str, Any],
 ) -> dict[str, Any]:
     left = {
-        "descricao_normalizada": a.get("descricao_normalizada") or a.get("descricao") or "",
+        "descricao_normalizada": a.get("descricao_normalizada")
+        or a.get("descricao")
+        or "",
         "ncm": a.get("ncm") or "",
         "cest": a.get("cest") or "",
         "gtin": a.get("gtin") or "",
         "codigos": a.get("codigos") or [],
     }
     right = {
-        "descricao_normalizada": b.get("descricao_normalizada") or b.get("descricao") or "",
+        "descricao_normalizada": b.get("descricao_normalizada")
+        or b.get("descricao")
+        or "",
         "ncm": b.get("ncm") or "",
         "cest": b.get("cest") or "",
         "gtin": b.get("gtin") or "",
@@ -336,14 +387,22 @@ def _classificar_par(
     }
     result = doc_classify_group_pair(left, right)
     # Preserve externally expected signature while delegating to the new deterministic engine.
-    result["score_descricao"] = score_descricao if score_descricao is not None else result["score_descricao"]
+    result["score_descricao"] = (
+        score_descricao if score_descricao is not None else result["score_descricao"]
+    )
     result["score_ncm"] = score_ncm if score_ncm is not None else result["score_ncm"]
-    result["score_cest"] = score_cest if score_cest is not None else result["score_cest"]
-    result["score_gtin"] = score_gtin if score_gtin is not None else result["score_gtin"]
+    result["score_cest"] = (
+        score_cest if score_cest is not None else result["score_cest"]
+    )
+    result["score_gtin"] = (
+        score_gtin if score_gtin is not None else result["score_gtin"]
+    )
     return result
 
 
-def construir_tabela_pares_descricoes_similares(df_agregados: pl.DataFrame) -> pl.DataFrame:
+def construir_tabela_pares_descricoes_similares(
+    df_agregados: pl.DataFrame,
+) -> pl.DataFrame:
     rows = _prepare_group_rows(df_agregados)
     output: list[dict[str, Any]] = []
     for idx, left in enumerate(rows):
@@ -354,7 +413,12 @@ def construir_tabela_pares_descricoes_similares(df_agregados: pl.DataFrame) -> p
             score_cest = classificacao["score_cest"]
             score_gtin = classificacao["score_gtin"]
             shared_codes = sorted(set(left["codigos"]) & set(right["codigos"]))
-            should_emit = bool(shared_codes) or bool(classificacao["uniao_automatica_elegivel"]) or classificacao["recomendacao"] in {"UNIR_SUGERIDO", "BLOQUEAR_UNIAO", "SEPARAR_SUGERIDO"}
+            should_emit = (
+                bool(shared_codes)
+                or bool(classificacao["uniao_automatica_elegivel"])
+                or classificacao["recomendacao"]
+                in {"UNIR_SUGERIDO", "BLOQUEAR_UNIAO", "SEPARAR_SUGERIDO"}
+            )
             if not should_emit:
                 continue
             output.append(
@@ -384,35 +448,41 @@ def construir_tabela_pares_descricoes_similares(df_agregados: pl.DataFrame) -> p
                     **classificacao,
                 }
             )
-    return pl.DataFrame(output) if output else pl.DataFrame(schema={
-        "chave_produto_a": pl.Utf8,
-        "descricao_a": pl.Utf8,
-        "ncm_a": pl.Utf8,
-        "cest_a": pl.Utf8,
-        "gtin_a": pl.Utf8,
-        "qtd_codigos_a": pl.Int64,
-        "conflitos_a": pl.Utf8,
-        "chave_produto_b": pl.Utf8,
-        "descricao_b": pl.Utf8,
-        "ncm_b": pl.Utf8,
-        "cest_b": pl.Utf8,
-        "gtin_b": pl.Utf8,
-        "qtd_codigos_b": pl.Int64,
-        "conflitos_b": pl.Utf8,
-        "score_descricao": pl.Float64,
-        "score_ncm": pl.Float64,
-        "score_cest": pl.Float64,
-        "score_gtin": pl.Float64,
-        "score_semantico": pl.Float64,
-        "score_final": pl.Float64,
-        "recomendacao": pl.Utf8,
-        "motivo_recomendacao": pl.Utf8,
-        "uniao_automatica_elegivel": pl.Boolean,
-        "bloquear_uniao": pl.Boolean,
-        "metodo_similaridade": pl.Utf8,
-        "modelo_vetorizacao": pl.Utf8,
-        "origem_par_hibrido": pl.Utf8,
-    })
+    return (
+        pl.DataFrame(output)
+        if output
+        else pl.DataFrame(
+            schema={
+                "chave_produto_a": pl.Utf8,
+                "descricao_a": pl.Utf8,
+                "ncm_a": pl.Utf8,
+                "cest_a": pl.Utf8,
+                "gtin_a": pl.Utf8,
+                "qtd_codigos_a": pl.Int64,
+                "conflitos_a": pl.Utf8,
+                "chave_produto_b": pl.Utf8,
+                "descricao_b": pl.Utf8,
+                "ncm_b": pl.Utf8,
+                "cest_b": pl.Utf8,
+                "gtin_b": pl.Utf8,
+                "qtd_codigos_b": pl.Int64,
+                "conflitos_b": pl.Utf8,
+                "score_descricao": pl.Float64,
+                "score_ncm": pl.Float64,
+                "score_cest": pl.Float64,
+                "score_gtin": pl.Float64,
+                "score_semantico": pl.Float64,
+                "score_final": pl.Float64,
+                "recomendacao": pl.Utf8,
+                "motivo_recomendacao": pl.Utf8,
+                "uniao_automatica_elegivel": pl.Boolean,
+                "bloquear_uniao": pl.Boolean,
+                "metodo_similaridade": pl.Utf8,
+                "modelo_vetorizacao": pl.Utf8,
+                "origem_par_hibrido": pl.Utf8,
+            }
+        )
+    )
 
 
 def _module_available(module_name: str) -> bool:
@@ -430,7 +500,11 @@ def _load_sentence_transformer_model(model_name: str):
 
 
 def _semantic_runtime_available() -> bool:
-    return _module_available("faiss") and _module_available("sentence_transformers") and _module_available("numpy")
+    return (
+        _module_available("faiss")
+        and _module_available("sentence_transformers")
+        and _module_available("numpy")
+    )
 
 
 def obter_status_vectorizacao() -> dict[str, Any]:
@@ -524,7 +598,8 @@ def cache_metadata_matches(
         and str(metadata.get("modelo_vetorizacao") or "") == model_name
         and str(metadata.get("input_base_hash") or "") == str(input_base_hash or "")
         and int(metadata.get("top_k") or 0) == int(top_k)
-        and float(metadata.get("min_semantic_score") or 0.0) == float(min_semantic_score)
+        and float(metadata.get("min_semantic_score") or 0.0)
+        == float(min_semantic_score)
     )
 
 
@@ -581,7 +656,9 @@ def construir_tabela_pares_descricoes_faiss(
     if not rows:
         return construir_tabela_pares_descricoes_similares(df_agregados)
     if not _semantic_runtime_available():
-        raise RuntimeError("FAISS e/ou sentence-transformers nao estao disponiveis neste runtime.")
+        raise RuntimeError(
+            "FAISS e/ou sentence-transformers nao estao disponiveis neste runtime."
+        )
 
     vectors = _encode_faiss_rows(rows, batch_size=batch_size)
     scores, neighbors = _search_faiss_neighbors(vectors, top_k=top_k)
@@ -605,8 +682,14 @@ def construir_tabela_pares_descricoes_faiss(
 
             seen_pairs.add(pair_key)
             score_descricao = max(
-                _similarity_score(str(left.get("descricao") or ""), str(right.get("descricao") or "")),
-                _char_ngram_cosine(_build_faiss_vector_text(left), _build_faiss_vector_text(right), size=3),
+                _similarity_score(
+                    str(left.get("descricao") or ""), str(right.get("descricao") or "")
+                ),
+                _char_ngram_cosine(
+                    _build_faiss_vector_text(left),
+                    _build_faiss_vector_text(right),
+                    size=3,
+                ),
             )
             classificacao = _classificar_par(
                 score_descricao=score_descricao,
@@ -625,8 +708,13 @@ def construir_tabela_pares_descricoes_faiss(
                 and float(classificacao.get("score_ncm") or 0.0) >= 0.5
             ):
                 classificacao["recomendacao"] = "UNIR_SUGERIDO"
-                classificacao["motivo_recomendacao"] = "Alta proximidade semantica via FAISS com dados fiscais compativeis."
-                classificacao["score_final"] = max(float(classificacao.get("score_final") or 0.0), round(0.55 + (semantic_score * 0.35), 6))
+                classificacao["motivo_recomendacao"] = (
+                    "Alta proximidade semantica via FAISS com dados fiscais compativeis."
+                )
+                classificacao["score_final"] = max(
+                    float(classificacao.get("score_final") or 0.0),
+                    round(0.55 + (semantic_score * 0.35), 6),
+                )
 
             output.append(
                 {
@@ -653,42 +741,49 @@ def construir_tabela_pares_descricoes_faiss(
                     "modelo_vetorizacao": _FAISS_VECTOR_MODEL_NAME,
                     "origem_par_hibrido": "faiss_cosine",
                     **classificacao,
-                    "score_final": max(float(classificacao.get("score_final") or 0.0), semantic_score),
+                    "score_final": max(
+                        float(classificacao.get("score_final") or 0.0), semantic_score
+                    ),
                 }
             )
 
     if output:
-        return pl.DataFrame(output).sort(["score_final", "score_semantico", "score_descricao"], descending=[True, True, True])
+        return pl.DataFrame(output).sort(
+            ["score_final", "score_semantico", "score_descricao"],
+            descending=[True, True, True],
+        )
 
-    return pl.DataFrame(schema={
-        "chave_produto_a": pl.Utf8,
-        "descricao_a": pl.Utf8,
-        "ncm_a": pl.Utf8,
-        "cest_a": pl.Utf8,
-        "gtin_a": pl.Utf8,
-        "qtd_codigos_a": pl.Int64,
-        "conflitos_a": pl.Utf8,
-        "chave_produto_b": pl.Utf8,
-        "descricao_b": pl.Utf8,
-        "ncm_b": pl.Utf8,
-        "cest_b": pl.Utf8,
-        "gtin_b": pl.Utf8,
-        "qtd_codigos_b": pl.Int64,
-        "conflitos_b": pl.Utf8,
-        "score_descricao": pl.Float64,
-        "score_ncm": pl.Float64,
-        "score_cest": pl.Float64,
-        "score_gtin": pl.Float64,
-        "score_semantico": pl.Float64,
-        "score_final": pl.Float64,
-        "recomendacao": pl.Utf8,
-        "motivo_recomendacao": pl.Utf8,
-        "uniao_automatica_elegivel": pl.Boolean,
-        "bloquear_uniao": pl.Boolean,
-        "metodo_similaridade": pl.Utf8,
-        "modelo_vetorizacao": pl.Utf8,
-        "origem_par_hibrido": pl.Utf8,
-    })
+    return pl.DataFrame(
+        schema={
+            "chave_produto_a": pl.Utf8,
+            "descricao_a": pl.Utf8,
+            "ncm_a": pl.Utf8,
+            "cest_a": pl.Utf8,
+            "gtin_a": pl.Utf8,
+            "qtd_codigos_a": pl.Int64,
+            "conflitos_a": pl.Utf8,
+            "chave_produto_b": pl.Utf8,
+            "descricao_b": pl.Utf8,
+            "ncm_b": pl.Utf8,
+            "cest_b": pl.Utf8,
+            "gtin_b": pl.Utf8,
+            "qtd_codigos_b": pl.Int64,
+            "conflitos_b": pl.Utf8,
+            "score_descricao": pl.Float64,
+            "score_ncm": pl.Float64,
+            "score_cest": pl.Float64,
+            "score_gtin": pl.Float64,
+            "score_semantico": pl.Float64,
+            "score_final": pl.Float64,
+            "recomendacao": pl.Utf8,
+            "motivo_recomendacao": pl.Utf8,
+            "uniao_automatica_elegivel": pl.Boolean,
+            "bloquear_uniao": pl.Boolean,
+            "metodo_similaridade": pl.Utf8,
+            "modelo_vetorizacao": pl.Utf8,
+            "origem_par_hibrido": pl.Utf8,
+        }
+    )
 
 
 def _build_light_vector_text(row: dict[str, Any]) -> str:
@@ -721,17 +816,34 @@ def _build_light_block_keys(row: dict[str, Any], vector_text: str) -> set[str]:
     return keys
 
 
-def _score_light_pair(left: dict[str, Any], right: dict[str, Any], threshold: float) -> tuple[float, bool]:
+def _score_light_pair(
+    left: dict[str, Any], right: dict[str, Any], threshold: float
+) -> tuple[float, bool]:
     left_text = _build_light_vector_text(left)
     right_text = _build_light_vector_text(right)
     score_char = _char_ngram_cosine(left_text, right_text, size=3)
-    score_desc = _similarity_score(str(left.get("descricao") or ""), str(right.get("descricao") or ""))
-    score_compl = _similarity_score(str(left.get("lista_descr_compl") or ""), str(right.get("lista_descr_compl") or ""))
+    score_desc = _similarity_score(
+        str(left.get("descricao") or ""), str(right.get("descricao") or "")
+    )
+    score_compl = _similarity_score(
+        str(left.get("lista_descr_compl") or ""),
+        str(right.get("lista_descr_compl") or ""),
+    )
     base_score = (0.55 * score_char) + (0.35 * score_desc) + (0.10 * score_compl)
 
-    gtin_equal = _metric_equal(left.get("gtin"), right.get("gtin")) and _is_valid_gtin_candidate(left.get("gtin"))
-    gtin_conflict = _metric_conflict(left.get("gtin"), right.get("gtin")) and _is_valid_gtin_candidate(left.get("gtin")) and _is_valid_gtin_candidate(right.get("gtin"))
-    ncm_prefix_equal = bool(str(left.get("ncm") or "").strip() and str(right.get("ncm") or "").strip() and str(left.get("ncm") or "")[:4] == str(right.get("ncm") or "")[:4])
+    gtin_equal = _metric_equal(
+        left.get("gtin"), right.get("gtin")
+    ) and _is_valid_gtin_candidate(left.get("gtin"))
+    gtin_conflict = (
+        _metric_conflict(left.get("gtin"), right.get("gtin"))
+        and _is_valid_gtin_candidate(left.get("gtin"))
+        and _is_valid_gtin_candidate(right.get("gtin"))
+    )
+    ncm_prefix_equal = bool(
+        str(left.get("ncm") or "").strip()
+        and str(right.get("ncm") or "").strip()
+        and str(left.get("ncm") or "")[:4] == str(right.get("ncm") or "")[:4]
+    )
     cest_equal = _metric_equal(left.get("cest"), right.get("cest"))
 
     adjusted = base_score
@@ -744,7 +856,9 @@ def _score_light_pair(left: dict[str, Any], right: dict[str, Any], threshold: fl
             adjusted += 0.03
         if gtin_conflict:
             adjusted -= 0.20
-        elif _metric_conflict(left.get("ncm"), right.get("ncm")) and not ncm_prefix_equal:
+        elif (
+            _metric_conflict(left.get("ncm"), right.get("ncm")) and not ncm_prefix_equal
+        ):
             adjusted -= 0.08
 
     adjusted = max(0.0, min(1.0, adjusted))
@@ -783,7 +897,9 @@ def construir_tabela_pares_descricoes_light(
             related = block_index.get(key) or []
             if len(related) > max_candidates_per_group:
                 continue
-            candidate_indexes.update(candidate for candidate in related if candidate > idx)
+            candidate_indexes.update(
+                candidate for candidate in related if candidate > idx
+            )
 
         scored_candidates: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
         for candidate_idx in candidate_indexes:
@@ -825,42 +941,48 @@ def construir_tabela_pares_descricoes_light(
                     "modelo_vetorizacao": _LIGHT_VECTOR_MODEL_NAME,
                     "origem_par_hibrido": "char_ngrams_tfidf",
                     **classificacao,
-                    "score_final": max(float(classificacao.get("score_final") or 0.0), light_score),
+                    "score_final": max(
+                        float(classificacao.get("score_final") or 0.0), light_score
+                    ),
                 }
             )
 
     if output:
-        return pl.DataFrame(output).sort(["score_final", "score_descricao"], descending=[True, True])
+        return pl.DataFrame(output).sort(
+            ["score_final", "score_descricao"], descending=[True, True]
+        )
 
-    return pl.DataFrame(schema={
-        "chave_produto_a": pl.Utf8,
-        "descricao_a": pl.Utf8,
-        "ncm_a": pl.Utf8,
-        "cest_a": pl.Utf8,
-        "gtin_a": pl.Utf8,
-        "qtd_codigos_a": pl.Int64,
-        "conflitos_a": pl.Utf8,
-        "chave_produto_b": pl.Utf8,
-        "descricao_b": pl.Utf8,
-        "ncm_b": pl.Utf8,
-        "cest_b": pl.Utf8,
-        "gtin_b": pl.Utf8,
-        "qtd_codigos_b": pl.Int64,
-        "conflitos_b": pl.Utf8,
-        "score_descricao": pl.Float64,
-        "score_ncm": pl.Float64,
-        "score_cest": pl.Float64,
-        "score_gtin": pl.Float64,
-        "score_semantico": pl.Float64,
-        "score_final": pl.Float64,
-        "recomendacao": pl.Utf8,
-        "motivo_recomendacao": pl.Utf8,
-        "uniao_automatica_elegivel": pl.Boolean,
-        "bloquear_uniao": pl.Boolean,
-        "metodo_similaridade": pl.Utf8,
-        "modelo_vetorizacao": pl.Utf8,
-        "origem_par_hibrido": pl.Utf8,
-    })
+    return pl.DataFrame(
+        schema={
+            "chave_produto_a": pl.Utf8,
+            "descricao_a": pl.Utf8,
+            "ncm_a": pl.Utf8,
+            "cest_a": pl.Utf8,
+            "gtin_a": pl.Utf8,
+            "qtd_codigos_a": pl.Int64,
+            "conflitos_a": pl.Utf8,
+            "chave_produto_b": pl.Utf8,
+            "descricao_b": pl.Utf8,
+            "ncm_b": pl.Utf8,
+            "cest_b": pl.Utf8,
+            "gtin_b": pl.Utf8,
+            "qtd_codigos_b": pl.Int64,
+            "conflitos_b": pl.Utf8,
+            "score_descricao": pl.Float64,
+            "score_ncm": pl.Float64,
+            "score_cest": pl.Float64,
+            "score_gtin": pl.Float64,
+            "score_semantico": pl.Float64,
+            "score_final": pl.Float64,
+            "recomendacao": pl.Utf8,
+            "motivo_recomendacao": pl.Utf8,
+            "uniao_automatica_elegivel": pl.Boolean,
+            "bloquear_uniao": pl.Boolean,
+            "metodo_similaridade": pl.Utf8,
+            "modelo_vetorizacao": pl.Utf8,
+            "origem_par_hibrido": pl.Utf8,
+        }
+    )
 
 
 def _empty_produtos_result() -> pl.DataFrame:
@@ -892,15 +1014,21 @@ def _cleanup_legacy_produto_artifacts(dir_analises: Path, cnpj: str) -> None:
             if path.exists():
                 path.unlink()
         except Exception:
-            logger.warning("[produto_runtime] nao foi possivel remover artefato legado: %s", path)
+            logger.warning(
+                "[produto_runtime] nao foi possivel remover artefato legado: %s", path
+            )
 
 
-def unificar_produtos_unidades(cnpj: str, projeto_dir: Path | None = None) -> pl.DataFrame:
+def unificar_produtos_unidades(
+    cnpj: str, projeto_dir: Path | None = None
+) -> pl.DataFrame:
     import importlib.util
 
     base_dir = projeto_dir or Path(__file__).resolve().parents[3]
     config_path = base_dir / "config.py"
-    spec = importlib.util.spec_from_file_location("sefin_config_local", str(config_path))
+    spec = importlib.util.spec_from_file_location(
+        "sefin_config_local", str(config_path)
+    )
     sefin_config = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sefin_config)
     dir_parquet, dir_analises, _ = sefin_config.obter_diretorios_cnpj(cnpj)
@@ -912,16 +1040,26 @@ def unificar_produtos_unidades(cnpj: str, projeto_dir: Path | None = None) -> pl
 
     _cleanup_legacy_produto_artifacts(dir_analises, cnpj)
 
-    logger.info("[produto_runtime] reconstruindo pipeline atual de produtos para %s", cnpj)
+    logger.info(
+        "[produto_runtime] reconstruindo pipeline atual de produtos para %s", cnpj
+    )
 
     df_base = _carregar_base_detalhes(dir_parquet)
     if df_base.is_empty():
         empty = _empty_produtos_result()
         empty.write_parquet(str(produtos_path))
-        pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS}).write_parquet(str(base_detalhes_path))
-        _build_produtos_indexados(pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS}), empty).write_parquet(str(indexados_path))
-        _build_codigos_multidescricao(pl.DataFrame(schema={"codigo": pl.Utf8})).write_parquet(str(codigos_path))
-        _build_variacoes_produtos(pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})).write_parquet(str(variacoes_path))
+        pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS}).write_parquet(
+            str(base_detalhes_path)
+        )
+        _build_produtos_indexados(
+            pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS}), empty
+        ).write_parquet(str(indexados_path))
+        _build_codigos_multidescricao(
+            pl.DataFrame(schema={"codigo": pl.Utf8})
+        ).write_parquet(str(codigos_path))
+        _build_variacoes_produtos(
+            pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
+        ).write_parquet(str(variacoes_path))
         _cleanup_legacy_produto_artifacts(dir_analises, cnpj)
         return empty
 
@@ -941,7 +1079,9 @@ def unificar_produtos_unidades(cnpj: str, projeto_dir: Path | None = None) -> pl
     return df_agregados
 
 
-def _normalize_mapa_descricoes_manual(df: pl.DataFrame, default_acao: str = "AGREGAR") -> pl.DataFrame:
+def _normalize_mapa_descricoes_manual(
+    df: pl.DataFrame, default_acao: str = "AGREGAR"
+) -> pl.DataFrame:
     if df.is_empty():
         return pl.DataFrame(schema={c: pl.Utf8 for c in DESCRIPTION_MANUAL_MAP_COLUMNS})
 
@@ -963,7 +1103,9 @@ def _normalize_mapa_descricoes_manual(df: pl.DataFrame, default_acao: str = "AGR
                 "descricao_par": descricao_par,
                 "hash_descricoes_key": str(
                     row.get("hash_descricoes_key")
-                    or _build_description_hash(origem, destino, descricao_par, tipo_regra)
+                    or _build_description_hash(
+                        origem, destino, descricao_par, tipo_regra
+                    )
                 ),
                 "chave_grupo_a": _canon_text(row.get("chave_grupo_a"), ""),
                 "chave_grupo_b": _canon_text(row.get("chave_grupo_b"), ""),
@@ -971,21 +1113,33 @@ def _normalize_mapa_descricoes_manual(df: pl.DataFrame, default_acao: str = "AGR
                 "acao_manual": _canon_text(row.get("acao_manual"), default_acao),
             }
         )
-    return pl.DataFrame(rows).select(DESCRIPTION_MANUAL_MAP_COLUMNS).unique(subset=["hash_descricoes_key"], keep="last")
+    return (
+        pl.DataFrame(rows)
+        .select(DESCRIPTION_MANUAL_MAP_COLUMNS)
+        .unique(subset=["hash_descricoes_key"], keep="last")
+    )
 
 
-def merge_mapa_descricoes_manual(mapa_path: str | Path, df_novo: pl.DataFrame, default_acao: str = "AGREGAR") -> None:
+def merge_mapa_descricoes_manual(
+    mapa_path: str | Path, df_novo: pl.DataFrame, default_acao: str = "AGREGAR"
+) -> None:
     mapa_path = Path(mapa_path)
     novo = _normalize_mapa_descricoes_manual(df_novo, default_acao=default_acao)
     if mapa_path.exists():
-        existente = _normalize_mapa_descricoes_manual(pl.read_parquet(str(mapa_path)), default_acao=default_acao)
-        merged = pl.concat([existente, novo], how="diagonal_relaxed").unique(subset=["hash_descricoes_key"], keep="last")
+        existente = _normalize_mapa_descricoes_manual(
+            pl.read_parquet(str(mapa_path)), default_acao=default_acao
+        )
+        merged = pl.concat([existente, novo], how="diagonal_relaxed").unique(
+            subset=["hash_descricoes_key"], keep="last"
+        )
         merged.write_parquet(str(mapa_path))
     else:
         novo.write_parquet(str(mapa_path))
 
 
-def _source_frame_rows(path: Path, fonte: str, mappings: dict[str, str]) -> pl.DataFrame:
+def _source_frame_rows(
+    path: Path, fonte: str, mappings: dict[str, str]
+) -> pl.DataFrame:
     if not path.exists():
         return pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
     df = pl.read_parquet(str(path))
@@ -1013,13 +1167,18 @@ def _source_frame_rows(path: Path, fonte: str, mappings: dict[str, str]) -> pl.D
                 "hash_manual_key": "",
             }
         )
-    return pl.DataFrame(rows).select(_DETAIL_COLUMNS) if rows else pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
+    return (
+        pl.DataFrame(rows).select(_DETAIL_COLUMNS)
+        if rows
+        else pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
+    )
 
 
 def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
     frames = [
         _source_frame_rows(
-            dir_parquet / next((p.name for p in dir_parquet.glob("NFe_*.parquet")), "__missing__"),
+            dir_parquet
+            / next((p.name for p in dir_parquet.glob("NFe_*.parquet")), "__missing__"),
             "NFE",
             {
                 "codigo": "prod_cprod",
@@ -1031,7 +1190,8 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
             },
         ),
         _source_frame_rows(
-            dir_parquet / next((p.name for p in dir_parquet.glob("NFCe_*.parquet")), "__missing__"),
+            dir_parquet
+            / next((p.name for p in dir_parquet.glob("NFCe_*.parquet")), "__missing__"),
             "NFCE",
             {
                 "codigo": "prod_cprod",
@@ -1043,7 +1203,11 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
             },
         ),
         _source_frame_rows(
-            dir_parquet / next((p.name for p in dir_parquet.glob("c170_simplificada_*.parquet")), "__missing__"),
+            dir_parquet
+            / next(
+                (p.name for p in dir_parquet.glob("c170_simplificada_*.parquet")),
+                "__missing__",
+            ),
             "C170",
             {
                 "codigo": "cod_item",
@@ -1057,7 +1221,10 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
             },
         ),
         _source_frame_rows(
-            dir_parquet / next((p.name for p in dir_parquet.glob("bloco_h_*.parquet")), "__missing__"),
+            dir_parquet
+            / next(
+                (p.name for p in dir_parquet.glob("bloco_h_*.parquet")), "__missing__"
+            ),
             "BLOCO_H",
             {
                 "codigo": "codigo_produto",
@@ -1074,8 +1241,15 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
     if not non_empty:
         return pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
     df = pl.concat(non_empty, how="diagonal_relaxed")
+
     def expr_canon(col_name: str, default_empty: str = "(VAZIO)") -> pl.Expr:
-        expr = pl.col(col_name).fill_null("").cast(pl.Utf8).str.strip_chars().str.to_uppercase()
+        expr = (
+            pl.col(col_name)
+            .fill_null("")
+            .cast(pl.Utf8)
+            .str.strip_chars()
+            .str.to_uppercase()
+        )
         return pl.when(expr == "").then(pl.lit(default_empty)).otherwise(expr)
 
     df = df.with_columns(
@@ -1108,11 +1282,17 @@ def _carregar_base_detalhes(dir_parquet: Path) -> pl.DataFrame:
     # ⚡ Bolt Optimization: apply hashlib.sha1 only to unique values to minimize
     # map_elements overhead and FFI boundary crossing, making it significantly faster
     # for dataframes with repetitive items.
-    unique_df = df.select("__temp_concat").unique().with_columns(
-        pl.col("__temp_concat").map_elements(
-            lambda x: hashlib.sha1(x.encode("utf-8")).hexdigest(),
-            return_dtype=pl.Utf8,
-        ).alias("hash_manual_key")
+    unique_df = (
+        df.select("__temp_concat")
+        .unique()
+        .with_columns(
+            pl.col("__temp_concat")
+            .map_elements(
+                lambda x: hashlib.sha1(x.encode("utf-8")).hexdigest(),
+                return_dtype=pl.Utf8,
+            )
+            .alias("hash_manual_key")
+        )
     )
 
     return df.join(unique_df, on="__temp_concat", how="left").drop("__temp_concat")
@@ -1123,37 +1303,65 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
         return df_base
 
     # ⚡ Bolt Optimization: map_elements only on unique descriptions to prevent massive FFI overhead per row
-    unique_desc = df_base.select("descricao").drop_nulls().unique().with_columns(
-        pl.col("descricao")
-        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-        .alias("descricao_normalizada")
+    unique_desc = (
+        df_base.select("descricao")
+        .drop_nulls()
+        .unique()
+        .with_columns(
+            pl.col("descricao")
+            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+            .alias("descricao_normalizada")
+        )
     )
     work = df_base.join(unique_desc, on="descricao", how="left")
 
     code_groups = (
         work.group_by("codigo")
-        .agg(pl.col("descricao_normalizada").drop_nulls().unique().sort().alias("__descricoes_norm"))
+        .agg(
+            pl.col("descricao_normalizada")
+            .drop_nulls()
+            .unique()
+            .sort()
+            .alias("__descricoes_norm")
+        )
         .filter(pl.col("__descricoes_norm").list.len() > 1)
     )
     if code_groups.is_empty():
         return work.drop("descricao_normalizada")
 
     replacements: dict[str, str] = {}
-    for cod, desc_norm_list in zip(code_groups["codigo"], code_groups["__descricoes_norm"]):
+    for cod, desc_norm_list in zip(
+        code_groups["codigo"], code_groups["__descricoes_norm"]
+    ):
         codigo = str(cod or "").strip()
-        raw_list = desc_norm_list.to_list() if hasattr(desc_norm_list, "to_list") else desc_norm_list
-        groups = [str(item or "").strip() for item in (raw_list or []) if str(item or "").strip()]
+        raw_list = (
+            desc_norm_list.to_list()
+            if hasattr(desc_norm_list, "to_list")
+            else desc_norm_list
+        )
+        groups = [
+            str(item or "").strip()
+            for item in (raw_list or [])
+            if str(item or "").strip()
+        ]
         for index, descricao_norm in enumerate(groups, start=1):
-            replacements[f"{codigo}|{descricao_norm}"] = f"{codigo}_SEPARADO_{index:02d}"
+            replacements[f"{codigo}|{descricao_norm}"] = (
+                f"{codigo}_SEPARADO_{index:02d}"
+            )
 
     replacements_df = pl.DataFrame(
-        {"__desagregacao_key": list(replacements.keys()), "__codigo_desagregado": list(replacements.values())},
-        schema={"__desagregacao_key": pl.Utf8, "__codigo_desagregado": pl.Utf8}
+        {
+            "__desagregacao_key": list(replacements.keys()),
+            "__codigo_desagregado": list(replacements.values()),
+        },
+        schema={"__desagregacao_key": pl.Utf8, "__codigo_desagregado": pl.Utf8},
     )
 
     return (
         work.with_columns(
-            pl.concat_str(["codigo", "descricao_normalizada"], separator="|").alias("__desagregacao_key")
+            pl.concat_str(["codigo", "descricao_normalizada"], separator="|").alias(
+                "__desagregacao_key"
+            )
         )
         .join(replacements_df, on="__desagregacao_key", how="left")
         .with_columns(pl.col("__codigo_desagregado").fill_null(""))
@@ -1163,7 +1371,10 @@ def _aplicar_desagregacao_codigos(df_base: pl.DataFrame) -> pl.DataFrame:
             .otherwise(pl.col("codigo"))
             .alias("codigo")
         )
-        .drop(["descricao_normalizada", "__desagregacao_key", "__codigo_desagregado"], strict=False)
+        .drop(
+            ["descricao_normalizada", "__desagregacao_key", "__codigo_desagregado"],
+            strict=False,
+        )
     )
 
 
@@ -1191,7 +1402,9 @@ def _resolve_description_unions(mapa_descricoes_path: Path) -> dict[str, str]:
     return {key: resolve(key) for key in list(parent)}
 
 
-def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str) -> pl.DataFrame:
+def _aplicar_mapas_manuais(
+    df_base: pl.DataFrame, dir_analises: Path, cnpj: str
+) -> pl.DataFrame:
     if df_base.is_empty():
         return df_base
 
@@ -1200,7 +1413,13 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
 
     unions = _resolve_description_unions(mapa_descricoes_path)
     if unions:
-        canon_expr = pl.col("descricao").fill_null("").cast(pl.Utf8).str.strip_chars().str.to_uppercase()
+        canon_expr = (
+            pl.col("descricao")
+            .fill_null("")
+            .cast(pl.Utf8)
+            .str.strip_chars()
+            .str.to_uppercase()
+        )
         canon_expr = pl.when(canon_expr == "").then(pl.lit("")).otherwise(canon_expr)
         clean_expr = pl.col("descricao").fill_null("").cast(pl.Utf8).str.strip_chars()
 
@@ -1212,17 +1431,22 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
             # Fallback for older Polars versions using join instead of map_elements
             # Convert unions dict to DataFrame and do a left join
             unions_df = pl.DataFrame(
-                {"__canon_desc": list(unions.keys()), "__replaced_desc": list(unions.values())},
-                schema={"__canon_desc": pl.Utf8, "__replaced_desc": pl.Utf8}
+                {
+                    "__canon_desc": list(unions.keys()),
+                    "__replaced_desc": list(unions.values()),
+                },
+                schema={"__canon_desc": pl.Utf8, "__replaced_desc": pl.Utf8},
             )
-            df_base = df_base.with_columns(
-                canon_expr.alias("__canon_desc"),
-                clean_expr.alias("__clean_desc")
-            ).join(
-                unions_df, on="__canon_desc", how="left"
-            ).with_columns(
-                pl.coalesce(["__replaced_desc", "__clean_desc"]).alias("descricao")
-            ).drop(["__canon_desc", "__clean_desc", "__replaced_desc"], strict=False)
+            df_base = (
+                df_base.with_columns(
+                    canon_expr.alias("__canon_desc"), clean_expr.alias("__clean_desc")
+                )
+                .join(unions_df, on="__canon_desc", how="left")
+                .with_columns(
+                    pl.coalesce(["__replaced_desc", "__clean_desc"]).alias("descricao")
+                )
+                .drop(["__canon_desc", "__clean_desc", "__replaced_desc"], strict=False)
+            )
 
     if mapa_manual_path.exists():
         mapa = pl.read_parquet(str(mapa_manual_path))
@@ -1248,34 +1472,56 @@ def _aplicar_mapas_manuais(df_base: pl.DataFrame, dir_analises: Path, cnpj: str)
                 pl.col("tipo_item_novo").cast(pl.Utf8).alias("__tipo_item_novo"),
             ]
         ).unique(subset=["hash_manual_key"], keep="last")
-        df_base = df_base.join(mapa, on="hash_manual_key", how="left").with_columns(
-            [
-                pl.when(pl.col("__codigo_novo").is_not_null() & (pl.col("__codigo_novo") != ""))
-                .then(pl.col("__codigo_novo"))
-                .otherwise(pl.col("codigo"))
-                .alias("codigo"),
-                pl.when(pl.col("__descricao_nova").is_not_null() & (pl.col("__descricao_nova") != ""))
-                .then(pl.col("__descricao_nova"))
-                .otherwise(pl.col("descricao"))
-                .alias("descricao"),
-                pl.when(pl.col("__ncm_novo").is_not_null() & (pl.col("__ncm_novo") != ""))
-                .then(pl.col("__ncm_novo"))
-                .otherwise(pl.col("ncm"))
-                .alias("ncm"),
-                pl.when(pl.col("__cest_novo").is_not_null() & (pl.col("__cest_novo") != ""))
-                .then(pl.col("__cest_novo"))
-                .otherwise(pl.col("cest"))
-                .alias("cest"),
-                pl.when(pl.col("__gtin_novo").is_not_null() & (pl.col("__gtin_novo") != ""))
-                .then(pl.col("__gtin_novo"))
-                .otherwise(pl.col("gtin"))
-                .alias("gtin"),
-                pl.when(pl.col("__tipo_item_novo").is_not_null() & (pl.col("__tipo_item_novo") != ""))
-                .then(pl.col("__tipo_item_novo"))
-                .otherwise(pl.col("tipo_item"))
-                .alias("tipo_item"),
-            ]
-        ).drop([c for c in df_base.columns if c.startswith("__")], strict=False)
+        df_base = (
+            df_base.join(mapa, on="hash_manual_key", how="left")
+            .with_columns(
+                [
+                    pl.when(
+                        pl.col("__codigo_novo").is_not_null()
+                        & (pl.col("__codigo_novo") != "")
+                    )
+                    .then(pl.col("__codigo_novo"))
+                    .otherwise(pl.col("codigo"))
+                    .alias("codigo"),
+                    pl.when(
+                        pl.col("__descricao_nova").is_not_null()
+                        & (pl.col("__descricao_nova") != "")
+                    )
+                    .then(pl.col("__descricao_nova"))
+                    .otherwise(pl.col("descricao"))
+                    .alias("descricao"),
+                    pl.when(
+                        pl.col("__ncm_novo").is_not_null()
+                        & (pl.col("__ncm_novo") != "")
+                    )
+                    .then(pl.col("__ncm_novo"))
+                    .otherwise(pl.col("ncm"))
+                    .alias("ncm"),
+                    pl.when(
+                        pl.col("__cest_novo").is_not_null()
+                        & (pl.col("__cest_novo") != "")
+                    )
+                    .then(pl.col("__cest_novo"))
+                    .otherwise(pl.col("cest"))
+                    .alias("cest"),
+                    pl.when(
+                        pl.col("__gtin_novo").is_not_null()
+                        & (pl.col("__gtin_novo") != "")
+                    )
+                    .then(pl.col("__gtin_novo"))
+                    .otherwise(pl.col("gtin"))
+                    .alias("gtin"),
+                    pl.when(
+                        pl.col("__tipo_item_novo").is_not_null()
+                        & (pl.col("__tipo_item_novo") != "")
+                    )
+                    .then(pl.col("__tipo_item_novo"))
+                    .otherwise(pl.col("tipo_item"))
+                    .alias("tipo_item"),
+                ]
+            )
+            .drop([c for c in df_base.columns if c.startswith("__")], strict=False)
+        )
     return df_base
 
 
@@ -1314,14 +1560,62 @@ def _build_produtos_agregados(df_base: pl.DataFrame) -> pl.DataFrame:
 
     grouped_rows: list[dict[str, Any]] = []
     for index, (desc_norm, rows) in enumerate(sorted(buckets.items()), start=1):
-        descricoes = sorted({_clean_value(row.get("descricao")) for row in rows if _clean_value(row.get("descricao"))})
-        descr_compls = sorted({_clean_value(row.get("descr_compl")) for row in rows if _clean_value(row.get("descr_compl"))})
-        codigos = sorted({_clean_value(row.get("codigo")) for row in rows if _clean_value(row.get("codigo"))})
-        ncms = sorted({_clean_value(row.get("ncm")) for row in rows if _clean_value(row.get("ncm"))})
-        cests = sorted({_clean_value(row.get("cest")) for row in rows if _clean_value(row.get("cest"))})
-        gtins = sorted({_clean_value(row.get("gtin")) for row in rows if _clean_value(row.get("gtin"))})
-        tipos = sorted({_clean_value(row.get("tipo_item")) for row in rows if _clean_value(row.get("tipo_item"))})
-        unidades = sorted({_clean_value(row.get("unid")) for row in rows if _clean_value(row.get("unid"))})
+        descricoes = sorted(
+            {
+                _clean_value(row.get("descricao"))
+                for row in rows
+                if _clean_value(row.get("descricao"))
+            }
+        )
+        descr_compls = sorted(
+            {
+                _clean_value(row.get("descr_compl"))
+                for row in rows
+                if _clean_value(row.get("descr_compl"))
+            }
+        )
+        codigos = sorted(
+            {
+                _clean_value(row.get("codigo"))
+                for row in rows
+                if _clean_value(row.get("codigo"))
+            }
+        )
+        ncms = sorted(
+            {
+                _clean_value(row.get("ncm"))
+                for row in rows
+                if _clean_value(row.get("ncm"))
+            }
+        )
+        cests = sorted(
+            {
+                _clean_value(row.get("cest"))
+                for row in rows
+                if _clean_value(row.get("cest"))
+            }
+        )
+        gtins = sorted(
+            {
+                _clean_value(row.get("gtin"))
+                for row in rows
+                if _clean_value(row.get("gtin"))
+            }
+        )
+        tipos = sorted(
+            {
+                _clean_value(row.get("tipo_item"))
+                for row in rows
+                if _clean_value(row.get("tipo_item"))
+            }
+        )
+        unidades = sorted(
+            {
+                _clean_value(row.get("unid"))
+                for row in rows
+                if _clean_value(row.get("unid"))
+            }
+        )
 
         conflitos: list[str] = []
         if len(descricoes) > 1:
@@ -1341,7 +1635,8 @@ def _build_produtos_agregados(df_base: pl.DataFrame) -> pl.DataFrame:
         grouped_rows.append(
             {
                 "chave_produto": f"ID_{index:04d}",
-                "descricao": _consensus(descricoes) or (descricoes[0] if descricoes else ""),
+                "descricao": _consensus(descricoes)
+                or (descricoes[0] if descricoes else ""),
                 "descricao_normalizada": desc_norm,
                 "lista_descricao": " | ".join(descricoes),
                 "lista_descr_compl": " | ".join(descr_compls),
@@ -1387,7 +1682,9 @@ def _build_produtos_agregados(df_base: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame) -> pl.DataFrame:
+def _build_produtos_indexados(
+    df_base: pl.DataFrame, df_agregados: pl.DataFrame
+) -> pl.DataFrame:
     if df_base.is_empty():
         return pl.DataFrame(
             schema={
@@ -1406,10 +1703,15 @@ def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame)
             }
         )
     # ⚡ Bolt Optimization: map_elements only on unique descriptions to prevent massive FFI overhead per row
-    unique_desc = df_base.select("descricao").drop_nulls().unique().with_columns(
-        pl.col("descricao")
-        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-        .alias("descricao_normalizada")
+    unique_desc = (
+        df_base.select("descricao")
+        .drop_nulls()
+        .unique()
+        .with_columns(
+            pl.col("descricao")
+            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+            .alias("descricao_normalizada")
+        )
     )
     df_base_norm = df_base.join(unique_desc, on="descricao", how="left")
     joined = df_base_norm.join(
@@ -1418,12 +1720,34 @@ def _build_produtos_indexados(df_base: pl.DataFrame, df_agregados: pl.DataFrame)
         how="left",
     )
     return (
-        joined.group_by(["chave_produto", "codigo", "descricao", "descricao_normalizada", "descr_compl", "tipo_item", "ncm", "cest", "gtin"])
+        joined.group_by(
+            [
+                "chave_produto",
+                "codigo",
+                "descricao",
+                "descricao_normalizada",
+                "descr_compl",
+                "tipo_item",
+                "ncm",
+                "cest",
+                "gtin",
+            ]
+        )
         .agg(
             [
                 pl.len().cast(pl.Int64).alias("qtd_linhas"),
-                pl.col("unid").drop_nulls().cast(pl.Utf8).unique().sort().alias("__unidades"),
-                pl.col("fonte").drop_nulls().cast(pl.Utf8).unique().sort().alias("__fontes"),
+                pl.col("unid")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__unidades"),
+                pl.col("fonte")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__fontes"),
             ]
         )
         .with_columns(
@@ -1457,45 +1781,106 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
 
     # ⚡ Bolt Optimization: map_elements only on unique descriptions to prevent massive FFI overhead per row
     if "descricao_normalizada" not in df_indexados.columns:
-        unique_desc = df_indexados.select("descricao").drop_nulls().unique().with_columns(
-            pl.col("descricao")
-            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-            .alias("descricao_normalizada")
+        unique_desc = (
+            df_indexados.select("descricao")
+            .drop_nulls()
+            .unique()
+            .with_columns(
+                pl.col("descricao")
+                .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+                .alias("descricao_normalizada")
+            )
         )
         df_indexados = df_indexados.join(unique_desc, on="descricao", how="left")
     else:
-        missing_norm = df_indexados.filter(pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == ""))
+        missing_norm = df_indexados.filter(
+            pl.col("descricao_normalizada").is_null()
+            | (pl.col("descricao_normalizada").cast(pl.Utf8) == "")
+        )
         if not missing_norm.is_empty():
-            unique_desc = missing_norm.select("descricao").drop_nulls().unique().with_columns(
-                pl.col("descricao")
-                .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-                .alias("__new_descricao_normalizada")
+            unique_desc = (
+                missing_norm.select("descricao")
+                .drop_nulls()
+                .unique()
+                .with_columns(
+                    pl.col("descricao")
+                    .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+                    .alias("__new_descricao_normalizada")
+                )
             )
-            df_indexados = df_indexados.join(unique_desc, on="descricao", how="left").with_columns(
-                pl.when(pl.col("descricao_normalizada").is_null() | (pl.col("descricao_normalizada").cast(pl.Utf8) == ""))
-                .then(pl.col("__new_descricao_normalizada"))
-                .otherwise(pl.col("descricao_normalizada").cast(pl.Utf8))
-                .alias("descricao_normalizada")
-            ).drop("__new_descricao_normalizada")
+            df_indexados = (
+                df_indexados.join(unique_desc, on="descricao", how="left")
+                .with_columns(
+                    pl.when(
+                        pl.col("descricao_normalizada").is_null()
+                        | (pl.col("descricao_normalizada").cast(pl.Utf8) == "")
+                    )
+                    .then(pl.col("__new_descricao_normalizada"))
+                    .otherwise(pl.col("descricao_normalizada").cast(pl.Utf8))
+                    .alias("descricao_normalizada")
+                )
+                .drop("__new_descricao_normalizada")
+            )
 
     grouped = (
         df_indexados.group_by("codigo")
         .agg(
             [
-                pl.col("descricao").drop_nulls().cast(pl.Utf8).unique().sort().alias("__descricoes"),
-                pl.col("descricao_normalizada").drop_nulls().cast(pl.Utf8).unique().sort().alias("__descricoes_norm"),
+                pl.col("descricao")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__descricoes"),
+                pl.col("descricao_normalizada")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__descricoes_norm"),
                 pl.col("ncm").drop_nulls().cast(pl.Utf8).unique().sort().alias("__ncm"),
-                pl.col("cest").drop_nulls().cast(pl.Utf8).unique().sort().alias("__cest"),
-                pl.col("gtin").drop_nulls().cast(pl.Utf8).unique().sort().alias("__gtin"),
-                pl.col("tipo_item").drop_nulls().cast(pl.Utf8).unique().sort().alias("__tipo"),
-                pl.col("chave_produto").drop_nulls().cast(pl.Utf8).unique().sort().alias("__chaves"),
-                pl.col("descr_compl").drop_nulls().cast(pl.Utf8).unique().sort().alias("__compl"),
+                pl.col("cest")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__cest"),
+                pl.col("gtin")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__gtin"),
+                pl.col("tipo_item")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__tipo"),
+                pl.col("chave_produto")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__chaves"),
+                pl.col("descr_compl")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .sort()
+                .alias("__compl"),
             ]
         )
         .with_columns(
             [
-                pl.col("__descricoes").list.len().cast(pl.Int64).alias("qtd_descricoes"),
-                pl.col("__descricoes_norm").list.len().cast(pl.Int64).alias("qtd_descricoes_normalizadas"),
+                pl.col("__descricoes")
+                .list.len()
+                .cast(pl.Int64)
+                .alias("qtd_descricoes"),
+                pl.col("__descricoes_norm")
+                .list.len()
+                .cast(pl.Int64)
+                .alias("qtd_descricoes_normalizadas"),
             ]
         )
         .filter(pl.col("qtd_descricoes_normalizadas") > 1)
@@ -1508,10 +1893,24 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
                 pl.col("__tipo").list.join(", ").alias("lista_tipo_item"),
                 pl.col("__chaves").list.join(", ").alias("lista_chave_produto"),
                 pl.col("__compl").list.join(" | ").alias("lista_descr_compl"),
-                pl.col("__chaves").list.len().cast(pl.Int64).alias("qtd_grupos_descricao_afetados"),
+                pl.col("__chaves")
+                .list.len()
+                .cast(pl.Int64)
+                .alias("qtd_grupos_descricao_afetados"),
             ]
         )
-        .drop(["__descricoes", "__descricoes_norm", "__ncm", "__cest", "__gtin", "__tipo", "__chaves", "__compl"])
+        .drop(
+            [
+                "__descricoes",
+                "__descricoes_norm",
+                "__ncm",
+                "__cest",
+                "__gtin",
+                "__tipo",
+                "__chaves",
+                "__compl",
+            ]
+        )
         .sort("codigo")
     )
     return grouped
@@ -1519,27 +1918,47 @@ def _build_codigos_multidescricao(df_indexados: pl.DataFrame) -> pl.DataFrame:
 
 def _build_variacoes_produtos(df_base: pl.DataFrame) -> pl.DataFrame:
     if df_base.is_empty():
-        return pl.DataFrame(schema={"descricao": pl.Utf8, "qtd_codigos": pl.Int64, "qtd_ncm": pl.Int64, "qtd_gtin": pl.Int64})
+        return pl.DataFrame(
+            schema={
+                "descricao": pl.Utf8,
+                "qtd_codigos": pl.Int64,
+                "qtd_ncm": pl.Int64,
+                "qtd_gtin": pl.Int64,
+            }
+        )
 
     # ⚡ Bolt Optimization: map_elements only on unique descriptions to prevent massive FFI overhead per row
-    unique_desc = df_base.select("descricao").drop_nulls().unique().with_columns(
-        pl.col("descricao")
-        .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
-        .alias("descricao_normalizada")
+    unique_desc = (
+        df_base.select("descricao")
+        .drop_nulls()
+        .unique()
+        .with_columns(
+            pl.col("descricao")
+            .map_elements(doc_normalize_description_key, return_dtype=pl.Utf8)
+            .alias("descricao_normalizada")
+        )
     )
     df_base_norm = df_base.join(unique_desc, on="descricao", how="left")
 
     return (
-        df_base_norm
-        .group_by("descricao_normalizada")
+        df_base_norm.group_by("descricao_normalizada")
         .agg(
             [
-                pl.col("descricao").drop_nulls().cast(pl.Utf8).mode().first().alias("descricao"),
+                pl.col("descricao")
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .mode()
+                .first()
+                .alias("descricao"),
                 pl.col("codigo").n_unique().cast(pl.Int64).alias("qtd_codigos"),
                 pl.col("ncm").n_unique().cast(pl.Int64).alias("qtd_ncm"),
                 pl.col("gtin").n_unique().cast(pl.Int64).alias("qtd_gtin"),
             ]
         )
-        .filter((pl.col("qtd_codigos") > 1) | (pl.col("qtd_ncm") > 1) | (pl.col("qtd_gtin") > 1))
+        .filter(
+            (pl.col("qtd_codigos") > 1)
+            | (pl.col("qtd_ncm") > 1)
+            | (pl.col("qtd_gtin") > 1)
+        )
         .sort(["qtd_codigos", "qtd_ncm", "qtd_gtin"], descending=[True, True, True])
     )

@@ -7,6 +7,10 @@ import unicodedata
 from typing import Any
 
 
+_RE_NON_ALNUM = re.compile(r"[^A-Z0-9 ]+")
+_RE_NON_ALNUM_NO_SPACE = re.compile(r"[^A-Z0-9]+")
+_RE_DIGITS = re.compile(r"[^0-9]")
+
 DESCRIPTION_STOPWORDS = {
     "A",
     "AS",
@@ -33,7 +37,6 @@ UNIT_SYNONYMS = {
     "PECA": "PC",
     "PECAS": "PC",
     "PCA": "PC",
-    "PCA": "PC",
     "PCT": "PCT",
     "PAC": "PCT",
     "PACOTE": "PCT",
@@ -59,30 +62,32 @@ def _ascii_upper(value: Any) -> str:
 
 
 def normalize_description_key(value: Any) -> str:
-    clean = re.sub(r"[^A-Z0-9 ]+", " ", _ascii_upper(value))
-    tokens = [token for token in clean.split() if token and token not in DESCRIPTION_STOPWORDS]
+    clean = _RE_NON_ALNUM.sub(" ", _ascii_upper(value))
+    tokens = [
+        token for token in clean.split() if token and token not in DESCRIPTION_STOPWORDS
+    ]
     return " ".join(tokens)
 
 
 def normalize_unit(value: Any) -> str:
-    token = re.sub(r"[^A-Z0-9]+", "", _ascii_upper(value))
+    token = _RE_NON_ALNUM_NO_SPACE.sub("", _ascii_upper(value))
     if not token:
         return ""
     return UNIT_SYNONYMS.get(token, token)
 
 
 def clean_ncm(value: Any) -> str:
-    digits = re.sub(r"[^0-9]", "", str(value or ""))
+    digits = _RE_DIGITS.sub("", str(value or ""))
     return digits if len(digits) == 8 else ""
 
 
 def clean_cest(value: Any) -> str:
-    digits = re.sub(r"[^0-9]", "", str(value or ""))
+    digits = _RE_DIGITS.sub("", str(value or ""))
     return digits if len(digits) == 7 else ""
 
 
 def clean_gtin(value: Any) -> str:
-    digits = re.sub(r"[^0-9]", "", str(value or ""))
+    digits = _RE_DIGITS.sub("", str(value or ""))
     return digits if len(digits) in VALID_GTIN_LENGTHS else ""
 
 
@@ -90,7 +95,7 @@ def metric_score(left: Any, right: Any) -> float:
     a = str(left or "").strip()
     b = str(right or "").strip()
     if a and b:
-      return 1.0 if a == b else 0.0
+        return 1.0 if a == b else 0.0
     return 0.5
 
 
@@ -187,15 +192,21 @@ def choose_standard_code(rows: list[dict[str, Any]]) -> str:
 
 
 def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    desc_score = description_similarity(left.get("descricao_normalizada"), right.get("descricao_normalizada"))
+    desc_score = description_similarity(
+        left.get("descricao_normalizada"), right.get("descricao_normalizada")
+    )
     ncm_score = metric_score(left.get("ncm"), right.get("ncm"))
     cest_score = metric_score(left.get("cest"), right.get("cest"))
     gtin_score = metric_score(left.get("gtin"), right.get("gtin"))
 
-    shared_codes = sorted(set(left.get("codigos") or []) & set(right.get("codigos") or []))
+    shared_codes = sorted(
+        set(left.get("codigos") or []) & set(right.get("codigos") or [])
+    )
     ncm_equal = ncm_score == 1.0
     cest_equal = cest_score == 1.0
-    gtin_equal = gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
+    gtin_equal = (
+        gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
+    )
     fiscal_conflict = sum(
         1
         for a, b in [
@@ -203,7 +214,9 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
             (left.get("cest"), right.get("cest")),
             (left.get("gtin"), right.get("gtin")),
         ]
-        if str(a or "").strip() and str(b or "").strip() and str(a).strip() != str(b).strip()
+        if str(a or "").strip()
+        and str(b or "").strip()
+        and str(a).strip() != str(b).strip()
     )
 
     recommendation = "REVISAR"
@@ -213,8 +226,14 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
 
     if shared_codes:
         recommendation = "SEPARAR_SUGERIDO"
-        reason = f"Codigo reutilizado em descricoes diferentes: {', '.join(shared_codes)}."
-    elif gtin_equal and ncm_equal and (cest_equal or not left.get("cest") or not right.get("cest")):
+        reason = (
+            f"Codigo reutilizado em descricoes diferentes: {', '.join(shared_codes)}."
+        )
+    elif (
+        gtin_equal
+        and ncm_equal
+        and (cest_equal or not left.get("cest") or not right.get("cest"))
+    ):
         recommendation = "UNIR_AUTOMATICO_ELEGIVEL"
         reason = "GTIN valido coincide com NCM/CEST compativeis."
         auto_join = True
