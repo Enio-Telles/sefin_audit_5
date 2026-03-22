@@ -63,7 +63,7 @@ app.include_router(references.router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "2.0.0", "engine": "python"}
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
