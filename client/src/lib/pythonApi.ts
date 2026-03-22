@@ -33,7 +33,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-async function downloadFile(path: string, options?: RequestInit): Promise<Blob> {
+async function downloadFile(
+  path: string,
+  options?: RequestInit
+): Promise<Blob> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
@@ -68,7 +71,9 @@ function triggerDownload(blob: Blob, filename: string) {
 // ============================================================
 
 export async function checkHealth() {
-  return request<{ status: string; version: string; engine: string }>("/health");
+  return request<{ status: string; version: string; engine: string }>(
+    "/health"
+  );
 }
 
 // ============================================================
@@ -76,8 +81,13 @@ export async function checkHealth() {
 // ============================================================
 
 export async function downloadRevisaoManualExcel(cnpj: string) {
-  const blob = await downloadFile(`/export/revisao-manual-excel?cnpj=${encodeURIComponent(cnpj)}`);
-  triggerDownload(blob, `revisao_manual_produtos_${cnpj.replace(/[^0-9]/g, "")}.xlsx`);
+  const blob = await downloadFile(
+    `/export/revisao-manual-excel?cnpj=${encodeURIComponent(cnpj)}`
+  );
+  triggerDownload(
+    blob,
+    `revisao_manual_produtos_${cnpj.replace(/[^0-9]/g, "")}.xlsx`
+  );
 }
 
 // ============================================================
@@ -123,31 +133,55 @@ export type AuditEtapa = {
   analises?: { nome: string; status: string; motivo?: string }[];
 };
 
-export type AuditPipelineResponse = {
+export type AuditPipelineBaseResponse = {
   success: boolean;
   cnpj: string;
-  job_status?: "agendada" | "executando" | "concluida" | "erro";
   message?: string;
-  etapas: AuditEtapa[];
-  arquivos_extraidos: AuditFileResult[];
-  arquivos_analises: AuditFileResult[];
-  arquivos_produtos: AuditFileResult[];
-  arquivos_relatorios: AuditReportResult[];
-  erros: string[];
   dir_parquet: string;
   dir_analises: string;
   dir_relatorios: string;
 };
 
-export async function runAuditPipeline(cnpj: string, data_limite_processamento?: string) {
-  return request<AuditPipelineResponse>("/auditoria/pipeline", {
+export type AuditPipelineStartResponse = AuditPipelineBaseResponse & {
+  job_status: "agendada";
+};
+
+export type AuditPipelineStatusResponse = AuditPipelineBaseResponse & {
+  job_status: "agendada" | "executando" | "concluida" | "erro";
+  etapas: AuditEtapa[];
+  erros: string[];
+  arquivos_extraidos: AuditFileResult[];
+  arquivos_analises: AuditFileResult[];
+  arquivos_produtos: AuditFileResult[];
+  arquivos_relatorios: AuditReportResult[];
+};
+
+export type AuditPipelineFinalResult = AuditPipelineBaseResponse & {
+  etapas: AuditEtapa[];
+  erros: string[];
+  arquivos_extraidos: AuditFileResult[];
+  arquivos_analises: AuditFileResult[];
+  arquivos_produtos: AuditFileResult[];
+  arquivos_relatorios: AuditReportResult[];
+};
+
+export async function runAuditPipeline(
+  cnpj: string,
+  data_limite_processamento?: string
+) {
+  return request<AuditPipelineStartResponse>("/auditoria/pipeline", {
     method: "POST",
-    body: JSON.stringify({ cnpj, data_limite_processamento: data_limite_processamento || "" }),
+    body: JSON.stringify({
+      cnpj,
+      data_limite_processamento: data_limite_processamento || "",
+    }),
   });
 }
 
 export async function getAuditStatus(cnpj: string) {
-  return request<AuditPipelineResponse>(`/auditoria/status/${encodeURIComponent(cnpj)}`);
+  return request<AuditPipelineStatusResponse>(
+    `/auditoria/status/${encodeURIComponent(cnpj)}`
+  );
 }
 
 export type AuditHistorySummary = {
@@ -160,11 +194,15 @@ export type AuditHistorySummary = {
 };
 
 export async function getAuditHistory() {
-  return request<{ success: boolean; historico: AuditHistorySummary[] }>("/auditoria/historico");
+  return request<{ success: boolean; historico: AuditHistorySummary[] }>(
+    "/auditoria/historico"
+  );
 }
 
 export async function getAuditDetails(cnpj: string) {
-  return request<AuditPipelineResponse>(`/auditoria/historico/${encodeURIComponent(cnpj)}`);
+  return request<AuditPipelineFinalResult>(
+    `/auditoria/historico/${encodeURIComponent(cnpj)}`
+  );
 }
 
 // ============================================================
@@ -205,7 +243,10 @@ export async function runBatchAudit(data: LoteCNPJRequest) {
 }
 
 export async function getAvailableQueries() {
-  return request<{ success: boolean; consultas: { id: string; nome: string }[] }>("/auditoria/consultas");
+  return request<{
+    success: boolean;
+    consultas: { id: string; nome: string }[];
+  }>("/auditoria/consultas");
 }
 
 // ============================================================
@@ -265,27 +306,41 @@ export type OracleConnectionConfig = {
 };
 
 export async function testOracleConnection(config: OracleConnectionConfig) {
-  return request<{ success: boolean; message: string }>("/oracle/test-connection", {
-    method: "POST",
-    body: JSON.stringify(config),
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/test-connection",
+    {
+      method: "POST",
+      body: JSON.stringify(config),
+    }
+  );
 }
 
 export async function getOracleCredentials() {
-  return request<{ success: boolean; has_credentials: boolean; user?: string; message?: string }>("/oracle/credentials");
+  return request<{
+    success: boolean;
+    has_credentials: boolean;
+    user?: string;
+    message?: string;
+  }>("/oracle/credentials");
 }
 
 export async function saveOracleCredentials(config: OracleConnectionConfig) {
-  return request<{ success: boolean; message: string }>("/oracle/save-credentials", {
-    method: "POST",
-    body: JSON.stringify(config),
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/save-credentials",
+    {
+      method: "POST",
+      body: JSON.stringify(config),
+    }
+  );
 }
 
 export async function clearOracleCredentials() {
-  return request<{ success: boolean; message: string }>("/oracle/clear-credentials", {
-    method: "DELETE",
-  });
+  return request<{ success: boolean; message: string }>(
+    "/oracle/clear-credentials",
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 export type ExtractionRequest = {
@@ -309,10 +364,11 @@ export type ExtractionResult = {
 };
 
 export async function extractOracleData(req: ExtractionRequest) {
-  return request<{ success: boolean; results: ExtractionResult[]; output_dir: string }>(
-    "/oracle/extract",
-    { method: "POST", body: JSON.stringify(req) }
-  );
+  return request<{
+    success: boolean;
+    results: ExtractionResult[];
+    output_dir: string;
+  }>("/oracle/extract", { method: "POST", body: JSON.stringify(req) });
 }
 
 // ============================================================
@@ -332,9 +388,11 @@ export type ParquetFileInfo = {
 };
 
 export async function listParquetFiles(directory: string) {
-  return request<{ directory: string; files: ParquetFileInfo[]; count: number }>(
-    `/parquet/list?directory=${encodeURIComponent(directory)}`
-  );
+  return request<{
+    directory: string;
+    files: ParquetFileInfo[];
+    count: number;
+  }>(`/parquet/list?directory=${encodeURIComponent(directory)}`);
 }
 
 export type ParquetReadResponse = {
@@ -382,7 +440,11 @@ export async function addParquetRow(file_path: string) {
   });
 }
 
-export async function addParquetColumn(file_path: string, column_name: string, default_value = "") {
+export async function addParquetColumn(
+  file_path: string,
+  column_name: string,
+  default_value = ""
+) {
   return request<{ success: boolean }>("/parquet/add-column", {
     method: "POST",
     body: JSON.stringify({ file_path, column_name, default_value }),
@@ -407,13 +469,16 @@ export type ParquetMergeRequest = {
 };
 
 export async function mergeParquetFiles(data: ParquetMergeRequest) {
-  return request<{ success: boolean; message: string; file_path: string; rows: number; columns: number }>(
-    "/parquet/merge",
-    {
-      method: "POST",
-      body: JSON.stringify(data),
-    }
-  );
+  return request<{
+    success: boolean;
+    message: string;
+    file_path: string;
+    rows: number;
+    columns: number;
+  }>("/parquet/merge", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // ============================================================
@@ -430,16 +495,31 @@ export async function validateCnpj(cnpj: string) {
 // Export Excel
 // ============================================================
 
-export async function exportToExcel(source_files: string[], output_dir: string) {
-  return request<{ success: boolean; results: { file: string; output?: string; rows?: number; status: string; message?: string }[] }>(
-    "/export/excel",
-    { method: "POST", body: JSON.stringify({ source_files, output_dir }) }
-  );
+export async function exportToExcel(
+  source_files: string[],
+  output_dir: string
+) {
+  return request<{
+    success: boolean;
+    results: {
+      file: string;
+      output?: string;
+      rows?: number;
+      status: string;
+      message?: string;
+    }[];
+  }>("/export/excel", {
+    method: "POST",
+    body: JSON.stringify({ source_files, output_dir }),
+  });
 }
 
 export async function downloadExcel(file_path: string) {
-  const blob = await downloadFile(`/export/excel-download?file_path=${encodeURIComponent(file_path)}`);
-  const filename = file_path.split("/").pop()?.replace(".parquet", ".xlsx") || "export.xlsx";
+  const blob = await downloadFile(
+    `/export/excel-download?file_path=${encodeURIComponent(file_path)}`
+  );
+  const filename =
+    file_path.split("/").pop()?.replace(".parquet", ".xlsx") || "export.xlsx";
   triggerDownload(blob, filename);
 }
 
@@ -523,7 +603,9 @@ export type FatoresDiagnosticoResponse = {
 };
 
 export async function diagnosticarFatoresConversao(cnpj: string) {
-  return request<FatoresDiagnosticoResponse>(`/fatores/diagnostico?cnpj=${encodeURIComponent(cnpj)}`);
+  return request<FatoresDiagnosticoResponse>(
+    `/fatores/diagnostico?cnpj=${encodeURIComponent(cnpj)}`
+  );
 }
 
 export type AplicarAgrupamentoResult = {
@@ -553,7 +635,11 @@ export type ResolverLoteResponse = {
   resolvidos: number;
 };
 
-export async function resolverEmLote(cnpj: string, tipo: 'discrepancias' | 'duplicidades', nivel_minimo: number) {
+export async function resolverEmLote(
+  cnpj: string,
+  tipo: "discrepancias" | "duplicidades",
+  nivel_minimo: number
+) {
   return request<ResolverLoteResponse>("/produtos/resolver-em-lote", {
     method: "POST",
     body: JSON.stringify({ cnpj, tipo, nivel_minimo }),
@@ -658,14 +744,23 @@ export type DETNotificationRequest = {
   matricula?: string;
 };
 
-export async function generateDETNotification(data: DETNotificationRequest, format: "html" | "txt" = "html") {
-  const endpoint = format === "txt" ? "/reports/det-notification-txt" : "/reports/det-notification";
+export async function generateDETNotification(
+  data: DETNotificationRequest,
+  format: "html" | "txt" = "html"
+) {
+  const endpoint =
+    format === "txt"
+      ? "/reports/det-notification-txt"
+      : "/reports/det-notification";
   const blob = await downloadFile(endpoint, {
     method: "POST",
     body: JSON.stringify(data),
   });
   const cnpjClean = data.cnpj.replace(/\D/g, "");
-  triggerDownload(blob, `notificacao_det_${cnpjClean}.${format === "txt" ? "txt" : "html"}`);
+  triggerDownload(
+    blob,
+    `notificacao_det_${cnpjClean}.${format === "txt" ? "txt" : "html"}`
+  );
 }
 
 // ============================================================
@@ -724,7 +819,11 @@ export type BatchRuleId =
   | "R3_GTIN_NCM"
   | "R6_MANTER_SEPARADO";
 
-export type FiscalRelationState = "EQUAL_FILLED" | "EQUAL_NULL" | "CONFLICT" | "INCOMPLETE";
+export type FiscalRelationState =
+  | "EQUAL_FILLED"
+  | "EQUAL_NULL"
+  | "CONFLICT"
+  | "INCOMPLETE";
 
 export interface UnificacaoLotePreviewRequest {
   cnpj: string;
@@ -980,7 +1079,11 @@ export interface ProdutoAnaliseStatusResumo {
   decididos_entre_grupos: number;
 }
 
-export type AutoSepararResidualMode = "NCM_CEST_GTIN" | "NCM_GTIN" | "NCM_ONLY" | "TEXT_ONLY";
+export type AutoSepararResidualMode =
+  | "NCM_CEST_GTIN"
+  | "NCM_GTIN"
+  | "NCM_ONLY"
+  | "TEXT_ONLY";
 
 export interface AutoSepararResidualResponse {
   status: string;
@@ -991,33 +1094,49 @@ export interface AutoSepararResidualResponse {
   qtd_codigos_aplicados: number;
   qtd_codigos_ignorados: number;
   motivos_ignorados: { codigo: string; motivo: string }[];
-  resumo_motivos_ignorados: { motivo: string; qtd_codigos: number; codigos_amostra: string[] }[];
+  resumo_motivos_ignorados: {
+    motivo: string;
+    qtd_codigos: number;
+    codigos_amostra: string[];
+  }[];
 }
 
 export async function getProdutoDetalhes(cnpj: string, codigo: string) {
-  return request<DetalhesCodigoResponse>(`/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`);
+  return request<DetalhesCodigoResponse>(
+    `/produtos/detalhes-codigo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`
+  );
 }
 
 export async function getProdutosRevisaoManual(cnpj: string) {
-  return request<ProdutosRevisaoManualResponse>(`/produtos/revisao-manual?cnpj=${encodeURIComponent(cnpj)}`);
+  return request<ProdutosRevisaoManualResponse>(
+    `/produtos/revisao-manual?cnpj=${encodeURIComponent(cnpj)}`
+  );
 }
 
 export async function getProdutosRevisaoFinal(cnpj: string) {
-  return request<ProdutosRevisaoFinalResponse>(`/produtos/revisao-final?cnpj=${encodeURIComponent(cnpj)}`);
+  return request<ProdutosRevisaoFinalResponse>(
+    `/produtos/revisao-final?cnpj=${encodeURIComponent(cnpj)}`
+  );
 }
 
 export async function previewUnificacaoLote(req: UnificacaoLotePreviewRequest) {
-  return request<UnificacaoLotePreviewResponse>("/produtos/unificacao-lote/propostas", {
-    method: "POST",
-    body: JSON.stringify(req),
-  });
+  return request<UnificacaoLotePreviewResponse>(
+    "/produtos/unificacao-lote/propostas",
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+    }
+  );
 }
 
 export async function applyUnificacaoLote(req: UnificacaoLoteApplyRequest) {
-  return request<UnificacaoLoteApplyResponse>("/produtos/unificacao-lote/aplicar", {
-    method: "POST",
-    body: JSON.stringify(req),
-  });
+  return request<UnificacaoLoteApplyResponse>(
+    "/produtos/unificacao-lote/aplicar",
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+    }
+  );
 }
 
 export async function getParesGruposSimilares(
@@ -1060,46 +1179,65 @@ export interface VectorizacaoStatusResponse {
     model_name?: string;
     engine?: string | null;
     modes?: {
-      faiss?: { available: boolean; message: string; model_name?: string; engine?: string | null };
-      light?: { available: boolean; message: string; model_name?: string; engine?: string | null };
-
+      faiss?: {
+        available: boolean;
+        message: string;
+        model_name?: string;
+        engine?: string | null;
+      };
+      light?: {
+        available: boolean;
+        message: string;
+        model_name?: string;
+        engine?: string | null;
+      };
     };
   };
   caches: {
     faiss?: Record<string, unknown> & { stale?: boolean };
     light?: Record<string, unknown> & { stale?: boolean };
-
   };
 }
 
 export async function getVectorizacaoStatus(cnpj: string) {
-  return request<VectorizacaoStatusResponse>(`/produtos/vectorizacao-status?cnpj=${encodeURIComponent(cnpj)}`);
+  return request<VectorizacaoStatusResponse>(
+    `/produtos/vectorizacao-status?cnpj=${encodeURIComponent(cnpj)}`
+  );
 }
 
 export interface ProdutoRuntimeStatusResponse {
   success: boolean;
   cnpj: string;
   runtime: {
-
-    files: Record<string, { path: string; exists: boolean; size_bytes?: number }>;
+    files: Record<
+      string,
+      { path: string; exists: boolean; size_bytes?: number }
+    >;
   };
 }
 
 export async function getRuntimeProdutosStatus(cnpj: string) {
-  return request<ProdutoRuntimeStatusResponse>(`/produtos/runtime-status?cnpj=${encodeURIComponent(cnpj)}`);
-}
-
-export async function rebuildRuntimeProdutos(cnpj: string) {
-  return request<{ success: boolean; message: string; rows: number; runtime: ProdutoRuntimeStatusResponse["runtime"] }>(
-    "/produtos/rebuild-runtime",
-    {
-      method: "POST",
-      body: JSON.stringify({ cnpj }),
-    }
+  return request<ProdutoRuntimeStatusResponse>(
+    `/produtos/runtime-status?cnpj=${encodeURIComponent(cnpj)}`
   );
 }
 
-export async function clearVectorizacaoCache(cnpj: string, metodo: "faiss" | "light" | "all" = "all") {
+export async function rebuildRuntimeProdutos(cnpj: string) {
+  return request<{
+    success: boolean;
+    message: string;
+    rows: number;
+    runtime: ProdutoRuntimeStatusResponse["runtime"];
+  }>("/produtos/rebuild-runtime", {
+    method: "POST",
+    body: JSON.stringify({ cnpj }),
+  });
+}
+
+export async function clearVectorizacaoCache(
+  cnpj: string,
+  metodo: "faiss" | "light" | "all" = "all"
+) {
   return request<{ success: boolean; message: string; removed: string[] }>(
     `/produtos/vectorizacao-clear-cache?cnpj=${encodeURIComponent(cnpj)}&metodo=${encodeURIComponent(metodo)}`,
     { method: "POST" }
@@ -1126,102 +1264,161 @@ export async function getCodigosMultiDescricao(
   );
 }
 
-export async function getCodigoMultiDescricaoResumo(cnpj: string, codigo: string) {
+export async function getCodigoMultiDescricaoResumo(
+  cnpj: string,
+  codigo: string
+) {
   return request<CodigoMultiDescricaoResumoResponse>(
     `/produtos/codigo-multidescricao-resumo?cnpj=${encodeURIComponent(cnpj)}&codigo=${encodeURIComponent(codigo)}`
   );
 }
 
-export async function getProdutosDetalhesMulti(cnpj: string, codigos: string[]) {
-  return request<{ success: boolean; itens: Record<string, unknown>[] }>("/produtos/detalhes-multi-codigo", {
-    method: "POST",
-    body: JSON.stringify({ cnpj, codigos }),
-  });
+export async function getProdutosDetalhesMulti(
+  cnpj: string,
+  codigos: string[]
+) {
+  return request<{ success: boolean; itens: Record<string, unknown>[] }>(
+    "/produtos/detalhes-multi-codigo",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, codigos }),
+    }
+  );
 }
 
-export async function resolverManualUnificar(cnpj: string, itens: Record<string, unknown>[], decisao: Record<string, unknown>) {
+export async function resolverManualUnificar(
+  cnpj: string,
+  itens: Record<string, unknown>[],
+  decisao: Record<string, unknown>
+) {
   return request<ResolverManualResponse>("/produtos/resolver-manual-unificar", {
     method: "POST",
     body: JSON.stringify({ cnpj, itens, decisao }),
   });
 }
 
-export async function resolverManualDesagregar(cnpj: string, itensDecididos: Record<string, unknown>[]) {
-  return request<ResolverManualResponse>("/produtos/resolver-manual-desagregar", {
-    method: "POST",
-    body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
-  });
-}
-
-export async function autoSepararResidual(cnpj: string, modo: AutoSepararResidualMode, preview = false, codigos?: string[]) {
-  return request<AutoSepararResidualResponse>("/produtos/auto-separar-residual", {
-    method: "POST",
-    body: JSON.stringify({ cnpj, modo, preview, codigos }),
-  });
-}
-
-export async function submitProdutosRevisaoManual(cnpj: string, decisoes: RevisaoManualDecisionItem[]) {
-  return request<{ success: boolean; message: string }>("/produtos/revisao-manual/submit", {
-    method: "POST",
-    body: JSON.stringify({ cnpj, decisoes }),
-  });
-}
-
-export async function resolverManualDescricoes(cnpj: string, regras: DescricaoManualMapItem[]) {
-  return request<{ status: string; mensagem: string; arquivo: string; qtd_regras: number }>(
-    "/produtos/resolver-manual-descricoes",
+export async function resolverManualDesagregar(
+  cnpj: string,
+  itensDecididos: Record<string, unknown>[]
+) {
+  return request<ResolverManualResponse>(
+    "/produtos/resolver-manual-desagregar",
     {
       method: "POST",
-      body: JSON.stringify({ cnpj, regras }),
+      body: JSON.stringify({ cnpj, itens_decididos: itensDecididos }),
     }
   );
+}
+
+export async function autoSepararResidual(
+  cnpj: string,
+  modo: AutoSepararResidualMode,
+  preview = false,
+  codigos?: string[]
+) {
+  return request<AutoSepararResidualResponse>(
+    "/produtos/auto-separar-residual",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, modo, preview, codigos }),
+    }
+  );
+}
+
+export async function submitProdutosRevisaoManual(
+  cnpj: string,
+  decisoes: RevisaoManualDecisionItem[]
+) {
+  return request<{ success: boolean; message: string }>(
+    "/produtos/revisao-manual/submit",
+    {
+      method: "POST",
+      body: JSON.stringify({ cnpj, decisoes }),
+    }
+  );
+}
+
+export async function resolverManualDescricoes(
+  cnpj: string,
+  regras: DescricaoManualMapItem[]
+) {
+  return request<{
+    status: string;
+    mensagem: string;
+    arquivo: string;
+    qtd_regras: number;
+  }>("/produtos/resolver-manual-descricoes", {
+    method: "POST",
+    body: JSON.stringify({ cnpj, regras }),
+  });
 }
 
 export async function desfazerDecisaoCodigo(cnpj: string, codigo: string) {
-  return request<{ status: string; mensagem: string; qtd_regras_removidas: number }>(
-    "/produtos/desfazer-decisao-codigo",
-    {
-      method: "POST",
-      body: JSON.stringify({ cnpj, codigo }),
-    }
-  );
+  return request<{
+    status: string;
+    mensagem: string;
+    qtd_regras_removidas: number;
+  }>("/produtos/desfazer-decisao-codigo", {
+    method: "POST",
+    body: JSON.stringify({ cnpj, codigo }),
+  });
 }
 
-export async function desfazerManualDescricoes(cnpj: string, descricoes: string[]) {
-  return request<{ status: string; mensagem: string; qtd_regras_removidas: number }>(
-    "/produtos/desfazer-manual-descricoes",
-    {
-      method: "POST",
-      body: JSON.stringify({ cnpj, descricoes }),
-    }
-  );
+export async function desfazerManualDescricoes(
+  cnpj: string,
+  descricoes: string[]
+) {
+  return request<{
+    status: string;
+    mensagem: string;
+    qtd_regras_removidas: number;
+  }>("/produtos/desfazer-manual-descricoes", {
+    method: "POST",
+    body: JSON.stringify({ cnpj, descricoes }),
+  });
 }
 
-export async function getStatusAnaliseProdutos(cnpj: string, options?: { includeData?: boolean }) {
+export async function getStatusAnaliseProdutos(
+  cnpj: string,
+  options?: { includeData?: boolean }
+) {
   const includeData = options?.includeData ?? true;
-  return request<{ success: boolean; file_path: string; data: ProdutoAnaliseStatusItem[]; resumo: ProdutoAnaliseStatusResumo }>(
+  return request<{
+    success: boolean;
+    file_path: string;
+    data: ProdutoAnaliseStatusItem[];
+    resumo: ProdutoAnaliseStatusResumo;
+  }>(
     `/produtos/status-analise?cnpj=${encodeURIComponent(cnpj)}&include_data=${includeData ? "true" : "false"}`
   );
 }
 
-export async function marcarProdutoVerificado(item: ProdutoAnaliseStatusItem & { cnpj: string }) {
-  return request<{ success: boolean; mensagem: string; arquivo: string; status_file: string }>(
-    "/produtos/marcar-verificado",
-    {
-      method: "POST",
-      body: JSON.stringify(item),
-    }
-  );
+export async function marcarProdutoVerificado(
+  item: ProdutoAnaliseStatusItem & { cnpj: string }
+) {
+  return request<{
+    success: boolean;
+    mensagem: string;
+    arquivo: string;
+    status_file: string;
+  }>("/produtos/marcar-verificado", {
+    method: "POST",
+    body: JSON.stringify(item),
+  });
 }
 
-export async function desfazerProdutoVerificado(item: ProdutoAnaliseStatusItem & { cnpj: string }) {
-  return request<{ success: boolean; mensagem: string; qtd_removidos: number; status_file: string }>(
-    "/produtos/desfazer-verificado",
-    {
-      method: "POST",
-      body: JSON.stringify(item),
-    }
-  );
+export async function desfazerProdutoVerificado(
+  item: ProdutoAnaliseStatusItem & { cnpj: string }
+) {
+  return request<{
+    success: boolean;
+    mensagem: string;
+    qtd_removidos: number;
+    status_file: string;
+  }>("/produtos/desfazer-verificado", {
+    method: "POST",
+    body: JSON.stringify(item),
+  });
 }
 
 // ============================================================
@@ -1252,9 +1449,13 @@ export interface CestDetailsResponse {
 }
 
 export async function getNcmDetails(codigo: string) {
-  return request<NcmDetailsResponse>(`/references/ncm/${encodeURIComponent(codigo)}`);
+  return request<NcmDetailsResponse>(
+    `/references/ncm/${encodeURIComponent(codigo)}`
+  );
 }
 
 export async function getCestDetails(codigo: string) {
-  return request<CestDetailsResponse>(`/references/cest/${encodeURIComponent(codigo)}`);
+  return request<CestDetailsResponse>(
+    `/references/cest/${encodeURIComponent(codigo)}`
+  );
 }
