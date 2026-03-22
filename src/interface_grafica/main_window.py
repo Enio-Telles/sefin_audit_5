@@ -42,7 +42,7 @@ from src.interface_grafica.modelos.table_model import PolarsTableModel
 from src.servicos.aggregation_service import ServicoAgregacao
 from src.servicos.export_service import ExportService
 from src.servicos.parquet_service import FilterCondition, ParquetService
-from src.servicos.pipeline_funcoes_service import ResultadoPipeline, ServicoPipelineCompleto
+from src.servicos.pipeline_funcoes_service import ConfiguracaoPipeline, ResultadoPipeline, ServicoPipelineCompleto
 from src.servicos.pipeline_service import PipelineService
 from src.servicos.query_worker import QueryWorker
 from src.servicos.registry_service import RegistryService
@@ -78,13 +78,14 @@ class PipelineWorker(QThread):
 
     def run(self) -> None:
         try:
-            result = self.service.executar_completo(
-                self.cnpj, 
-                self.consultas, 
-                self.tabelas, 
-                self.data_limite,
+            config = ConfiguracaoPipeline(
+                cnpj=self.cnpj,
+                consultas=self.consultas,
+                tabelas=self.tabelas,
+                data_limite=self.data_limite,
                 progresso=self.progress.emit
             )
+            result = self.service.executar_completo(config)
         except Exception as exc:  # pragma: no cover - UI
             self.failed.emit(str(exc))
             return

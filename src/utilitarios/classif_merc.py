@@ -1,5 +1,4 @@
 import polars as pl
-import os
 from rich import print as rprint
 
 def aux_classif_merc(

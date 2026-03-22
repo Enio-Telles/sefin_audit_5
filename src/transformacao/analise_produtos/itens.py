@@ -1,9 +1,6 @@
-import hashlib
 import polars as pl
-from pathlib import Path
 from rich import print as rprint
 
-from ...utilitarios.parquet_utils import salvar_para_parquet
 
 CAMPOS_CHAVE = ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"]
 

@@ -3,11 +3,9 @@ from __future__ import annotations
 import html
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 from docx import Document
-from docx.shared import Inches
 from openpyxl import Workbook
 
 from src.config import MAX_DOCX_ROWS

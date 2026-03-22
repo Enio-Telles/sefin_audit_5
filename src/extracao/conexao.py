@@ -3,7 +3,6 @@ Módulo de conexão Oracle refatorado.
 Usa credenciais do arquivo .env na raiz do projeto.
 """
 import os
-import socket
 from pathlib import Path
 from dotenv import load_dotenv
 import oracledb
