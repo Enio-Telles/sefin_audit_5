@@ -371,7 +371,7 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
         <p className="text-xs text-muted-foreground">
           {file.rows !== undefined
             ? `${file.rows} linhas`
-            : (file.size ? `Tamanho: ${formatBytes(file.size)}` : '')}
+            : (file.size !== undefined ? `Tamanho: ${formatBytes(file.size)}` : 'Sem metadados')}
           {file.columns !== undefined ? `, ${file.columns} colunas` : ''}
           {file.analise && (
             <Badge

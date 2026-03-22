@@ -3033,85 +3033,16 @@ async def detalhes_historico(cnpj: str):
 
     dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
-    arquivos_extraidos = []
-    if dir_parquet.exists():
-        for f in dir_parquet.glob("*.parquet"):
-            try:
-                df = pl.scan_parquet(str(f))
-                rows = df.select(pl.len()).collect().item()
-                cols = len(df.collect_schema())
-                arquivos_extraidos.append({
-                    "name": f.name,
-                    "path": str(f),
-                    "rows": rows,
-                    "columns": cols,
-                    "query": f.stem.replace(f"_{cnpj_limpo}", ""),
-                })
-            except Exception:
-                pass
 
-    arquivos_analises = []
-    if dir_analises.exists():
-        for f in dir_analises.glob("*.parquet"):
-            try:
-                df = pl.scan_parquet(str(f))
-                rows = df.select(pl.len()).collect().item()
-                cols = len(df.collect_schema())
-                
-                analise_nome = ""
-                if "ressarcimento" in f.name: analise_nome = "Ressarcimento C176"
-                elif "resumo_mensal" in f.name: analise_nome = "Resumo Mensal C176"
-                elif "omissao" in f.name: analise_nome = "Omissão de Saída"
-                
-                arquivos_analises.append({
-                    "name": f.name,
-                    "path": str(f),
-                    "rows": rows,
-                    "columns": cols,
-                    "analise": analise_nome,
-                })
-            except Exception:
-                pass
-
-    arquivos_relatorios = []
-    if dir_relatorios.exists():
-        for f in dir_relatorios.iterdir():
-            if f.is_file():
-                tipo = "Documento Word" if f.suffix == ".docx" else "Texto TXT" if f.suffix == ".txt" else "Arquivo"
-                arquivos_relatorios.append({
-                    "name": f.name,
-                    "path": str(f),
-                    "tipo": tipo
-                })
-
-    # Create fake steps to feed the frontend UI
-    etapas = [
-        {
-            "etapa": "Extração Oracle",
-            "status": "concluída (histórico)",
-            "consultas_executadas": len(arquivos_extraidos),
-            "consultas_com_erro": 0,
-        },
-        {
-            "etapa": "Análises",
-            "status": "concluída (histórico)",
-            "analises": [{"nome": analise, "status": "recuperado"} for a in arquivos_analises if (analise := a.get("analise"))]
-        },
-        {
-            "etapa": "Relatórios",
-            "status": "concluída (histórico)",
-            "documentos_gerados": len(arquivos_relatorios),
-        }
-    ]
+    from routers.filesystem import obter_arquivos_auditoria
+    arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
 
     return {
         "success": True,
         "cnpj": cnpj_limpo,
-        "etapas": etapas,
-        "arquivos_extraidos": arquivos_extraidos,
-        "arquivos_analises": arquivos_analises,
-        "arquivos_relatorios": arquivos_relatorios,
+        "etapas": [{"etapa": "Completo", "status": "sucesso"}],
         "erros": [],
+        **arquivos,
         "dir_parquet": str(dir_parquet),
         "dir_analises": str(dir_analises),
         "dir_relatorios": str(dir_relatorios),
