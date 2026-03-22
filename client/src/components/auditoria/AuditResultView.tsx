@@ -77,6 +77,15 @@ function ActionGroup({
   );
 }
 
+function formatBytes(bytes: number, decimals = 1) {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
 export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
   const [, navigate] = useLocation();
   const cleanCnpj = result.cnpj?.replace(/\D/g, "") || "";
@@ -360,7 +369,10 @@ export function AuditResultView({ result, elapsed }: AuditResultViewProps) {
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="truncate text-sm font-medium">{file.name}</p>
         <p className="text-xs text-muted-foreground">
-          {file.rows} linhas, {file.columns} colunas
+          {file.rows !== undefined
+            ? `${file.rows} linhas`
+            : (file.size ? `Tamanho: ${formatBytes(file.size)}` : '')}
+          {file.columns !== undefined ? `, ${file.columns} colunas` : ''}
           {file.analise && (
             <Badge
               variant="outline"
