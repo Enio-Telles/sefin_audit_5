@@ -1,7 +1,6 @@
 """
 Serviço para leitura, parse e extração de parâmetros de arquivos SQL refatorado.
 """
-from __future__ import annotations
 
 import re
 from pathlib import Path
