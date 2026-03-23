@@ -368,7 +368,7 @@ async def get_audit_status(cnpj: str):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     import importlib.util
-    from routers.filesystem import obter_arquivos_auditoria
+    from core.audit_artifacts_service import obter_arquivos_auditoria
 
     try:
         _config_path = _PROJETO_DIR / "config.py"

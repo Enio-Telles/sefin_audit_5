@@ -3034,7 +3034,7 @@ async def detalhes_historico(cnpj: str):
     dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
 
-    from routers.filesystem import obter_arquivos_auditoria
+    from core.audit_artifacts_service import obter_arquivos_auditoria
     arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
 
     return {
