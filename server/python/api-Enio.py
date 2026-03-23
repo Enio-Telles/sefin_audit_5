@@ -129,8 +129,9 @@ def validar_cnpj(cnpj: str) -> bool:
     return True
 
 
-def is_safe_path(target_path: str | Path) -> bool:
-    """Valida se o caminho está dentro dos diretórios base permitidos."""
+def is_safe_path(target_path: str | Path) -> Path | None:
+    """Valida se o caminho está dentro dos diretórios base permitidos.
+    Retorna o caminho resolvido se for seguro, ou None caso contrário."""
     try:
         resolved = Path(target_path).resolve()
 
@@ -138,13 +139,13 @@ def is_safe_path(target_path: str | Path) -> bool:
         for base in [_PROJETO_DIR, _AUDIT_DIR, _CRUZAMENTOS_DIR]:
             try:
                 resolved.relative_to(base)
-                return True
+                return resolved
             except ValueError:
                 continue
 
-        return False
+        return None
     except Exception:
-        return False
+        return None
 
 
 def normalizar_colunas(df: pl.DataFrame) -> pl.DataFrame:
@@ -1049,10 +1050,9 @@ async def clear_oracle_credentials():
 @app.post("/api/python/parquet/read")
 async def read_parquet(request: ParquetReadRequest):
     """Lê um arquivo Parquet com paginação e filtros."""
-    if not is_safe_path(request.file_path):
+    file_path = is_safe_path(request.file_path)
+    if not file_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    file_path = Path(request.file_path)
     if not _is_allowed(file_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
@@ -1101,10 +1101,9 @@ async def read_parquet(request: ParquetReadRequest):
 @app.get("/api/python/parquet/unique-values")
 async def get_parquet_unique_values(file_path: str = Query(...), column: str = Query(...)):
     """Retorna até 10 valores únicos para a coluna especificada."""
-    if not is_safe_path(file_path):
+    path = is_safe_path(file_path)
+    if not path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    path = Path(file_path)
     if not _is_allowed(path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not path.exists():
@@ -1126,10 +1125,9 @@ async def get_parquet_unique_values(file_path: str = Query(...), column: str = Q
 @app.post("/api/python/parquet/write-cell")
 async def write_parquet_cell(request: ParquetWriteRequest):
     """Edita uma célula específica de um arquivo Parquet."""
-    if not is_safe_path(request.file_path):
+    file_path = is_safe_path(request.file_path)
+    if not file_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    file_path = Path(request.file_path)
     if not _is_allowed(file_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
@@ -1167,10 +1165,9 @@ async def write_parquet_cell(request: ParquetWriteRequest):
 @app.post("/api/python/parquet/add-row")
 async def add_parquet_row(request: ParquetAddRowRequest):
     """Adiciona uma nova linha vazia ao arquivo Parquet."""
-    if not is_safe_path(request.file_path):
+    file_path = is_safe_path(request.file_path)
+    if not file_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    file_path = Path(request.file_path)
     if not _is_allowed(file_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
@@ -1188,10 +1185,9 @@ async def add_parquet_row(request: ParquetAddRowRequest):
 @app.post("/api/python/parquet/add-column")
 async def add_parquet_column(request: ParquetAddColumnRequest):
     """Adiciona uma nova coluna ao arquivo Parquet."""
-    if not is_safe_path(request.file_path):
+    file_path = is_safe_path(request.file_path)
+    if not file_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    file_path = Path(request.file_path)
     if not _is_allowed(file_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not file_path.exists():
@@ -1272,10 +1268,9 @@ async def merge_parquet_files(request: ParquetMergeRequest):
 @app.get("/api/python/parquet/list")
 async def list_parquet_files(directory: str = Query(...)):
     """Lista arquivos Parquet em um diretório."""
-    if not is_safe_path(directory):
+    dir_path = is_safe_path(directory)
+    if not dir_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    dir_path = Path(directory)
     if not _is_allowed(dir_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not dir_path.exists():
@@ -1331,10 +1326,9 @@ async def browse_filesystem(path: str = Query("")):
                 entries.append({"name": "Cruzamentos", "path": str(_CRUZAMENTOS_DIR), "has_children": True})
             return {"current": "", "parent": None, "entries": entries}
 
-        if not is_safe_path(current_path):
+        target = is_safe_path(current_path)
+        if not target:
             raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-        target = Path(current_path).resolve()
         if not target.exists() or not target.is_dir():
             raise HTTPException(status_code=404, detail="Diretório não encontrado")
         parent_path = target.parent
@@ -1369,10 +1363,9 @@ async def list_sql_queries(path: str = Query("")):
     if not path:
         return {"queries": []}
 
-    if not is_safe_path(path):
+    target_path = is_safe_path(path)
+    if not target_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    target_path = Path(path)
     if not _is_allowed(target_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not target_path.exists():
@@ -1409,10 +1402,9 @@ async def list_auxiliary_queries(path: str = Query("")):
     if not path:
         return {"queries": [], "count": 0}
 
-    if not is_safe_path(path):
+    target_path = is_safe_path(path)
+    if not target_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    target_path = Path(path)
     if not _is_allowed(target_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not target_path.exists() or not target_path.is_dir():
@@ -1454,20 +1446,18 @@ def _human_size(size_bytes: int) -> str:
 @app.post("/api/python/export/excel")
 async def export_to_excel(request: ExcelExportRequest):
     """Exporta arquivos Parquet para Excel com formatação padrão (Arial 9)."""
-    if not is_safe_path(request.output_dir):
+    output_path = is_safe_path(request.output_dir)
+    if not output_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    output_path = Path(request.output_dir)
     if not _is_allowed(output_path):
         raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
     output_path.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
     for source in request.source_files:
-        if not is_safe_path(source):
+        source_path = is_safe_path(source)
+        if not source_path:
             results.append({"file": source, "status": "error", "message": "Acesso não autorizado ao diretório"})
             continue
-
-        source_path = Path(source)
         if not _is_allowed(source_path):
             results.append({"file": source, "status": "error", "message": "Acesso ao caminho não permitido"})
             continue
@@ -1497,10 +1487,9 @@ async def export_to_excel(request: ExcelExportRequest):
 @app.get("/api/python/export/excel-download")
 async def export_excel_download(file_path: str = Query(...)):
     """Exporta um Parquet para Excel (Arial 9) e retorna como download."""
-    if not is_safe_path(file_path):
+    source = is_safe_path(file_path)
+    if not source:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    source = Path(file_path)
     if not _is_allowed(source):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     if not source.exists():
@@ -1724,11 +1713,12 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
     Exemplo de análise: soma do valor_total por ano_mes, com filtros opcionais por CNPJ e período.
     Espera um arquivo base (default: "nfe_saida.parquet") com colunas: emissao_data, valor_total, cnpj_emitente.
     """
-    if not is_safe_path(req.input_dir) or not is_safe_path(req.output_dir):
+    base = is_safe_path(req.input_dir)
+    output_dir = is_safe_path(req.output_dir)
+    if not base or not output_dir:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
 
     try:
-        base = Path(req.input_dir)
         if not _is_allowed(base):
             raise HTTPException(status_code=403, detail="Acesso ao diretório de entrada não permitido")
         if not base.exists():
@@ -1772,7 +1762,6 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
             .sort("ano_mes")
         )
 
-        output_dir = Path(req.output_dir)
         if not _is_allowed(output_dir):
             raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1921,10 +1910,9 @@ async def gerar_fisconforme(request: FisconformeRequest):
 @app.post("/api/python/parquet/upload")
 async def upload_parquet(file: UploadFile = File(...), directory: str = Query(...)):
     """Upload de arquivo Parquet para um diretório."""
-    if not is_safe_path(directory):
+    dir_path = is_safe_path(directory)
+    if not dir_path:
         raise HTTPException(status_code=403, detail="Acesso não autorizado ao diretório")
-
-    dir_path = Path(directory)
     if not _is_allowed(dir_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     dir_path.mkdir(parents=True, exist_ok=True)
