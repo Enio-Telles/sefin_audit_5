@@ -80,11 +80,16 @@ def criar_contexto_sql(tabelas: Dict[str, Union[pl.DataFrame, pl.LazyFrame, Path
     con = duckdb.connect(database=":memory:")
     
     for nome, obj in tabelas.items():
+        # Validação básica de identificador SQL para evitar injeção no 'nome'
+        if not all(c.isalnum() or c == '_' for c in nome):
+            raise ValueError(f"Nome de tabela inválido: {nome}. Use apenas letras, números e underscores.")
+
         if isinstance(obj, (pl.DataFrame, pl.LazyFrame)):
             # DuckDB consegue ler DataFrames e LazyFrames do Polars diretamente
             con.register(nome, obj)
         elif isinstance(obj, (str, Path)):
-            # Se for um path, registra como scan_parquet
-            con.execute(f"CREATE VIEW {nome} AS SELECT * FROM read_parquet('{str(obj)}')")
+            # Se for um path, usa Polars para escanear com segurança e registra no DuckDB
+            # Isso evita injeção de SQL no path via f-strings
+            con.register(nome, pl.scan_parquet(str(obj)))
             
     return con
