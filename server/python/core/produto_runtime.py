@@ -330,30 +330,65 @@ def _prepare_group_rows(df_agregados: pl.DataFrame) -> list[dict[str, Any]]:
     lista_descr_compl_col = _pick_col(df_agregados, "lista_descr_compl")
 
     rows: list[dict[str, Any]] = []
-    for row in df_agregados.to_dicts():
-        raw_codes = (
-            str(row.get(lista_codigos_col) or "").strip() if lista_codigos_col else ""
-        )
+
+    # ⚡ Bolt Optimization: Replacing slow `df.to_dicts()` iteration with fast `zip()` over column Series.
+    # Avoiding row-by-row dictionary allocations dramatically reduces FFI overhead for large DataFrames.
+    def _extract(col_name: str | None) -> list[Any]:
+        if not col_name:
+            return [None] * df_agregados.height
+        series = df_agregados[col_name]
+        return series.to_list() if hasattr(series, "to_list") else list(series)
+
+    chaves = _extract(chave_col)
+    descricoes = _extract(descricao_col)
+    ncms = _extract(ncm_col)
+    cests = _extract(cest_col)
+    gtins = _extract(gtin_col)
+    conflitos_vals = _extract(conflitos_col)
+    desc_norms = _extract(descricao_norm_col)
+    lista_codigos_vals = _extract(lista_codigos_col)
+    descr_compl_vals = _extract(lista_descr_compl_col)
+
+    for (
+        c_chave,
+        c_desc,
+        c_ncm,
+        c_cest,
+        c_gtin,
+        c_conf,
+        c_desc_n,
+        c_cods,
+        c_compl,
+    ) in zip(
+        chaves,
+        descricoes,
+        ncms,
+        cests,
+        gtins,
+        conflitos_vals,
+        desc_norms,
+        lista_codigos_vals,
+        descr_compl_vals,
+        strict=False,
+    ):
+        raw_codes = str(c_cods or "").strip() if lista_codigos_col else ""
         codes = [item.strip() for item in raw_codes.split(",") if item.strip()]
         rows.append(
             {
-                "chave_produto": str(row.get(chave_col) or "").strip(),
-                "descricao": str(row.get(descricao_col) or "").strip(),
+                "chave_produto": str(c_chave or "").strip(),
+                "descricao": str(c_desc or "").strip(),
                 "descricao_normalizada": str(
-                    row.get(descricao_norm_col)
-                    or doc_normalize_description_key(row.get(descricao_col))
+                    c_desc_n or doc_normalize_description_key(c_desc)
                 ).strip(),
-                "ncm": str(row.get(ncm_col) or "").strip() if ncm_col else "",
-                "cest": str(row.get(cest_col) or "").strip() if cest_col else "",
-                "gtin": str(row.get(gtin_col) or "").strip() if gtin_col else "",
-                "lista_descr_compl": str(row.get(lista_descr_compl_col) or "").strip()
+                "ncm": str(c_ncm or "").strip() if ncm_col else "",
+                "cest": str(c_cest or "").strip() if cest_col else "",
+                "gtin": str(c_gtin or "").strip() if gtin_col else "",
+                "lista_descr_compl": str(c_compl or "").strip()
                 if lista_descr_compl_col
                 else "",
                 "codigos": codes,
                 "qtd_codigos": len(codes),
-                "conflitos": str(row.get(conflitos_col) or "").strip()
-                if conflitos_col
-                else "",
+                "conflitos": str(c_conf or "").strip() if conflitos_col else "",
             }
         )
     return [row for row in rows if row["chave_produto"] and row["descricao"]]
