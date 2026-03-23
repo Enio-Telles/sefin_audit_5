@@ -16,7 +16,10 @@ from core.audit_metadata_service import (
     obter_diagnostico_fatores,
 )
 from core.audit_response_service import construir_resposta_status
-from core.audit_pipeline_service import run_audit_pipeline_bg
+from core.audit_pipeline_service import (
+    executar_pipeline_auditoria,
+    iniciar_status_agendado,
+)
 
 
 logger = logging.getLogger("sefin_audit_python")
@@ -102,7 +105,6 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     import importlib.util
-    import json
 
     try:
         _config_path = _PROJETO_DIR / "config.py"
@@ -115,18 +117,10 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         DIR_SQL = _sefin_config.DIR_SQL
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
-        status_file = dir_analises / "status_pipeline.json"
-        with open(status_file, "w") as f:
-            json.dump(
-                {
-                    "status": "agendada",
-                    "message": "Auditoria agendada em segundo plano. Verifique o status posteriormente.",
-                },
-                f,
-            )
+        iniciar_status_agendado(dir_analises)
 
         background_tasks.add_task(
-            run_audit_pipeline_bg,
+            executar_pipeline_auditoria,
             req,
             cnpj_limpo,
             dir_parquet,
