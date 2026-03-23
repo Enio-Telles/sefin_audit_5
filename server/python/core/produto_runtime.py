@@ -1144,23 +1144,87 @@ def _source_frame_rows(
         return pl.DataFrame(schema={c: pl.Utf8 for c in _DETAIL_COLUMNS})
     df = pl.read_parquet(str(path))
     rows: list[dict[str, Any]] = []
-    for row in df.to_dicts():
-        codigo = _clean_value(row.get(mappings.get("codigo", "")))
-        descricao = _clean_value(row.get(mappings.get("descricao", "")))
+
+    # ⚡ Bolt Optimization: Replacing slow `df.to_dicts()` iteration with fast `zip()` over column Series.
+    # This avoids massive Python dictionary allocation overhead per row while crossing the Rust FFI boundary,
+    # resulting in a significant performance boost for large dataset reads.
+    cod_col = mappings.get("codigo", "")
+    desc_col = mappings.get("descricao", "")
+    tipo_col = mappings.get("tipo_item", "")
+    compl_col = mappings.get("descr_compl", "")
+    ncm_col = mappings.get("ncm", "")
+    cest_col = mappings.get("cest", "")
+    gtin_col = mappings.get("gtin", "")
+    unid_col = mappings.get("unid", "")
+
+    # Retrieve columns safely (fallback to empty series if missing)
+    cod_series = (
+        df.get_column(cod_col)
+        if cod_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    desc_series = (
+        df.get_column(desc_col)
+        if desc_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    tipo_series = (
+        df.get_column(tipo_col)
+        if tipo_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    compl_series = (
+        df.get_column(compl_col)
+        if compl_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    ncm_series = (
+        df.get_column(ncm_col)
+        if ncm_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    cest_series = (
+        df.get_column(cest_col)
+        if cest_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    gtin_series = (
+        df.get_column(gtin_col)
+        if gtin_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+    unid_series = (
+        df.get_column(unid_col)
+        if unid_col in df.columns
+        else pl.Series([None] * df.height)
+    )
+
+    for cod, desc, tipo, compl, ncm, cest, gtin, unid in zip(
+        cod_series,
+        desc_series,
+        tipo_series,
+        compl_series,
+        ncm_series,
+        cest_series,
+        gtin_series,
+        unid_series,
+    ):
+        codigo = _clean_value(cod)
+        descricao = _clean_value(desc)
         if not codigo or not descricao:
             continue
-        tipo_item = _clean_value(row.get(mappings.get("tipo_item", "")))
+        tipo_item = _clean_value(tipo)
         rows.append(
             {
                 "fonte": fonte,
                 "codigo": codigo,
                 "descricao": descricao,
-                "descr_compl": _clean_value(row.get(mappings.get("descr_compl", ""))),
+                "descr_compl": _clean_value(compl),
                 "tipo_item": tipo_item,
-                "ncm": doc_clean_ncm(row.get(mappings.get("ncm", ""))),
-                "cest": doc_clean_cest(row.get(mappings.get("cest", ""))),
-                "gtin": _clean_gtin(row.get(mappings.get("gtin", ""))),
-                "unid": doc_normalize_unit(row.get(mappings.get("unid", ""))),
+                "ncm": doc_clean_ncm(ncm),
+                "cest": doc_clean_cest(cest),
+                "gtin": _clean_gtin(gtin),
+                "unid": doc_normalize_unit(unid),
                 "codigo_original": codigo,
                 "descricao_original": descricao,
                 "tipo_item_original": tipo_item,
@@ -1962,6 +2026,7 @@ def _build_variacoes_produtos(df_base: pl.DataFrame) -> pl.DataFrame:
         )
         .sort(["qtd_codigos", "qtd_ncm", "qtd_gtin"], descending=[True, True, True])
     )
+
 
 def produto_pipeline_em_modo_compatibilidade() -> bool:
     return False
