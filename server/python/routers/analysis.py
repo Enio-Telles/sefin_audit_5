@@ -1,6 +1,5 @@
 import re
 import sys
-import json
 import traceback
 import logging
 import polars as pl
@@ -12,12 +11,13 @@ from core.models import AnaliseFaturamentoRequest, AuditPipelineRequest
 from core.utils import validar_cnpj
 
 # Novos services extraídos
-from core.audit_status_service import atualizar_status_pipeline, obter_status_pipeline
-from core.audit_oracle_service import obter_conexao_oracle
-from core.audit_extraction_service import executar_extracao_sql
-from core.audit_products_service import executar_unificacao_produtos
-from core.audit_reports_service import gerar_relatorios_finais
-from core.audit_metadata_service import processar_fatores_excel, obter_diagnostico_fatores
+from core.audit_metadata_service import (
+    processar_fatores_excel,
+    obter_diagnostico_fatores,
+)
+from core.audit_response_service import construir_resposta_status
+from core.audit_pipeline_service import run_audit_pipeline_bg
+
 
 logger = logging.getLogger("sefin_audit_python")
 router = APIRouter(prefix="/api/python", tags=["analysis"])
@@ -94,144 +94,6 @@ async def analise_faturamento_periodo(req: AnaliseFaturamentoRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def run_audit_pipeline_bg(
-    req: AuditPipelineRequest,
-    cnpj_limpo: str,
-    dir_parquet,
-    dir_analises,
-    dir_relatorios,
-    dir_sql,
-):
-    try:
-        erros = []
-        atualizar_status_pipeline(
-            dir_analises,
-            "executando",
-            "Auditoria em andamento.",
-            etapas=[
-                {"etapa": "Extração de Dados", "status": "executando"},
-                {"etapa": "Cruzamentos e Análises", "status": "pendente"},
-                {"etapa": "Análise de Produtos", "status": "pendente"},
-                {"etapa": "Geração de Relatórios", "status": "pendente"},
-            ]
-        )
-
-        # ETAPA 1: Extração
-        try:
-            conexao = obter_conexao_oracle(_PROJETO_DIR)
-            arquivos_extraidos, erros_extracao = executar_extracao_sql(
-                conexao,
-                cnpj_limpo,
-                dir_parquet,
-                dir_sql,
-                req.data_limite_processamento
-            )
-            conexao.close()
-            if erros_extracao:
-                erros.extend(erros_extracao)
-                raise Exception("Falhas detectadas na extração Oracle.")
-
-            atualizar_status_pipeline(
-                dir_analises,
-                "executando",
-                "Extração concluída.",
-                etapas=[{"etapa": "Extração de Dados", "status": "concluida"}],
-            )
-        except Exception as e:
-            erros.append(f"Extração Oracle: {str(e)}")
-            atualizar_status_pipeline(
-                dir_analises,
-                "executando",
-                "Erros detectados na extração. Prosseguindo...",
-                etapas=[{"etapa": "Extração de Dados", "status": "erro", "motivo": "Ver erros"}],
-                erros=erros
-            )
-
-        # ETAPA 2: Análises
-        atualizar_status_pipeline(
-            dir_analises,
-            "executando",
-            "Iniciando cruzamentos e análises...",
-            etapas=[{"etapa": "Cruzamentos e Análises", "status": "executando"}]
-        )
-
-        arquivos_analises = []
-        arquivos_produtos = []
-        atualizar_status_pipeline(
-            dir_analises,
-            "executando",
-            "Iniciando unificação de produtos...",
-            etapas=[
-                {"etapa": "Cruzamentos e Análises", "status": "concluida"},
-                {"etapa": "Análise de Produtos", "status": "executando"}
-            ]
-        )
-
-        try:
-            arquivos_produtos = executar_unificacao_produtos(
-                cnpj_limpo,
-                dir_parquet,
-                dir_analises,
-                _PROJETO_DIR
-            )
-            atualizar_status_pipeline(
-                dir_analises,
-                "executando",
-                "Unificação Master e Produtos concluída.",
-                etapas=[{"etapa": "Análise de Produtos", "status": "concluida"}],
-            )
-        except HTTPException:
-            raise
-        except Exception as e:
-            erros.append(f"Processamento de Produtos: {str(e)}")
-            logger.error(f"[audit_pipeline] Erro em Produtos: {e}")
-            atualizar_status_pipeline(
-                dir_analises,
-                "executando",
-                "Erro no processamento de produtos.",
-                etapas=[{"etapa": "Análise de Produtos", "status": "erro", "motivo": str(e)}],
-                erros=erros
-            )
-
-        # ETAPA 3: Relatórios
-        atualizar_status_pipeline(
-            dir_analises,
-            "executando",
-            "Iniciando geração de relatórios...",
-            etapas=[{"etapa": "Geração de Relatórios", "status": "executando"}]
-        )
-
-        arquivos_relatorios, erros_relatorios = gerar_relatorios_finais(
-            cnpj_limpo,
-            dir_analises,
-            dir_relatorios,
-            _PROJETO_DIR
-        )
-        if erros_relatorios:
-            erros.extend(erros_relatorios)
-
-        atualizar_status_pipeline(
-            dir_analises,
-            "concluida" if not erros else "erro",
-            "Verifique a aba de arquivos gerados" if not erros else "Auditoria concluída com erros.",
-            etapas=[{"etapa": "Geração de Relatórios", "status": "concluida" if not any("Relatórios" in e for e in erros) else "erro"}],
-            erros=erros
-        )
-    except Exception as e:
-        logger.error(f"[pipeline bg] Erro: {e}\n{traceback.format_exc()}")
-        try:
-            erros_final = erros if 'erros' in locals() else []
-            erros_final.append(str(e))
-            atualizar_status_pipeline(
-                dir_analises,
-                "erro",
-                str(e),
-                erros=erros_final
-            )
-        except Exception:
-            pass
-
-
 @router.post("/auditoria/pipeline")
 async def audit_pipeline(req: AuditPipelineRequest, background_tasks: BackgroundTasks):
     """Pipeline completo de auditoria."""
@@ -240,6 +102,8 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     import importlib.util
+    import json
+
     try:
         _config_path = _PROJETO_DIR / "config.py"
         _spec = importlib.util.spec_from_file_location(
@@ -269,6 +133,7 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
             dir_analises,
             dir_relatorios,
             DIR_SQL,
+            _PROJETO_DIR,
         )
 
         return {
@@ -319,11 +184,7 @@ async def importar_fatores_excel(
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
 
-        return {
-            "success": True,
-            "cnpj": cnpj_limpo,
-            **resultado
-        }
+        return {"success": True, "cnpj": cnpj_limpo, **resultado}
     except HTTPException:
         raise
     except Exception as e:
@@ -368,7 +229,6 @@ async def get_audit_status(cnpj: str):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     import importlib.util
-    from core.audit_artifacts_service import obter_arquivos_auditoria
 
     try:
         _config_path = _PROJETO_DIR / "config.py"
@@ -380,21 +240,9 @@ async def get_audit_status(cnpj: str):
         obter_diretorios_cnpj = _sefin_config.obter_diretorios_cnpj
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
-        status_dados = obter_status_pipeline(dir_analises)
-        arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
-
-        return {
-            "success": True,
-            "cnpj": cnpj_limpo,
-            **status_dados,
-            "arquivos_extraidos": arquivos.get("arquivos_extraidos", []),
-            "arquivos_analises": arquivos.get("arquivos_analises", []),
-            "arquivos_produtos": arquivos.get("arquivos_produtos", []),
-            "arquivos_relatorios": arquivos.get("arquivos_relatorios", []),
-            "dir_parquet": str(dir_parquet),
-            "dir_analises": str(dir_analises),
-            "dir_relatorios": str(dir_relatorios),
-        }
+        return construir_resposta_status(
+            cnpj_limpo, dir_parquet, dir_analises, dir_relatorios
+        )
     except HTTPException:
         raise
     except Exception as e:
