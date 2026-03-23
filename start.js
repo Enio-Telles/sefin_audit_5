@@ -52,7 +52,9 @@ function checkPrerequisites() {
 
   const pnpmVersion = runCommandSync("pnpm -v");
   if (!pnpmVersion) {
-    err("pnpm is not installed. Please install it globally: npm install -g pnpm");
+    err(
+      "pnpm is not installed. Please install it globally: npm install -g pnpm"
+    );
     process.exit(1);
   }
   info(`Found pnpm: ${pnpmVersion}`);
@@ -66,7 +68,14 @@ function ensureEnvFile() {
     info(".env file already exists.");
   } else {
     info("Creating default .env file...");
-    const defaultEnv = `DATABASE_URL=file:./sefin_audit.db
+    const defaultEnv = `# ==============================================================================
+# SEFIN Audit Tool - Configuração de Ambiente
+# ==============================================================================
+# Este é o setup OFICIAL do projeto.
+# As variáveis nesta seção são geradas automaticamente pelo start.js.
+# Para configurações avançadas/opcionais, consulte o arquivo .env.example.
+
+DATABASE_URL=file:./sefin_audit.db
 PYTHON_API_PORT=8001
 PORT=3000
 OAUTH_SERVER_URL=http://localhost:3000/mock-oauth
@@ -92,7 +101,10 @@ function installDependencies(pythonCmd) {
 
   info("Installing Python dependencies...");
   try {
-    execSync(`${pythonCmd} -m pip install -r requirements.txt`, { stdio: "inherit", cwd: ROOT_DIR });
+    execSync(`${pythonCmd} -m pip install -r requirements.txt`, {
+      stdio: "inherit",
+      cwd: ROOT_DIR,
+    });
   } catch (error) {
     err("Failed to install Python dependencies.");
     process.exit(1);
@@ -112,25 +124,37 @@ function initializeDatabase() {
 function startServers(pythonCmd) {
   info("Starting servers...");
 
-  const pythonServer = spawn(pythonCmd, ["-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001"], {
-    cwd: PYTHON_DIR,
-    stdio: "pipe",
-    env: process.env
-  });
+  const pythonServer = spawn(
+    pythonCmd,
+    ["-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001"],
+    {
+      cwd: PYTHON_DIR,
+      stdio: "pipe",
+      env: process.env,
+    }
+  );
 
-  pythonServer.stdout.on("data", data => process.stdout.write(`\x1b[32m[Python API]\x1b[0m ${data}`));
-  pythonServer.stderr.on("data", data => process.stderr.write(`\x1b[31m[Python API ERR]\x1b[0m ${data}`));
-  pythonServer.on("error", (e) => err(`Python Spawn Error: ${e.message}`));
+  pythonServer.stdout.on("data", data =>
+    process.stdout.write(`\x1b[32m[Python API]\x1b[0m ${data}`)
+  );
+  pythonServer.stderr.on("data", data =>
+    process.stderr.write(`\x1b[31m[Python API ERR]\x1b[0m ${data}`)
+  );
+  pythonServer.on("error", e => err(`Python Spawn Error: ${e.message}`));
 
   const nodeServer = spawn("pnpm", ["dev"], {
     cwd: ROOT_DIR,
     stdio: "pipe",
-    env: process.env
+    env: process.env,
   });
 
-  nodeServer.stdout.on("data", data => process.stdout.write(`\x1b[34m[Node App]\x1b[0m ${data}`));
-  nodeServer.stderr.on("data", data => process.stderr.write(`\x1b[31m[Node App ERR]\x1b[0m ${data}`));
-  nodeServer.on("error", (e) => err(`Node Spawn Error: ${e.message}`));
+  nodeServer.stdout.on("data", data =>
+    process.stdout.write(`\x1b[34m[Node App]\x1b[0m ${data}`)
+  );
+  nodeServer.stderr.on("data", data =>
+    process.stderr.write(`\x1b[31m[Node App ERR]\x1b[0m ${data}`)
+  );
+  nodeServer.on("error", e => err(`Node Spawn Error: ${e.message}`));
 
   // Optionally ensure frontend build for non-dev setup
   // info("Building frontend...");
@@ -158,5 +182,5 @@ function main() {
   startServers(pythonCmd);
 }
 
-process.on('uncaughtException', (e) => err(`Global Err: ${e.message}`));
+process.on("uncaughtException", e => err(`Global Err: ${e.message}`));
 main();
