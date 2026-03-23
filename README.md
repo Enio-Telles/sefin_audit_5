@@ -69,9 +69,13 @@ Crie um arquivo `.env` na raiz do projeto contendo as variáveis obrigatórias. 
 Este é o setup oficial gerado:
 
 ```env
-# ------------------------------------------------------------------------------
-# OBRIGATÓRIO (Gerado pelo start.js no primeiro fluxo de inicialização)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# SEFIN Audit Tool - Configuração de Ambiente
+# ==============================================================================
+# Este é o setup OFICIAL do projeto.
+# As variáveis nesta seção são geradas automaticamente pelo `start.js`.
+# Para configurações avançadas/opcionais, consulte o arquivo `.env.example`.
+
 DATABASE_URL=file:./sefin_audit.db
 PYTHON_API_PORT=8001
 PORT=3000
@@ -80,15 +84,13 @@ VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
 VITE_APP_ID=sefin-audit-tool
 VITE_ANALYTICS_ENDPOINT=mock-endpoint
 VITE_ANALYTICS_WEBSITE_ID=mock-id
-
-# Autenticação e Criptografia
 JWT_SECRET=local_dev_secret_12345678
 ```
 
 > **Quando editar o `.env` manualmente?**
 > Você só precisa editar este arquivo se precisar de configurações avançadas (como configurar o `NODE_ENV=production`), se quiser usar um `JWT_SECRET` forte para segurança extra em produção, ou para alterar portas caso as padrões (3000 e 8001) já estejam em uso. O ambiente lida com as credenciais do banco Oracle dinamicamente via interface Web.
 
-> **Variáveis Legadas**: Versões anteriores do projeto usavam variáveis fixas como `ORACLE_HOST`, `DB_USER` ou `PG_HOST` no arquivo `.env`. Essas variáveis **não fazem mais parte do fluxo principal Web** e foram movidas para scripts de extração locais antigos (`src/extracao/`) que operam em contexto de legado. Você pode conferir os detalhes no `.env.example`.
+> **Variáveis Legadas**: Versões anteriores do projeto usavam variáveis fixas como `ORACLE_HOST`, `DB_USER` ou `PG_HOST` no arquivo `.env`. Essas variáveis **não fazem mais parte do fluxo principal Web** e foram removidas do arquivo oficial e do `.env.example` para simplificar a inicialização e evitar confusões de ambiente. Se você precisar do contexto legado para rodar scripts avulsos antigos (`src/extracao/`), consulte o histórico do git para recuperar essas configurações.
 
 ## 📂 Estrutura de Diretórios
 
