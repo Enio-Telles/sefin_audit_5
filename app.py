@@ -112,7 +112,7 @@ def start_servers(python_cmd: str):
     )
 
     node_server = subprocess.Popen(
-        ["pnpm", "dev"],
+        ["pnpm.cmd" if sys.platform == "win32" else "pnpm", "dev"],
         cwd=ROOT_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
