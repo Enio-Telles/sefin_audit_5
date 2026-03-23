@@ -74,6 +74,7 @@ VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
 VITE_APP_ID=sefin-audit-tool
 VITE_ANALYTICS_ENDPOINT=mock-endpoint
 VITE_ANALYTICS_WEBSITE_ID=mock-id
+JWT_SECRET=local_dev_secret_12345678
 `;
     fs.writeFileSync(envPath, defaultEnv, "utf-8");
     info(".env file created with default configurations.");
