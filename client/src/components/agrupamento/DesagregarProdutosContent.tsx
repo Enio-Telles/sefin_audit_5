@@ -85,7 +85,10 @@ function getPrimaryValue(value: string): string {
   return normalizeText(value.split(",")[0]);
 }
 
-function fiscalAffinity(a: CodigoMultiDescricaoGrupoResumo, b: CodigoMultiDescricaoGrupoResumo): number {
+function fiscalAffinity(
+  a: CodigoMultiDescricaoGrupoResumo,
+  b: CodigoMultiDescricaoGrupoResumo
+): number {
   let matches = 0;
   const aNcm = getPrimaryValue(a.lista_ncm);
   const bNcm = getPrimaryValue(b.lista_ncm);
@@ -99,17 +102,18 @@ function fiscalAffinity(a: CodigoMultiDescricaoGrupoResumo, b: CodigoMultiDescri
   return matches;
 }
 
-function buildSuggestedClusters(gruposDescricao: CodigoMultiDescricaoGrupoResumo[]): CodigoMultiDescricaoGrupoResumo[][] {
-  const ordered = [...gruposDescricao]
-    .sort((a, b) => {
-      if (b.qtd_linhas !== a.qtd_linhas) return b.qtd_linhas - a.qtd_linhas;
-      return a.descricao.localeCompare(b.descricao);
-    });
+function buildSuggestedClusters(
+  gruposDescricao: CodigoMultiDescricaoGrupoResumo[]
+): CodigoMultiDescricaoGrupoResumo[][] {
+  const ordered = [...gruposDescricao].sort((a, b) => {
+    if (b.qtd_linhas !== a.qtd_linhas) return b.qtd_linhas - a.qtd_linhas;
+    return a.descricao.localeCompare(b.descricao);
+  });
 
   const visited = new Set<string>();
   const clusters: CodigoMultiDescricaoGrupoResumo[][] = [];
 
-  ordered.forEach((seed) => {
+  ordered.forEach(seed => {
     if (visited.has(seed.descricao)) return;
     const cluster: CodigoMultiDescricaoGrupoResumo[] = [];
     const queue = [seed];
@@ -118,7 +122,7 @@ function buildSuggestedClusters(gruposDescricao: CodigoMultiDescricaoGrupoResumo
     while (queue.length > 0) {
       const current = queue.shift()!;
       cluster.push(current);
-      ordered.forEach((candidate) => {
+      ordered.forEach(candidate => {
         if (visited.has(candidate.descricao)) return;
         const score = similarityScore(current.descricao, candidate.descricao);
         const fiscalScore = fiscalAffinity(current, candidate);
@@ -136,21 +140,27 @@ function buildSuggestedClusters(gruposDescricao: CodigoMultiDescricaoGrupoResumo
   return clusters;
 }
 
-function buildInitialGroups(codigo: string, gruposDescricao: CodigoMultiDescricaoGrupoResumo[]): GrupoDesagregacao[] {
+function buildInitialGroups(
+  codigo: string,
+  gruposDescricao: CodigoMultiDescricaoGrupoResumo[]
+): GrupoDesagregacao[] {
   return buildSuggestedClusters(gruposDescricao).map((cluster, index) => ({
-      id: crypto.randomUUID(),
-      codigo_novo: index === 0 ? codigo : `${codigo}_${index}`,
-      descricao_nova: cluster[0]?.descricao || "",
-      ncm_novo: getPrimaryValue(cluster[0]?.lista_ncm || ""),
-      cest_novo: getPrimaryValue(cluster[0]?.lista_cest || ""),
-      gtin_novo: getPrimaryValue(cluster[0]?.lista_gtin || ""),
-      grupos_origem: cluster,
-    }));
+    id: crypto.randomUUID(),
+    codigo_novo: index === 0 ? codigo : `${codigo}_${index}`,
+    descricao_nova: cluster[0]?.descricao || "",
+    ncm_novo: getPrimaryValue(cluster[0]?.lista_ncm || ""),
+    cest_novo: getPrimaryValue(cluster[0]?.lista_cest || ""),
+    gtin_novo: getPrimaryValue(cluster[0]?.lista_gtin || ""),
+    grupos_origem: cluster,
+  }));
 }
 
-function compactGroups(grupos: GrupoDesagregacao[], codigoBase: string): GrupoDesagregacao[] {
+function compactGroups(
+  grupos: GrupoDesagregacao[],
+  codigoBase: string
+): GrupoDesagregacao[] {
   return grupos
-    .filter((grupo) => grupo.grupos_origem.length > 0)
+    .filter(grupo => grupo.grupos_origem.length > 0)
     .map((grupo, index) => ({
       ...grupo,
       codigo_novo: index === 0 ? codigoBase : `${codigoBase}_${index}`,
@@ -189,17 +199,27 @@ export function DesagregarProdutosContent({
   const [saving, setSaving] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [resumo, setResumo] = useState<Record<string, unknown>>({});
-  const [gruposDisponiveis, setGruposDisponiveis] = useState<CodigoMultiDescricaoGrupoResumo[]>([]);
+  const [gruposDisponiveis, setGruposDisponiveis] = useState<
+    CodigoMultiDescricaoGrupoResumo[]
+  >([]);
   const [grupos, setGrupos] = useState<GrupoDesagregacao[]>([]);
-  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
-  const [ncmDetailsMap, setNcmDetailsMap] = useState<Record<string, NcmDetailsResponse["data"]>>({});
-  const [cestDetailsMap, setCestDetailsMap] = useState<Record<string, CestDetailsResponse["data"]>>({});
-  const [loadingFiscais, setLoadingFiscais] = useState<Record<string, boolean>>({});
+  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>(
+    []
+  );
+  const [ncmDetailsMap, setNcmDetailsMap] = useState<
+    Record<string, NcmDetailsResponse["data"]>
+  >({});
+  const [cestDetailsMap, setCestDetailsMap] = useState<
+    Record<string, CestDetailsResponse["data"]>
+  >({});
+  const [loadingFiscais, setLoadingFiscais] = useState<Record<string, boolean>>(
+    {}
+  );
   const pairAnalysis = analyzeGroupPairs(gruposDisponiveis);
   const suggestedClusters = buildSuggestedClusters(gruposDisponiveis);
   const suggestedClusterMap = new Map(
     suggestedClusters.flatMap((cluster, clusterIndex) =>
-      cluster.map((item) => [item.descricao, clusterIndex] as const)
+      cluster.map(item => [item.descricao, clusterIndex] as const)
     )
   );
 
@@ -240,15 +260,19 @@ export function DesagregarProdutosContent({
         setSelectedDescriptions(state.selectedDescriptions);
       }
       if (Array.isArray(state.grupos) && state.grupos.length > 0) {
-        const origemMap = new Map(gruposDisponiveis.map((grupo) => [grupo.descricao, grupo] as const));
+        const origemMap = new Map(
+          gruposDisponiveis.map(grupo => [grupo.descricao, grupo] as const)
+        );
         const restored = state.grupos
-          .map((grupo) => ({
+          .map(grupo => ({
             ...grupo,
             grupos_origem: (grupo.grupos_origem || [])
-              .map((descricao) => origemMap.get(descricao))
-              .filter((item): item is CodigoMultiDescricaoGrupoResumo => Boolean(item)),
+              .map(descricao => origemMap.get(descricao))
+              .filter((item): item is CodigoMultiDescricaoGrupoResumo =>
+                Boolean(item)
+              ),
           }))
-          .filter((grupo) => grupo.grupos_origem.length > 0);
+          .filter(grupo => grupo.grupos_origem.length > 0);
         if (restored.length > 0) {
           setDraftRestored(true);
           setDraftSavedAt(state.savedAt || "");
@@ -269,14 +293,14 @@ export function DesagregarProdutosContent({
       JSON.stringify({
         savedAt,
         selectedDescriptions,
-        grupos: grupos.map((grupo) => ({
+        grupos: grupos.map(grupo => ({
           id: grupo.id,
           codigo_novo: grupo.codigo_novo,
           descricao_nova: grupo.descricao_nova,
           ncm_novo: grupo.ncm_novo,
           cest_novo: grupo.cest_novo,
           gtin_novo: grupo.gtin_novo,
-          grupos_origem: grupo.grupos_origem.map((origem) => origem.descricao),
+          grupos_origem: grupo.grupos_origem.map(origem => origem.descricao),
         })),
       })
     );
@@ -297,22 +321,54 @@ export function DesagregarProdutosContent({
   }, [codigo, cnpj]);
 
   useEffect(() => {
-    grupos.forEach((grupo) => {
-      if (grupo.ncm_novo && !ncmDetailsMap[grupo.ncm_novo] && !loadingFiscais[`ncm_${grupo.ncm_novo}`]) {
-        setLoadingFiscais((prev) => ({ ...prev, [`ncm_${grupo.ncm_novo}`]: true }));
+    grupos.forEach(grupo => {
+      if (
+        grupo.ncm_novo &&
+        !ncmDetailsMap[grupo.ncm_novo] &&
+        !loadingFiscais[`ncm_${grupo.ncm_novo}`]
+      ) {
+        setLoadingFiscais(prev => ({
+          ...prev,
+          [`ncm_${grupo.ncm_novo}`]: true,
+        }));
         getNcmDetails(grupo.ncm_novo)
-          .then((res) => {
-            if (res.success) setNcmDetailsMap((prev) => ({ ...prev, [grupo.ncm_novo]: res.data }));
+          .then(res => {
+            if (res.success)
+              setNcmDetailsMap(prev => ({
+                ...prev,
+                [grupo.ncm_novo]: res.data,
+              }));
           })
-          .finally(() => setLoadingFiscais((prev) => ({ ...prev, [`ncm_${grupo.ncm_novo}`]: false })));
+          .finally(() =>
+            setLoadingFiscais(prev => ({
+              ...prev,
+              [`ncm_${grupo.ncm_novo}`]: false,
+            }))
+          );
       }
-      if (grupo.cest_novo && !cestDetailsMap[grupo.cest_novo] && !loadingFiscais[`cest_${grupo.cest_novo}`]) {
-        setLoadingFiscais((prev) => ({ ...prev, [`cest_${grupo.cest_novo}`]: true }));
+      if (
+        grupo.cest_novo &&
+        !cestDetailsMap[grupo.cest_novo] &&
+        !loadingFiscais[`cest_${grupo.cest_novo}`]
+      ) {
+        setLoadingFiscais(prev => ({
+          ...prev,
+          [`cest_${grupo.cest_novo}`]: true,
+        }));
         getCestDetails(grupo.cest_novo)
-          .then((res) => {
-            if (res.success) setCestDetailsMap((prev) => ({ ...prev, [grupo.cest_novo]: res.data }));
+          .then(res => {
+            if (res.success)
+              setCestDetailsMap(prev => ({
+                ...prev,
+                [grupo.cest_novo]: res.data,
+              }));
           })
-          .finally(() => setLoadingFiscais((prev) => ({ ...prev, [`cest_${grupo.cest_novo}`]: false })));
+          .finally(() =>
+            setLoadingFiscais(prev => ({
+              ...prev,
+              [`cest_${grupo.cest_novo}`]: false,
+            }))
+          );
       }
     });
   }, [grupos, ncmDetailsMap, cestDetailsMap, loadingFiscais]);
@@ -339,35 +395,39 @@ export function DesagregarProdutosContent({
   };
 
   const handleConfirm = async () => {
-    if (grupos.some((grupo) => grupo.grupos_origem.length === 0)) {
+    if (grupos.some(grupo => grupo.grupos_origem.length === 0)) {
       toast.error("Existem grupos vazios. Mova descricoes ou remova o grupo.");
       return;
     }
-    if (grupos.some((grupo) => !grupo.descricao_nova.trim())) {
+    if (grupos.some(grupo => !grupo.descricao_nova.trim())) {
       toast.error("Todos os grupos precisam ter uma descricao valida.");
       return;
     }
 
     setSaving(true);
     try {
-      const detalhes = await getProdutoDetalhes(cnpj, codigo) as any;
+      const detalhes = (await getProdutoDetalhes(cnpj, codigo)) as any;
       if (!detalhes.success) {
         toast.error("Nao foi possivel carregar os detalhes brutos do codigo.");
         return;
       }
 
       const destinoPorDescricao = new Map<string, GrupoDesagregacao>();
-      grupos.forEach((grupo) => {
-        grupo.grupos_origem.forEach((origem) => {
+      grupos.forEach(grupo => {
+        grupo.grupos_origem.forEach(origem => {
           destinoPorDescricao.set(canonicalText(origem.descricao), grupo);
         });
       });
 
       const itensDecididos = detalhes.itens.map((item: ProdutoDetalhe) => {
-        const chaveDescricao = canonicalText(item.descricao || item.descricao_original);
+        const chaveDescricao = canonicalText(
+          item.descricao || item.descricao_original
+        );
         const grupoDestino = destinoPorDescricao.get(chaveDescricao);
         if (!grupoDestino) {
-          throw new Error(`Descricao sem grupo de destino: ${item.descricao || item.descricao_original}`);
+          throw new Error(
+            `Descricao sem grupo de destino: ${item.descricao || item.descricao_original}`
+          );
         }
         return {
           fonte: item.fonte,
@@ -397,7 +457,9 @@ export function DesagregarProdutosContent({
         toast.error(res.mensagem);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar separacao.");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao salvar separacao."
+      );
     } finally {
       setSaving(false);
     }
@@ -437,21 +499,34 @@ export function DesagregarProdutosContent({
 
   const handleMoverDescricoesParaGrupo = (grupoDestinoId: string) => {
     if (selectedDescriptions.length === 0) return;
-    const descricoesSelecionadas = gruposDisponiveis.filter((grupo) => selectedDescriptions.includes(grupo.descricao));
+    const descricoesSelecionadas = gruposDisponiveis.filter(grupo =>
+      selectedDescriptions.includes(grupo.descricao)
+    );
 
-    setGrupos((prev) => {
-      const novosGrupos = prev.map((grupo) => ({
+    setGrupos(prev => {
+      const novosGrupos = prev.map(grupo => ({
         ...grupo,
-        grupos_origem: grupo.grupos_origem.filter((origem) => !selectedDescriptions.includes(origem.descricao)),
+        grupos_origem: grupo.grupos_origem.filter(
+          origem => !selectedDescriptions.includes(origem.descricao)
+        ),
       }));
-      const destino = novosGrupos.find((grupo) => grupo.id === grupoDestinoId);
+      const destino = novosGrupos.find(grupo => grupo.id === grupoDestinoId);
       if (destino) {
         destino.grupos_origem.push(...descricoesSelecionadas);
         if (!destino.descricao_nova && descricoesSelecionadas.length > 0) {
           destino.descricao_nova = descricoesSelecionadas[0].descricao;
-          if (!destino.ncm_novo) destino.ncm_novo = normalizeText(descricoesSelecionadas[0].lista_ncm.split(",")[0]);
-          if (!destino.cest_novo) destino.cest_novo = normalizeText(descricoesSelecionadas[0].lista_cest.split(",")[0]);
-          if (!destino.gtin_novo) destino.gtin_novo = normalizeText(descricoesSelecionadas[0].lista_gtin.split(",")[0]);
+          if (!destino.ncm_novo)
+            destino.ncm_novo = normalizeText(
+              descricoesSelecionadas[0].lista_ncm.split(",")[0]
+            );
+          if (!destino.cest_novo)
+            destino.cest_novo = normalizeText(
+              descricoesSelecionadas[0].lista_cest.split(",")[0]
+            );
+          if (!destino.gtin_novo)
+            destino.gtin_novo = normalizeText(
+              descricoesSelecionadas[0].lista_gtin.split(",")[0]
+            );
         }
       }
       return compactGroups(novosGrupos, codigo);
@@ -461,20 +536,30 @@ export function DesagregarProdutosContent({
   };
 
   const toggleDescricaoSelection = (descricao: string) => {
-    setSelectedDescriptions((prev) =>
-      prev.includes(descricao) ? prev.filter((item) => item !== descricao) : [...prev, descricao]
+    setSelectedDescriptions(prev =>
+      prev.includes(descricao)
+        ? prev.filter(item => item !== descricao)
+        : [...prev, descricao]
     );
   };
 
-  const atualizarGrupo = (id: string, campo: keyof GrupoDesagregacao, valor: string) => {
-    setGrupos((prev) => prev.map((grupo) => (grupo.id === id ? { ...grupo, [campo]: valor } : grupo)));
+  const atualizarGrupo = (
+    id: string,
+    campo: keyof GrupoDesagregacao,
+    valor: string
+  ) => {
+    setGrupos(prev =>
+      prev.map(grupo =>
+        grupo.id === id ? { ...grupo, [campo]: valor } : grupo
+      )
+    );
   };
 
   const removerGrupo = (id: string) => {
-    setGrupos((prev) => {
-      const removido = prev.find((grupo) => grupo.id === id);
+    setGrupos(prev => {
+      const removido = prev.find(grupo => grupo.id === id);
       if (!removido) return prev;
-      const novos = prev.filter((grupo) => grupo.id !== id);
+      const novos = prev.filter(grupo => grupo.id !== id);
       if (novos.length > 0) {
         novos[0].grupos_origem.push(...removido.grupos_origem);
       }
@@ -494,25 +579,34 @@ export function DesagregarProdutosContent({
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 py-20">
         <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-        <p className="text-sm font-black text-slate-600 uppercase tracking-widest">Sincronizando resumo do codigo...</p>
+        <p className="text-sm font-black text-slate-600 uppercase tracking-widest">
+          Sincronizando resumo do codigo...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col h-full bg-slate-50 ${embedded ? "" : "p-0"}`}>
+    <div
+      className={`flex flex-col h-full bg-slate-50 ${embedded ? "" : "p-0"}`}
+    >
       <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] divide-x divide-slate-200 overflow-hidden">
           <div className="flex h-full flex-col overflow-hidden bg-white">
             <div className="border-b bg-white px-4 py-3 shrink-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Descricoes do codigo</h3>
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">
+                    Descricoes do codigo
+                  </h3>
                   <div className="mt-1 text-xs text-slate-500">
-                    {gruposDisponiveis.length} descricoes | {totalLinhas} linhas | {selectedDescriptions.length} selecionadas
+                    {gruposDisponiveis.length} descricoes | {totalLinhas} linhas
+                    | {selectedDescriptions.length} selecionadas
                   </div>
                   <div className="mt-2 text-xs text-slate-500">
-                    Selecione uma ou mais descricoes e use <span className="font-semibold text-slate-700">Mover</span> no grupo de destino para manter itens juntos.
+                    Selecione uma ou mais descricoes e use{" "}
+                    <span className="font-semibold text-slate-700">Mover</span>{" "}
+                    no grupo de destino para manter itens juntos.
                   </div>
                 </div>
                 <Button
@@ -522,16 +616,27 @@ export function DesagregarProdutosContent({
                   disabled={loading || saving || undoing}
                   className="shrink-0"
                 >
-                  {undoing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Desfazer decisao"}
+                  {undoing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Desfazer decisao"
+                  )}
                 </Button>
               </div>
               {draftRestored ? (
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   <span>
                     Rascunho restaurado automaticamente para este codigo.
-                    {draftSavedAt ? ` Ultimo salvamento: ${new Date(draftSavedAt).toLocaleString("pt-BR")}.` : ""}
+                    {draftSavedAt
+                      ? ` Ultimo salvamento: ${new Date(draftSavedAt).toLocaleString("pt-BR")}.`
+                      : ""}
                   </span>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-amber-900" onClick={clearDraft}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-amber-900"
+                    onClick={clearDraft}
+                  >
                     Limpar rascunho
                   </Button>
                 </div>
@@ -540,18 +645,36 @@ export function DesagregarProdutosContent({
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {pairAnalysis.mostSimilar ? (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Par mais similar</div>
-                      <div className="mt-1 font-medium text-slate-800">{pairAnalysis.mostSimilar.a}</div>
-                      <div className="text-slate-500">{pairAnalysis.mostSimilar.b}</div>
-                      <div className="mt-1">Similaridade: {(pairAnalysis.mostSimilar.score * 100).toFixed(0)}%</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        Par mais similar
+                      </div>
+                      <div className="mt-1 font-medium text-slate-800">
+                        {pairAnalysis.mostSimilar.a}
+                      </div>
+                      <div className="text-slate-500">
+                        {pairAnalysis.mostSimilar.b}
+                      </div>
+                      <div className="mt-1">
+                        Similaridade:{" "}
+                        {(pairAnalysis.mostSimilar.score * 100).toFixed(0)}%
+                      </div>
                     </div>
                   ) : null}
                   {pairAnalysis.mostDissimilar ? (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Par mais dissimilar</div>
-                      <div className="mt-1 font-medium text-slate-800">{pairAnalysis.mostDissimilar.a}</div>
-                      <div className="text-slate-500">{pairAnalysis.mostDissimilar.b}</div>
-                      <div className="mt-1">Similaridade: {(pairAnalysis.mostDissimilar.score * 100).toFixed(0)}%</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        Par mais dissimilar
+                      </div>
+                      <div className="mt-1 font-medium text-slate-800">
+                        {pairAnalysis.mostDissimilar.a}
+                      </div>
+                      <div className="text-slate-500">
+                        {pairAnalysis.mostDissimilar.b}
+                      </div>
+                      <div className="mt-1">
+                        Similaridade:{" "}
+                        {(pairAnalysis.mostDissimilar.score * 100).toFixed(0)}%
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -559,19 +682,27 @@ export function DesagregarProdutosContent({
             </div>
             <ScrollArea className="flex-1 p-4">
               <div className="space-y-2 pb-8">
-                {gruposDisponiveis.map((grupoResumo) => {
-                  const isSelected = selectedDescriptions.includes(grupoResumo.descricao);
-                  const grupoDestinoIdx = grupos.findIndex((grupo) =>
-                    grupo.grupos_origem.some((origem) => origem.descricao === grupoResumo.descricao)
+                {gruposDisponiveis.map(grupoResumo => {
+                  const isSelected = selectedDescriptions.includes(
+                    grupoResumo.descricao
                   );
-                  const suggestedClusterIdx = suggestedClusterMap.get(grupoResumo.descricao) ?? 0;
-                  const suggestedAccent = GROUP_ACCENTS[suggestedClusterIdx % GROUP_ACCENTS.length];
+                  const grupoDestinoIdx = grupos.findIndex(grupo =>
+                    grupo.grupos_origem.some(
+                      origem => origem.descricao === grupoResumo.descricao
+                    )
+                  );
+                  const suggestedClusterIdx =
+                    suggestedClusterMap.get(grupoResumo.descricao) ?? 0;
+                  const suggestedAccent =
+                    GROUP_ACCENTS[suggestedClusterIdx % GROUP_ACCENTS.length];
 
                   return (
                     <button
                       key={grupoResumo.descricao}
                       type="button"
-                      onClick={() => toggleDescricaoSelection(grupoResumo.descricao)}
+                      onClick={() =>
+                        toggleDescricaoSelection(grupoResumo.descricao)
+                      }
                       className={`w-full rounded-lg border-l-4 ${suggestedAccent} px-3 py-3 text-left transition ${
                         isSelected
                           ? "border-purple-500 bg-purple-50"
@@ -584,23 +715,32 @@ export function DesagregarProdutosContent({
                             {grupoResumo.descricao}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            {grupoResumo.qtd_linhas} linha{grupoResumo.qtd_linhas > 1 ? "s" : ""}
-                            {grupoDestinoIdx >= 0 ? ` | grupo ${grupoDestinoIdx + 1}` : ""}
+                            {grupoResumo.qtd_linhas} linha
+                            {grupoResumo.qtd_linhas > 1 ? "s" : ""}
+                            {grupoDestinoIdx >= 0
+                              ? ` | grupo ${grupoDestinoIdx + 1}`
+                              : ""}
                             {` | sugestao ${suggestedClusterIdx + 1}`}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            Compl. {grupoResumo.lista_descr_compl || "-"} | NCM {grupoResumo.lista_ncm || "-"}
+                            Compl. {grupoResumo.lista_descr_compl || "-"} | NCM{" "}
+                            {grupoResumo.lista_ncm || "-"}
                           </div>
                           <div className="text-xs text-slate-500">
-                            GTIN {grupoResumo.lista_gtin || "-"} | Tipo {grupoResumo.lista_tipo_item || "-"}
+                            GTIN {grupoResumo.lista_gtin || "-"} | Tipo{" "}
+                            {grupoResumo.lista_tipo_item || "-"}
                           </div>
                         </div>
                         <div
                           className={`mt-1 h-4 w-4 rounded-full border ${
-                            isSelected ? "border-purple-600 bg-purple-600" : "border-slate-300 bg-white"
+                            isSelected
+                              ? "border-purple-600 bg-purple-600"
+                              : "border-slate-300 bg-white"
                           }`}
                         >
-                          {isSelected ? <div className="m-auto mt-[3px] h-2 w-2 rounded-full bg-white" /> : null}
+                          {isSelected ? (
+                            <div className="m-auto mt-[3px] h-2 w-2 rounded-full bg-white" />
+                          ) : null}
                         </div>
                       </div>
                     </button>
@@ -613,9 +753,16 @@ export function DesagregarProdutosContent({
           <div className="flex h-full flex-col overflow-hidden bg-slate-50">
             <div className="border-b bg-white px-4 py-3 shrink-0 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Novos produtos</h3>
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">
+                  Novos produtos
+                </h3>
                 <div className="mt-1 text-xs text-slate-500">
-                  {grupos.length} grupos | {grupos.reduce((acc, grupo) => acc + grupo.grupos_origem.length, 0)} descricoes alocadas
+                  {grupos.length} grupos |{" "}
+                  {grupos.reduce(
+                    (acc, grupo) => acc + grupo.grupos_origem.length,
+                    0
+                  )}{" "}
+                  descricoes alocadas
                 </div>
               </div>
               <Button
@@ -640,9 +787,13 @@ export function DesagregarProdutosContent({
                       <div className={`border-l-4 ${accent} pl-3`}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Grupo {index + 1}</div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Grupo {index + 1}
+                            </div>
                             <div className="mt-1 text-xs text-slate-500">
-                              {grupo.grupos_origem.length} descricao{grupo.grupos_origem.length > 1 ? "es" : ""} alocada{grupo.grupos_origem.length > 1 ? "s" : ""}
+                              {grupo.grupos_origem.length} descricao
+                              {grupo.grupos_origem.length > 1 ? "es" : ""}{" "}
+                              alocada{grupo.grupos_origem.length > 1 ? "s" : ""}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -651,7 +802,9 @@ export function DesagregarProdutosContent({
                                 size="sm"
                                 variant="outline"
                                 className="h-8 px-3 text-[10px] font-black uppercase tracking-widest"
-                                onClick={() => handleMoverDescricoesParaGrupo(grupo.id)}
+                                onClick={() =>
+                                  handleMoverDescricoesParaGrupo(grupo.id)
+                                }
                               >
                                 <ChevronRight className="h-3.5 w-3.5 mr-1" />
                                 Mover
@@ -663,6 +816,8 @@ export function DesagregarProdutosContent({
                                 size="icon"
                                 className="h-8 w-8 text-slate-400 hover:text-red-500"
                                 onClick={() => removerGrupo(grupo.id)}
+                                aria-label="Remover grupo"
+                                title="Remover grupo"
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -673,24 +828,85 @@ export function DesagregarProdutosContent({
 
                       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Codigo</Label>
-                          <Input value={grupo.codigo_novo} onChange={(e) => atualizarGrupo(grupo.id, "codigo_novo", e.target.value)} className="h-10 font-mono font-black border-slate-200 bg-slate-50" />
+                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            Codigo
+                          </Label>
+                          <Input
+                            value={grupo.codigo_novo}
+                            onChange={e =>
+                              atualizarGrupo(
+                                grupo.id,
+                                "codigo_novo",
+                                e.target.value
+                              )
+                            }
+                            className="h-10 font-mono font-black border-slate-200 bg-slate-50"
+                          />
                         </div>
                         <div className="space-y-1.5 md:col-span-2">
-                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Descricao</Label>
-                          <Input value={grupo.descricao_nova} onChange={(e) => atualizarGrupo(grupo.id, "descricao_nova", e.target.value)} className="h-10 border-slate-200 bg-slate-50 font-semibold" placeholder="Descricao oficial do grupo" />
+                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            Descricao
+                          </Label>
+                          <Input
+                            value={grupo.descricao_nova}
+                            onChange={e =>
+                              atualizarGrupo(
+                                grupo.id,
+                                "descricao_nova",
+                                e.target.value
+                              )
+                            }
+                            className="h-10 border-slate-200 bg-slate-50 font-semibold"
+                            placeholder="Descricao oficial do grupo"
+                          />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">NCM</Label>
-                          <Input value={grupo.ncm_novo} onChange={(e) => atualizarGrupo(grupo.id, "ncm_novo", e.target.value)} className="h-10 font-mono border-slate-200 bg-slate-50" />
+                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            NCM
+                          </Label>
+                          <Input
+                            value={grupo.ncm_novo}
+                            onChange={e =>
+                              atualizarGrupo(
+                                grupo.id,
+                                "ncm_novo",
+                                e.target.value
+                              )
+                            }
+                            className="h-10 font-mono border-slate-200 bg-slate-50"
+                          />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CEST</Label>
-                          <Input value={grupo.cest_novo} onChange={(e) => atualizarGrupo(grupo.id, "cest_novo", e.target.value)} className="h-10 font-mono border-slate-200 bg-slate-50" />
+                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            CEST
+                          </Label>
+                          <Input
+                            value={grupo.cest_novo}
+                            onChange={e =>
+                              atualizarGrupo(
+                                grupo.id,
+                                "cest_novo",
+                                e.target.value
+                              )
+                            }
+                            className="h-10 font-mono border-slate-200 bg-slate-50"
+                          />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">GTIN</Label>
-                          <Input value={grupo.gtin_novo} onChange={(e) => atualizarGrupo(grupo.id, "gtin_novo", e.target.value)} className="h-10 font-mono border-slate-200 bg-slate-50" />
+                          <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            GTIN
+                          </Label>
+                          <Input
+                            value={grupo.gtin_novo}
+                            onChange={e =>
+                              atualizarGrupo(
+                                grupo.id,
+                                "gtin_novo",
+                                e.target.value
+                              )
+                            }
+                            className="h-10 font-mono border-slate-200 bg-slate-50"
+                          />
                         </div>
                       </div>
 
@@ -698,19 +914,29 @@ export function DesagregarProdutosContent({
                         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
                           {grupo.ncm_novo && ncmDetailsMap[grupo.ncm_novo] ? (
                             <div className="text-[11px] space-y-1">
-                              <p className="font-black uppercase tracking-wider text-slate-600">NCM {grupo.ncm_novo}</p>
-                              <div className="text-slate-600 whitespace-pre-wrap">{ncmDetailsMap[grupo.ncm_novo].descricao}</div>
-                            </div>
-                          ) : null}
-                          {grupo.cest_novo && cestDetailsMap[grupo.cest_novo] ? (
-                            <div className="border-t border-slate-200 pt-3 text-[11px] space-y-1">
-                              <p className="font-black uppercase tracking-wider text-slate-600">CEST {grupo.cest_novo}</p>
+                              <p className="font-black uppercase tracking-wider text-slate-600">
+                                NCM {grupo.ncm_novo}
+                              </p>
                               <div className="text-slate-600 whitespace-pre-wrap">
-                                {cestDetailsMap[grupo.cest_novo].descricoes?.[0] || cestDetailsMap[grupo.cest_novo].nome_segmento}
+                                {ncmDetailsMap[grupo.ncm_novo].descricao}
                               </div>
                             </div>
                           ) : null}
-                          {!ncmDetailsMap[grupo.ncm_novo] && !cestDetailsMap[grupo.cest_novo] ? (
+                          {grupo.cest_novo &&
+                          cestDetailsMap[grupo.cest_novo] ? (
+                            <div className="border-t border-slate-200 pt-3 text-[11px] space-y-1">
+                              <p className="font-black uppercase tracking-wider text-slate-600">
+                                CEST {grupo.cest_novo}
+                              </p>
+                              <div className="text-slate-600 whitespace-pre-wrap">
+                                {cestDetailsMap[grupo.cest_novo]
+                                  .descricoes?.[0] ||
+                                  cestDetailsMap[grupo.cest_novo].nome_segmento}
+                              </div>
+                            </div>
+                          ) : null}
+                          {!ncmDetailsMap[grupo.ncm_novo] &&
+                          !cestDetailsMap[grupo.cest_novo] ? (
                             <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                               Buscando informacoes fiscais...
                             </div>
@@ -719,10 +945,12 @@ export function DesagregarProdutosContent({
                       )}
 
                       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Descricoes alocadas</div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                          Descricoes alocadas
+                        </div>
                         <div className="mt-2 space-y-1 text-xs text-slate-600">
                           {grupo.grupos_origem.length > 0 ? (
-                            grupo.grupos_origem.map((origem) => (
+                            grupo.grupos_origem.map(origem => (
                               <div key={origem.descricao}>
                                 {origem.descricao} ({origem.qtd_linhas})
                               </div>
@@ -741,28 +969,50 @@ export function DesagregarProdutosContent({
         </div>
       </div>
 
-      <div className={`p-4 border-t bg-white flex justify-between items-center shrink-0 z-30 ${embedded ? "" : "px-8"}`}>
+      <div
+        className={`p-4 border-t bg-white flex justify-between items-center shrink-0 z-30 ${embedded ? "" : "px-8"}`}
+      >
         <div className="flex flex-col">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Resumo</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+            Resumo
+          </span>
           <div className="flex items-center gap-3">
-            <span className="text-[14px] font-black text-slate-700">{grupos.length} GRUPOS</span>
+            <span className="text-[14px] font-black text-slate-700">
+              {grupos.length} GRUPOS
+            </span>
             <Separator orientation="vertical" className="h-3 bg-slate-300" />
             <span className="text-[14px] font-black text-slate-400">
-              {grupos.reduce((acc, grupo) => acc + grupo.grupos_origem.length, 0)} / {gruposDisponiveis.length} DESCRICOES ALOCADAS
+              {grupos.reduce(
+                (acc, grupo) => acc + grupo.grupos_origem.length,
+                0
+              )}{" "}
+              / {gruposDisponiveis.length} DESCRICOES ALOCADAS
             </span>
           </div>
         </div>
         <div className="flex gap-3">
-          <Button variant="ghost" onClick={onCancel} className="h-10 px-6 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 rounded-xl">
+          <Button
+            variant="ghost"
+            onClick={onCancel}
+            className="h-10 px-6 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 rounded-xl"
+          >
             Voltar
           </Button>
-          <Button disabled={loading || saving || undoing || selectedDescriptions.length > 0} onClick={handleConfirm} className="h-12 px-12 bg-purple-600 hover:bg-purple-700 font-black text-[14px] uppercase tracking-widest rounded-xl">
+          <Button
+            disabled={
+              loading || saving || undoing || selectedDescriptions.length > 0
+            }
+            onClick={handleConfirm}
+            className="h-12 px-12 bg-purple-600 hover:bg-purple-700 font-black text-[14px] uppercase tracking-widest rounded-xl"
+          >
             {saving ? (
               <>
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                 Processando...
               </>
-            ) : "Concluir separacao do codigo"}
+            ) : (
+              "Concluir separacao do codigo"
+            )}
           </Button>
         </div>
       </div>
