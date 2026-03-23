@@ -119,6 +119,8 @@ export default function Exportar() {
                     className="shrink-0 h-8"
                     onClick={handleLoadFiles}
                     disabled={isLoading}
+                    aria-label="Buscar arquivos Parquet"
+                    title="Buscar arquivos Parquet"
                   >
                     {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
                   </Button>
