@@ -64,24 +64,31 @@ pnpm run start:all
 
 ## ⚙️ Configuração de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto contendo as variáveis obrigatórias. *Caso não exista, o `start.js` criará um default automaticamente.*
+Crie um arquivo `.env` na raiz do projeto contendo as variáveis obrigatórias. **Se o arquivo não existir, o script `start.js` criará um `.env` mínimo automaticamente com os valores padrão.**
+
+Este é o setup oficial gerado:
 
 ```env
-# Configurações do Banco de Dados (Metadados/SQLite/MySQL)
+# ------------------------------------------------------------------------------
+# OBRIGATÓRIO (Gerado pelo start.js no primeiro fluxo de inicialização)
+# ------------------------------------------------------------------------------
 DATABASE_URL=file:./sefin_audit.db
-
-# Configurações de Rede
-PORT=3000                     # Porta do Gateway Node.js/Frontend
-PYTHON_API_PORT=8001          # Porta interna do microsserviço Python
-
-# Autenticação e Criptografia
-JWT_SECRET=sua_chave_secreta_aqui # Obrigatório em produção para cookies seguros
+PYTHON_API_PORT=8001
+PORT=3000
 OAUTH_SERVER_URL=http://localhost:3000/mock-oauth
 VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
-
-# Configurações do Frontend
 VITE_APP_ID=sefin-audit-tool
+VITE_ANALYTICS_ENDPOINT=mock-endpoint
+VITE_ANALYTICS_WEBSITE_ID=mock-id
+
+# Autenticação e Criptografia
+JWT_SECRET=local_dev_secret_12345678
 ```
+
+> **Quando editar o `.env` manualmente?**
+> Você só precisa editar este arquivo se precisar de configurações avançadas (como configurar o `NODE_ENV=production`), se quiser usar um `JWT_SECRET` forte para segurança extra em produção, ou para alterar portas caso as padrões (3000 e 8001) já estejam em uso. O ambiente lida com as credenciais do banco Oracle dinamicamente via interface Web.
+
+> **Variáveis Legadas**: Versões anteriores do projeto usavam variáveis fixas como `ORACLE_HOST`, `DB_USER` ou `PG_HOST` no arquivo `.env`. Essas variáveis **não fazem mais parte do fluxo principal Web** e foram movidas para scripts de extração locais antigos (`src/extracao/`) que operam em contexto de legado. Você pode conferir os detalhes no `.env.example`.
 
 ## 📂 Estrutura de Diretórios
 
