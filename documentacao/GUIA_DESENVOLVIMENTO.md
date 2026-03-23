@@ -635,3 +635,23 @@ def executar_analise_minha_analise(
 - [ANALISES_MODULOS.md](./ANALISES_MODULOS.md) - Análises existentes
 - [ARQUITETURA_INTEGRACAO.md](./ARQUITETURA_INTEGRACAO.md) - Como funciona integração
 - [README.md](./README.md) - Visão geral do projeto
+
+## 🧪 Como Rodar os Testes do Projeto
+
+Para garantir a qualidade do código, é fundamental rodar os testes antes de submeter alterações.
+
+### Testes do Frontend (React/TypeScript)
+
+```bash
+cd client
+pnpm test
+pnpm check  # Type checking
+```
+
+### Testes do Backend (Python)
+
+```bash
+PYTHONPATH=server/python python -m pytest server/python/ -m 'not e2e'
+```
+
+Certifique-se de que as dependências (`requirements-dev.txt`) estão instaladas e o ambiente virtual está ativo ao rodar os testes Python.
