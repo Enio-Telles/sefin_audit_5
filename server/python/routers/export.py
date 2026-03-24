@@ -2,7 +2,6 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from io import BytesIO
@@ -92,7 +91,7 @@ async def download_revisao_manual_excel(cnpj: str = Query(...)):
     if not parquet_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Arquivo de produtos não encontrado. Execute a unificação de produtos primeiro."
+            detail="Arquivo de produtos não encontrado. Execute a unificação de produtos primeiro."
         )
 
     try:

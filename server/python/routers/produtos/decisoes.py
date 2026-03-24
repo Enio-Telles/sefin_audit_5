@@ -1,16 +1,10 @@
-import difflib
-from functools import lru_cache
 import re
-import os
-import sys
 import traceback
 import logging
-import hashlib
 from datetime import UTC, datetime
 import polars as pl
-from pathlib import Path
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from core.models import *
 from core.produto_batch_lote import *
 from core.produto_runtime import *
@@ -287,7 +281,6 @@ async def auto_separar_residual(req: AutoSepararResidualRequest):
 @router.post("/produtos/resolver-manual-unificar")
 async def resolver_manual_unificar(req: ResolverManualUnificarRequest):
     """Processa a unificacao de produtos e executa o motor."""
-    from core.models import ResolverManualUnificarRequest
 
     cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
@@ -336,7 +329,6 @@ async def resolver_manual_unificar(req: ResolverManualUnificarRequest):
 @router.post("/produtos/resolver-manual-desagregar")
 async def resolver_manual_desagregar(req: ResolverManualDesagregarRequest):
     """Processa a desagregacao de produtos e executa o motor."""
-    from core.models import ResolverManualDesagregarRequest
 
     cnpj_limpo = re.sub(r"[^0-9]", "", req.cnpj)
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):

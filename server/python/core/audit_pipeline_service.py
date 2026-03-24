@@ -61,9 +61,15 @@ def _encerrar_com_sucesso(dir_analises: Path, erros: List[str] = None) -> None:
         if not erros
         else "Auditoria concluída com erros."
     )
-    status_etapa_relatorios = (
-        "concluida" if not any("Relatórios" in e for e in erros) else "erro"
-    )
+
+    # Safely check for "Relatórios" in any error string
+    tem_erro_relatorio = False
+    for e in erros:
+        if isinstance(e, str) and "Relatórios" in e:
+            tem_erro_relatorio = True
+            break
+
+    status_etapa_relatorios = "erro" if tem_erro_relatorio else "concluida"
 
     atualizar_status_pipeline(
         dir_analises,
@@ -176,11 +182,15 @@ async def executar_pipeline_auditoria(
             [{"etapa": "Geração de Relatórios", "status": "executando"}],
         )
 
-        arquivos_relatorios, erros_relatorios = gerar_relatorios_finais(
-            cnpj_limpo, dir_analises, dir_relatorios, projeto_dir
-        )
-        if erros_relatorios:
-            erros.extend(erros_relatorios)
+        try:
+            arquivos_relatorios, erros_relatorios = gerar_relatorios_finais(
+                cnpj_limpo, dir_analises, dir_relatorios, projeto_dir
+            )
+            if erros_relatorios:
+                erros.extend(erros_relatorios)
+        except Exception as e:
+            erros.append(f"Geração de Relatórios: {str(e)}")
+            logger.error(f"[audit_pipeline] Erro em Relatórios: {e}")
 
         _encerrar_com_sucesso(dir_analises, erros)
 

@@ -5,7 +5,6 @@ Adaptado de Sistema_Auditoria_Fiscal/gerar_relatorio_word.py.
 """
 from pathlib import Path
 import datetime
-import polars as pl
 import logging
 
 logger = logging.getLogger("sefin_audit_python")

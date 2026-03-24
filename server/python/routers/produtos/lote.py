@@ -1,16 +1,11 @@
-import difflib
-from functools import lru_cache
 import re
-import os
-import sys
 import traceback
 import logging
-import hashlib
 from datetime import UTC, datetime
 import polars as pl
 from pathlib import Path
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from core.models import *
 from core.produto_batch_lote import *
 from core.produto_runtime import *

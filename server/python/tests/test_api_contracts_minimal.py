@@ -54,15 +54,15 @@ def test_auditoria_historico_cnpj_contract(mock_config, client):
         response = client.get("/api/python/auditoria/historico/00000000000191")
 
         assert response.status_code == 200
-    data = response.json()
-    assert data.get("success") is True
-    assert "cnpj" in data
-    assert "etapas" in data
-    assert "erros" in data
-    assert "arquivos_extraidos" in data
-    assert "arquivos_analises" in data
-    assert "arquivos_produtos" in data
-    assert "arquivos_relatorios" in data
+        data = response.json()
+        assert data.get("success") is True
+        assert "cnpj" in data
+        assert "etapas" in data
+        assert "erros" in data
+        assert "arquivos_extraidos" in data
+        assert "arquivos_analises" in data
+        assert "arquivos_produtos" in data
+        assert "arquivos_relatorios" in data
 
 @patch("core.config_loader.get_config_var")
 def test_auditoria_status_cnpj_contract(mock_config, client):

@@ -4,11 +4,10 @@ import traceback
 import logging
 import polars as pl
 from pathlib import Path
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from core.utils import _human_size, validar_cnpj
 from core.audit_response_service import construir_resposta_status
-from core.audit_artifacts_service import obter_arquivos_auditoria, obter_estatisticas_arquivos
+from core.audit_artifacts_service import obter_estatisticas_arquivos
 from services.query_catalog import QueryCatalogService
 
 logger = logging.getLogger("sefin_audit_python")

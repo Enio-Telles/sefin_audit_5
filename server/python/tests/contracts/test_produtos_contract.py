@@ -1,9 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
 from api import app
 from unittest.mock import patch
-import polars as pl
-from pathlib import Path
 
 client = TestClient(app)
 
@@ -16,6 +13,7 @@ def test_produtos_revisao_final_contract():
     assert "file_path" in data
     assert "summary" in data
 
+@patch("routers.produtos.status._STATUS_ANALISE_COLUMNS", ["hash", "status", "revisado_por", "analisado_em"], create=True)
 def test_produtos_status_analise_contract():
     res = client.get("/api/python/produtos/status-analise?cnpj=11222333000181")
     assert res.status_code == 200

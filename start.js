@@ -75,7 +75,7 @@ function ensureEnvFile() {
 # O sistema foi desenhado para inicializar de forma autônoma via app.py ou start.js com SQLite local.
 #
 # Copie este arquivo para .env se quiser customizar.
-# O comando \`python app.py\` ou \`node start.js\` vai criar um .env básico automaticamente se não existir.
+# O comando `python app.py` ou `node start.js` vai criar um .env básico automaticamente se não existir.
 
 # ------------------------------------------------------------------------------
 # 1. OBRIGATÓRIAS (Gerado automaticamente no primeiro fluxo de inicialização)
@@ -91,6 +91,27 @@ VITE_ANALYTICS_WEBSITE_ID=mock-id
 
 # Autenticação e Criptografia
 JWT_SECRET=local_dev_secret_12345678
+
+# ------------------------------------------------------------------------------
+# 2. OPCIONAIS
+# ------------------------------------------------------------------------------
+# Ambiente
+# NODE_ENV=development
+
+# Configuração de Logs
+# LOG_LEVEL=INFO
+
+# ------------------------------------------------------------------------------
+# 3. AVANÇADAS
+# ------------------------------------------------------------------------------
+# NOTA: O projeto gerencia as credenciais do banco Oracle dinamicamente pela interface Web.
+# As variáveis abaixo só devem ser usadas se houver uma justificativa técnica clara.
+
+# ------------------------------------------------------------------------------
+# 4. LEGADAS (Não fazem parte do fluxo oficial web atual)
+# ------------------------------------------------------------------------------
+# Credenciais Oracle Salvas (Para manter sessão no backend Python de forma hardcoded, se usado em scripts antigos)
+# SAVED_ORACLE_USER=seu_cpf_ou_usuario
 `;
     fs.writeFileSync(envPath, defaultEnv, "utf-8");
     info(".env file created with default configurations.");
