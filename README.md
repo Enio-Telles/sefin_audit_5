@@ -92,6 +92,27 @@ VITE_ANALYTICS_WEBSITE_ID=mock-id
 
 # Autenticação e Criptografia
 JWT_SECRET=local_dev_secret_12345678
+
+# ------------------------------------------------------------------------------
+# 2. OPCIONAIS
+# ------------------------------------------------------------------------------
+# Ambiente
+# NODE_ENV=development
+
+# Configuração de Logs
+# LOG_LEVEL=INFO
+
+# ------------------------------------------------------------------------------
+# 3. AVANÇADAS
+# ------------------------------------------------------------------------------
+# NOTA: O projeto gerencia as credenciais do banco Oracle dinamicamente pela interface Web.
+# As variáveis abaixo só devem ser usadas se houver uma justificativa técnica clara.
+
+# ------------------------------------------------------------------------------
+# 4. LEGADAS (Não fazem parte do fluxo oficial web atual)
+# ------------------------------------------------------------------------------
+# Credenciais Oracle Salvas (Para manter sessão no backend Python de forma hardcoded, se usado em scripts antigos)
+# SAVED_ORACLE_USER=seu_cpf_ou_usuario
 ```
 
 > **Quando editar o `.env` manualmente?**

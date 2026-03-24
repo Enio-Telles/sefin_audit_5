@@ -2,6 +2,23 @@ import polars as pl
 from pathlib import Path
 from datetime import datetime
 
+def obter_estatisticas_arquivos(cnpj_limpo: str, dir_parquet: Path, dir_analises: Path, dir_relatorios: Path) -> dict:
+    arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
+    qtd_parquets = len(arquivos.get("arquivos_extraidos", []))
+    qtd_analises = len(arquivos.get("arquivos_analises", [])) + len(arquivos.get("arquivos_produtos", []))
+    qtd_relatorios = len(arquivos.get("arquivos_relatorios", []))
+    last_mod = 0
+    for categoria in ["arquivos_extraidos", "arquivos_analises", "arquivos_produtos", "arquivos_relatorios"]:
+        for f in arquivos.get(categoria, []):
+            if "modified" in f:
+                try:
+                    dt = datetime.fromisoformat(f["modified"])
+                    ts = dt.timestamp()
+                    last_mod = max(last_mod, ts)
+                except Exception:
+                    pass
+    return {"qtd_parquets": qtd_parquets, "qtd_analises": qtd_analises, "qtd_relatorios": qtd_relatorios, "ultima_modificacao": datetime.fromtimestamp(last_mod).isoformat() if last_mod > 0 else None}
+
 def obter_arquivos_auditoria(cnpj_limpo: str, dir_parquet: Path, dir_analises: Path, dir_relatorios: Path) -> dict:
     def _list_files(d: Path, pattern: str) -> list[dict]:
         if not d.exists() or not d.is_dir():

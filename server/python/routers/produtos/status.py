@@ -26,14 +26,9 @@ async def get_runtime_produtos_status(cnpj: str = Query(...)):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         return {
             "success": True,
             "cnpj": cnpj_limpo,
@@ -50,14 +45,9 @@ async def rebuild_runtime_produtos(req: ProdutoUnidRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         df = _reprocessar_produtos(dir_analises, cnpj_limpo)
         runtime = obter_runtime_produtos_status(dir_analises, cnpj_limpo)
         return {
@@ -78,14 +68,9 @@ async def get_status_analise_produtos(cnpj: str = Query(...), include_data: bool
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         status_path = _gravar_status_analise(dir_analises, cnpj_limpo)
         df_status = pl.read_parquet(str(status_path)) if status_path.exists() else pl.DataFrame(schema={c: pl.Utf8 for c in _STATUS_ANALISE_COLUMNS})
         return {

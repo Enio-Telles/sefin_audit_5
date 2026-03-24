@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from core.utils import _human_size, validar_cnpj
 from core.audit_response_service import construir_resposta_status
-from core.audit_artifacts_service import obter_arquivos_auditoria
+from core.audit_artifacts_service import obter_arquivos_auditoria, obter_estatisticas_arquivos
 from services.query_catalog import QueryCatalogService
 
 logger = logging.getLogger("sefin_audit_python")
@@ -22,8 +22,6 @@ _PROJETO_DIR = Path(__file__).resolve().parent.parent.parent.parent
 # Diretórios permitidos (whitelist) para navegação/listagem
 # Pode ser extendido via variável de ambiente ALLOWED_BASE_DIRS (separado por ';' ou ',')
 def _get_allowed_dirs() -> list[Path]:
-    import importlib.util
-
     allowed: list[Path] = []
     # Diretórios padrões do projeto
     allowed.append(_PROJETO_DIR)
@@ -32,11 +30,8 @@ def _get_allowed_dirs() -> list[Path]:
     allowed.append(_PROJETO_DIR / "referencias")
     # Diretórios definidos em config.py (se existirem)
     try:
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _cfg = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_cfg)  # type: ignore
+        from core.config_loader import get_config_module
+        _cfg = get_config_module()
         for name in ("DIR_SQL", "DIR_CNPJS"):
             p = getattr(_cfg, name, None)
             if p:
@@ -317,30 +312,10 @@ async def listar_historico():
                         d / "analises",
                         d / "relatorios",
                     )
-                    arquivos = obter_arquivos_auditoria(
-                        cnpj, dir_parquet, dir_analises, dir_relatorios
-                    )
-                    qtd_parquets = len(arquivos.get("arquivos_extraidos", []))
-                    qtd_analises = len(arquivos.get("arquivos_analises", [])) + len(
-                        arquivos.get("arquivos_produtos", [])
-                    )
-                    qtd_relatorios = len(arquivos.get("arquivos_relatorios", []))
-
-                    last_mod = 0
-                    for categoria in [
-                        "arquivos_extraidos",
-                        "arquivos_analises",
-                        "arquivos_produtos",
-                        "arquivos_relatorios",
-                    ]:
-                        for f in arquivos.get(categoria, []):
-                            if "modified" in f:
-                                try:
-                                    dt = datetime.fromisoformat(f["modified"])
-                                    ts = dt.timestamp()
-                                    last_mod = max(last_mod, ts)
-                                except Exception:
-                                    pass
+                    stats = obter_estatisticas_arquivos(cnpj, dir_parquet, dir_analises, dir_relatorios)
+                    qtd_parquets = stats["qtd_parquets"]
+                    qtd_analises = stats["qtd_analises"]
+                    qtd_relatorios = stats["qtd_relatorios"]
 
                     razao_social = None
                     cadastrais_file = dir_parquet / f"dados_cadastrais_{cnpj}.parquet"
@@ -366,11 +341,7 @@ async def listar_historico():
                                 "qtd_parquets": qtd_parquets,
                                 "qtd_analises": qtd_analises,
                                 "qtd_relatorios": qtd_relatorios,
-                                "ultima_modificacao": datetime.fromtimestamp(
-                                    last_mod
-                                ).isoformat()
-                                if last_mod > 0
-                                else None,
+                                "ultima_modificacao": stats["ultima_modificacao"],
                             }
                         )
         historico.sort(key=lambda x: x["ultima_modificacao"] or "", reverse=True)

@@ -4,28 +4,22 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 from api import app
 
-# Minimal mock configurations
 @pytest.fixture
 def client():
     return TestClient(app)
 
 def test_health_check(client):
-    """Teste básico para verificar se a API está online."""
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["ok", "healthy"]
 
 @patch("core.config_loader.get_config_var")
-@patch("routers.analysis.iniciar_status_agendado")
-def test_auditoria_pipeline_contract(mock_status, mock_config, client):
-    """Garante que a rota /auditoria/pipeline não quebre."""
-
-    # Mocking config variables
-    mock_config.side_effect = lambda var: {
+def test_auditoria_pipeline_contract(mock_config, client):
+    mock_config.side_effect = lambda var, default=None: {
         "obter_diretorios_cnpj": lambda cnpj: (Path("/tmp"), Path("/tmp"), Path("/tmp")),
         "DIR_SQL": Path("/tmp")
-    }.get(var)
+    }.get(var, default)
 
     payload = {
         "cnpj": "00000000000191",
@@ -34,12 +28,10 @@ def test_auditoria_pipeline_contract(mock_status, mock_config, client):
         "mes_ano_fim": "122023"
     }
 
-    # Simulate add_task
     mock_background = MagicMock()
     with patch("fastapi.BackgroundTasks.add_task", mock_background):
         response = client.post("/api/python/auditoria/pipeline", json=payload)
 
-    # Verify response schema
     assert response.status_code == 200
     data = response.json()
     assert data.get("success") is True
@@ -47,9 +39,6 @@ def test_auditoria_pipeline_contract(mock_status, mock_config, client):
 
 @patch("core.config_loader.get_config_var")
 def test_auditoria_historico_cnpj_contract(mock_config, client):
-    """Garante o contrato de /auditoria/historico/{cnpj} (chamando a lógica centralizada)."""
-
-    # Simulate an empty but existing CNPJ directory
     import tempfile
     with tempfile.TemporaryDirectory() as temp_dir:
         cnpj_dir = Path(temp_dir) / "00000000000191"
@@ -64,10 +53,8 @@ def test_auditoria_historico_cnpj_contract(mock_config, client):
 
         response = client.get("/api/python/auditoria/historico/00000000000191")
 
-    assert response.status_code == 200
+        assert response.status_code == 200
     data = response.json()
-
-    # Validate critical keys required by the frontend
     assert data.get("success") is True
     assert "cnpj" in data
     assert "etapas" in data
@@ -79,19 +66,47 @@ def test_auditoria_historico_cnpj_contract(mock_config, client):
 
 @patch("core.config_loader.get_config_var")
 def test_auditoria_status_cnpj_contract(mock_config, client):
-    """Garante o contrato de /auditoria/status/{cnpj}."""
-
-    mock_config.side_effect = lambda var: {
+    mock_config.side_effect = lambda var, default=None: {
         "obter_diretorios_cnpj": lambda cnpj: (Path("/tmp"), Path("/tmp"), Path("/tmp"))
-    }.get(var)
+    }.get(var, default)
 
     response = client.get("/api/python/auditoria/status/00000000000191")
 
     assert response.status_code == 200
     data = response.json()
-
     assert data.get("success") is True
     assert "cnpj" in data
     assert "job_status" in data
     assert "message" in data
     assert "etapas" in data
+
+@patch("core.config_loader.get_config_var")
+@patch("routers.produtos.status._PROJETO_DIR", new_callable=MagicMock, create=True)
+@patch("routers.produtos.status._resumir_status_analise", create=True)
+@patch("routers.produtos.status._gravar_status_analise", create=True)
+@patch("routers.produtos.status._STATUS_ANALISE_COLUMNS", ["col1"], create=True)
+@patch("routers.produtos.status.pl.read_parquet")
+def test_produtos_status_analise_contract(mock_read, mock_gravar, mock_resumir, mock_projeto, mock_config, client):
+    mock_config.side_effect = lambda var, default=None: {
+        "obter_diretorios_cnpj": lambda cnpj: (Path("/tmp"), Path("/tmp"), Path("/tmp"))
+    }.get(var, default)
+
+    mock_gravar.return_value = Path('/tmp/mock.parquet')
+    import polars as pl
+    mock_read.return_value = pl.DataFrame({"status": ["concluido"]})
+    mock_resumir.return_value = {
+        "cnpj": "00000000000191",
+        "has_tabela_final": True,
+        "rows_total": 100,
+        "rows_analisados": 100,
+        "progresso": 100.0,
+        "job_status": "concluido",
+        "etapa_atual": "Finalizado"
+    }
+
+    response = client.get("/api/python/produtos/status-analise?cnpj=00000000000191")
+    assert response.status_code == 200
+    data = response.json()
+    assert "has_tabela_final" in data["resumo"]
+    assert "progresso" in data["resumo"]
+    assert data["resumo"]["cnpj"] == "00000000000191"

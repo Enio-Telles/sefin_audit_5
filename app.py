@@ -108,7 +108,22 @@ def initialize_database():
         err("Failed to initialize database.")
         sys.exit(1)
 
+def load_env():
+    env_path = ROOT_DIR / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip()
+                if k not in os.environ:
+                    os.environ[k] = v
+
 def start_servers(python_cmd: str):
+    load_env()
     import threading
     import signal
 
