@@ -1125,11 +1125,37 @@ def _normalize_mapa_descricoes_manual(
             df = df.with_columns(pl.lit("").cast(pl.Utf8).alias(col))
 
     rows: list[dict[str, str]] = []
-    for row in df.select(DESCRIPTION_MANUAL_MAP_COLUMNS).to_dicts():
-        tipo_regra = _canon_text(row.get("tipo_regra"), "")
-        origem = _canon_text(row.get("descricao_origem"), "")
-        destino = _canon_text(row.get("descricao_destino"), "")
-        descricao_par = _canon_text(row.get("descricao_par"), "")
+
+    # ⚡ Bolt Optimization: Replace slow `df.to_dicts()` iteration with fast `zip()` over column Series lists.
+    # By extracting list primitives natively and bypassing per-row Python dict allocations via FFI,
+    # we significantly speed up row-level parsing logic for large datasets.
+    cols_data = [
+        df.get_column("tipo_regra").to_list(),
+        df.get_column("descricao_origem").to_list(),
+        df.get_column("descricao_destino").to_list(),
+        df.get_column("descricao_par").to_list(),
+        df.get_column("hash_descricoes_key").to_list(),
+        df.get_column("chave_grupo_a").to_list(),
+        df.get_column("chave_grupo_b").to_list(),
+        df.get_column("score_origem").to_list(),
+        df.get_column("acao_manual").to_list(),
+    ]
+
+    for (
+        r_tipo,
+        r_origem,
+        r_destino,
+        r_par,
+        r_hash,
+        r_chave_a,
+        r_chave_b,
+        r_score,
+        r_acao,
+    ) in zip(*cols_data):
+        tipo_regra = _canon_text(r_tipo, "")
+        origem = _canon_text(r_origem, "")
+        destino = _canon_text(r_destino, "")
+        descricao_par = _canon_text(r_par, "")
         rows.append(
             {
                 "tipo_regra": tipo_regra,
@@ -1137,15 +1163,15 @@ def _normalize_mapa_descricoes_manual(
                 "descricao_destino": destino,
                 "descricao_par": descricao_par,
                 "hash_descricoes_key": str(
-                    row.get("hash_descricoes_key")
+                    r_hash
                     or _build_description_hash(
                         origem, destino, descricao_par, tipo_regra
                     )
                 ),
-                "chave_grupo_a": _canon_text(row.get("chave_grupo_a"), ""),
-                "chave_grupo_b": _canon_text(row.get("chave_grupo_b"), ""),
-                "score_origem": str(row.get("score_origem") or "").strip(),
-                "acao_manual": _canon_text(row.get("acao_manual"), default_acao),
+                "chave_grupo_a": _canon_text(r_chave_a, ""),
+                "chave_grupo_b": _canon_text(r_chave_b, ""),
+                "score_origem": str(r_score or "").strip(),
+                "acao_manual": _canon_text(r_acao, default_acao),
             }
         )
     return (
