@@ -6,10 +6,10 @@ import keyring
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from core.models import TimbradoReportRequest, DETNotificationRequest, FisconformeRequest
-from core.utils import validar_cnpj, ler_sql, _write_excel_with_format
+from core.utils import validar_cnpj, ler_sql
 
 logger = logging.getLogger("sefin_audit_python")
 router = APIRouter(prefix="/api/python", tags=["reports"])

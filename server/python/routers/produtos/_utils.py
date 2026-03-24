@@ -1,54 +1,17 @@
 import difflib
 from functools import lru_cache
 import re
-import os
 import sys
-import traceback
 import logging
 import hashlib
 from datetime import UTC, datetime
 import polars as pl
 from pathlib import Path
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query
-from core.models import (
-    AutoSepararResidualRequest,
-    DesfazerManualCodigoRequest,
-    DesfazerManualDescricoesRequest,
-    DescricaoManualMapItem,
-    ProdutoAnaliseStatusRequest,
-    ProdutoUnidRequest,
-    RevisaoManualSubmitRequest,
-    ResolverManualDescricoesRequest,
-    ResolverManualUnificarRequest,
-    ResolverManualDesagregarRequest,
-    ResolverManualMultiDetalhesRequest,
-    UnificacaoLoteApplyRequest,
-    UnificacaoLotePreviewRequest,
-)
-from core.produto_batch_lote import (
-    RULE_CONFIG as BATCH_RULE_CONFIG,
-    RULE_PRIORITY as BATCH_RULE_PRIORITY,
-    construir_preview_unificacao_lote,
-    filtrar_tabela_final_para_lote,
-    ocultar_grupos_verificados,
-)
+from fastapi import APIRouter
 from core.produto_runtime import (
-    _normalize_mapa_descricoes_manual,
-    build_vector_cache_metadata,
-    cache_metadata_matches,
-    compute_file_sha1,
-    construir_tabela_pares_descricoes_faiss,
-    construir_tabela_pares_descricoes_light,
-    construir_tabela_pares_descricoes_similares,
-    merge_mapa_descricoes_manual,
-    obter_runtime_produtos_status,
-    obter_status_vectorizacao,
-    read_vector_cache_metadata,
     unificar_produtos_unidades,
-    write_vector_cache_metadata,
 )
-from core.utils import validar_cnpj
 
 logger = logging.getLogger("sefin_audit_python")
 router = APIRouter(prefix="/api/python", tags=["produto_unid"])
@@ -148,8 +111,6 @@ def _canon_text(value: Any, vazio: str = "(VAZIO)") -> str:
 
 
 
-import difflib
-from functools import lru_cache
 
 _STOP_WORDS = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "SEM", "PARA", "UN", "PCT", "CX", "KG", "LT", "ML", "GR", "PC", "LATA", "LITRO", "LITROS", "GARRAFA"}
 

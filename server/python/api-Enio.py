@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import logging
-from typing import Optional
 from core.produto_runtime import unificar_produtos_unidades
 
 # Initialize dotenv explicitly
@@ -44,7 +43,6 @@ app = FastAPI(title="SEFIN Audit Tool API", version="1.0.0")
 
 # SSE Infrastructure
 import asyncio
-from fastapi.responses import StreamingResponse
 
 class EventManager:
     def __init__(self):
@@ -254,7 +252,6 @@ def _write_excel_with_format(pdf, writer, sheet_name: str = "Plan1"):
     """Escreve DataFrame em planilha com Arial 9, cabeçalho em negrito e autoajuste de colunas.
     Aplica formatos básicos para datas e números.
     """
-    import pandas as pd  # local import para evitar dependência global
 
     # Escreve conteúdo inicial
     pdf.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -1205,7 +1202,6 @@ async def add_parquet_column(request: ParquetAddColumnRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-import traceback # Added import for traceback
 
 @app.post("/api/python/parquet/merge")
 async def merge_parquet_files(request: ParquetMergeRequest):
@@ -1496,7 +1492,6 @@ async def export_excel_download(file_path: str = Query(...)):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
         import tempfile
-        import shutil
         import pandas as pd
         
         df = pl.read_parquet(str(source))

@@ -1,7 +1,6 @@
 import importlib.util
-import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 def get_config_module() -> Any:
     """Carrega o arquivo de configuração raiz dinamicamente."""
