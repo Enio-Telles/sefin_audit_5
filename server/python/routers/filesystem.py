@@ -6,11 +6,13 @@ import polars as pl
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
-from core.utils import ler_sql, extrair_parametros_sql, _human_size, validar_cnpj
-
-logger = logging.getLogger("sefin_audit_python")
+from core.utils import _human_size, validar_cnpj
 from core.audit_response_service import construir_resposta_status
 from core.audit_artifacts_service import obter_arquivos_auditoria
+from services.query_catalog import QueryCatalogService
+
+logger = logging.getLogger("sefin_audit_python")
+
 router = APIRouter(prefix="/api/python", tags=["filesystem"])
 
 # Get project root from environment or handle it
@@ -198,32 +200,30 @@ async def list_sql_queries(path: str = Query("")):
     if not target_path.exists():
         return {"queries": []}
     try:
-        queries = []
-        files = (
-            [target_path]
-            if target_path.is_file() and target_path.suffix.lower() == ".sql"
-            else list(target_path.glob("*.sql"))
-            if target_path.is_dir()
-            else []
-        )
-        for file in files:
-            try:
-                sql_content = ler_sql(file)
-                params_set = extrair_parametros_sql(sql_content)
-                params_list = [
-                    p for p in params_set if p.lower() not in ("cnpj", "cnpj_raiz")
-                ]
-            except Exception:
-                params_list = []
-            queries.append(
+        if target_path.is_file() and target_path.suffix.lower() == ".sql":
+            # If it's a single file, QueryCatalogService processes its directory and we filter
+            catalog = QueryCatalogService(target_path.parent)
+            all_queries = catalog.list_queries()
+            queries = [
+                q for q in all_queries if q["caminho"] == str(target_path.resolve())
+            ]
+        else:
+            catalog = QueryCatalogService(target_path)
+            queries = catalog.list_queries()
+
+        # Map back to old response format to not break compatibility
+        mapped_queries = []
+        for q in queries:
+            mapped_queries.append(
                 {
-                    "id": str(file.resolve()),
-                    "name": file.stem,
-                    "description": f"Arquivo SQL: {file.name}",
-                    "parameters": params_list,
+                    "id": q["caminho"],
+                    "name": q["nome"],
+                    "description": q["descricao"],
+                    "parameters": q["parametros"],
                 }
             )
-        return {"queries": sorted(queries, key=lambda x: x["name"])}
+
+        return {"queries": sorted(mapped_queries, key=lambda x: x["name"])}
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Erro ao ler consultas SQL: {str(e)}"
@@ -245,25 +245,21 @@ async def list_auxiliary_queries(path: str = Query("")):
     if not target_path.exists() or not target_path.is_dir():
         return {"queries": [], "count": 0}
     try:
-        queries = []
-        for file in target_path.glob("*.sql"):
-            try:
-                sql_content = ler_sql(file)
-                params_set = extrair_parametros_sql(sql_content)
-                params_list = [
-                    p for p in params_set if p.lower() not in ("cnpj", "cnpj_raiz")
-                ]
-            except Exception:
-                params_list = []
-            queries.append(
+        catalog = QueryCatalogService(target_path)
+        queries = catalog.list_auxiliary_queries(target_path)
+
+        mapped_queries = []
+        for q in queries:
+            mapped_queries.append(
                 {
-                    "id": str(file.resolve()),
-                    "name": file.stem,
-                    "description": f"Tabela auxiliar: {file.name}",
-                    "parameters": params_list,
+                    "id": q["caminho"],
+                    "name": q["nome"],
+                    "description": q["descricao"],
+                    "parameters": q["parametros"],
                 }
             )
-        sorted_queries = sorted(queries, key=lambda x: x["name"])
+
+        sorted_queries = sorted(mapped_queries, key=lambda x: x["name"])
         return {"queries": sorted_queries, "count": len(sorted_queries)}
     except Exception as e:
         raise HTTPException(
@@ -276,13 +272,19 @@ async def listar_consultas_disponiveis():
     """Lista as consultas disponíveis no projeto (arquivos SQL)."""
     try:
         from core.config_loader import get_config_var
+
         DIR_SQL = get_config_var("DIR_SQL", _PROJETO_DIR / "consultas_fonte")
         if not DIR_SQL.exists():
             return {"success": True, "consultas": []}
-        sql_files = sorted(DIR_SQL.glob("*.sql"))
+
+        catalog = QueryCatalogService(DIR_SQL)
+        queries = catalog.list_queries()
+
         return {
             "success": True,
-            "consultas": [{"id": f.name, "nome": f.stem} for f in sql_files],
+            "consultas": [
+                {"id": Path(q["caminho"]).name, "nome": q["nome"]} for q in queries
+            ],
         }
     except Exception as e:
         logger.error("[listar_consultas] Erro: %s\n%s", e, traceback.format_exc())
@@ -302,6 +304,7 @@ async def listar_historico():
     """Lista todos os CNPJs que já possuem pastas criadas."""
     try:
         from core.config_loader import get_config_var
+
         DIR_CNPJS = get_config_var("DIR_CNPJS", _PROJETO_DIR / "CNPJ")
 
         historico = []
@@ -314,13 +317,22 @@ async def listar_historico():
                         d / "analises",
                         d / "relatorios",
                     )
-                    arquivos = obter_arquivos_auditoria(cnpj, dir_parquet, dir_analises, dir_relatorios)
+                    arquivos = obter_arquivos_auditoria(
+                        cnpj, dir_parquet, dir_analises, dir_relatorios
+                    )
                     qtd_parquets = len(arquivos.get("arquivos_extraidos", []))
-                    qtd_analises = len(arquivos.get("arquivos_analises", [])) + len(arquivos.get("arquivos_produtos", []))
+                    qtd_analises = len(arquivos.get("arquivos_analises", [])) + len(
+                        arquivos.get("arquivos_produtos", [])
+                    )
                     qtd_relatorios = len(arquivos.get("arquivos_relatorios", []))
 
                     last_mod = 0
-                    for categoria in ["arquivos_extraidos", "arquivos_analises", "arquivos_produtos", "arquivos_relatorios"]:
+                    for categoria in [
+                        "arquivos_extraidos",
+                        "arquivos_analises",
+                        "arquivos_produtos",
+                        "arquivos_relatorios",
+                    ]:
                         for f in arquivos.get(categoria, []):
                             if "modified" in f:
                                 try:
@@ -392,11 +404,11 @@ async def detalhes_historico_cnpj(cnpj: str):
         dir_analises = base_dir / "analises"
         dir_relatorios = base_dir / "relatorios"
 
-        return construir_resposta_status(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
+        return construir_resposta_status(
+            cnpj_limpo, dir_parquet, dir_analises, dir_relatorios
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error("[historico/{cnpj}] Erro: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
-
