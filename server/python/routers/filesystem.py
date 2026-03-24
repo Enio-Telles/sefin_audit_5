@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from core.utils import ler_sql, extrair_parametros_sql, _human_size, validar_cnpj
 
 logger = logging.getLogger("sefin_audit_python")
-from core.audit_artifacts_service import obter_arquivos_auditoria
+from core.audit_response_service import construir_resposta_status
 router = APIRouter(prefix="/api/python", tags=["filesystem"])
 
 # Get project root from environment or handle it
@@ -274,14 +274,8 @@ async def list_auxiliary_queries(path: str = Query("")):
 async def listar_consultas_disponiveis():
     """Lista as consultas disponíveis no projeto (arquivos SQL)."""
     try:
-        import importlib.util
-
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        DIR_SQL = getattr(_sefin_config, "DIR_SQL", _PROJETO_DIR / "consultas_fonte")
+        from core.config_loader import get_config_var
+        DIR_SQL = get_config_var("DIR_SQL", _PROJETO_DIR / "consultas_fonte")
         if not DIR_SQL.exists():
             return {"success": True, "consultas": []}
         sql_files = sorted(DIR_SQL.glob("*.sql"))
@@ -306,14 +300,8 @@ async def validate_cnpj_endpoint(cnpj: str = Query(...)):
 async def listar_historico():
     """Lista todos os CNPJs que já possuem pastas criadas."""
     try:
-        import importlib.util
-
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        DIR_CNPJS = getattr(_sefin_config, "DIR_CNPJS", _PROJETO_DIR / "CNPJ")
+        from core.config_loader import get_config_var
+        DIR_CNPJS = get_config_var("DIR_CNPJS", _PROJETO_DIR / "CNPJ")
 
         historico = []
         if DIR_CNPJS.exists():
@@ -400,14 +388,9 @@ async def detalhes_historico_cnpj(cnpj: str):
         if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
             raise HTTPException(status_code=400, detail="CNPJ inválido")
 
-        import importlib.util
+        from core.config_loader import get_config_var
 
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        DIR_CNPJS = getattr(_sefin_config, "DIR_CNPJS", _PROJETO_DIR / "CNPJ")
+        DIR_CNPJS = get_config_var("DIR_CNPJS", _PROJETO_DIR / "CNPJ")
 
         base_dir = (
             (DIR_CNPJS / cnpj_limpo)
@@ -421,31 +404,7 @@ async def detalhes_historico_cnpj(cnpj: str):
         dir_analises = base_dir / "analises"
         dir_relatorios = base_dir / "relatorios"
 
-        arquivos = obter_arquivos_auditoria(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
-
-        import json
-        etapas_salvas = []
-        erros_salvos = []
-        status_file = dir_analises / "status_pipeline.json"
-        if status_file.exists():
-            try:
-                with open(status_file, "r") as f:
-                    data = json.load(f)
-                    etapas_salvas = data.get("etapas", [])
-                    erros_salvos = data.get("erros", [])
-            except Exception:
-                pass
-
-        return {
-            "success": True,
-            "cnpj": cnpj_limpo,
-            "etapas": etapas_salvas,
-            "erros": erros_salvos,
-            **arquivos,
-            "dir_parquet": str(dir_parquet),
-            "dir_analises": str(dir_analises),
-            "dir_relatorios": str(dir_relatorios),
-        }
+        return construir_resposta_status(cnpj_limpo, dir_parquet, dir_analises, dir_relatorios)
     except HTTPException:
         raise
     except Exception as e:

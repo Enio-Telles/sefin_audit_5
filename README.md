@@ -50,7 +50,7 @@ cd sefin-audit-tool
 ```
 
 2. **Inicialização Automática (Start Script):**
-O script automatiza a instalação das dependências Node e Python, criação do arquivo `.env` e inicialização do SQLite via Drizzle.
+O script automatiza a instalação das dependências Node e Python, criação do arquivo `.env` e inicialização do banco SQLite local via Drizzle. **Este é o setup OFICIAL do projeto**, projetado para garantir máxima reprodutibilidade e isolamento.
 
 ```bash
 # Executa as validações, instala dependências e inicia os serviços em paralelo
