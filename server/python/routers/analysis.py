@@ -104,17 +104,11 @@ async def audit_pipeline(req: AuditPipelineRequest, background_tasks: Background
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
-    import importlib.util
+    from core.config_loader import get_config_var
 
     try:
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_config_path)
-        )
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        obter_diretorios_cnpj = _sefin_config.obter_diretorios_cnpj
-        DIR_SQL = _sefin_config.DIR_SQL
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        DIR_SQL = get_config_var("DIR_SQL")
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
         iniciar_status_agendado(dir_analises)
@@ -157,14 +151,9 @@ async def importar_fatores_excel(
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
     try:
-        import importlib.util
-
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_config)
-        _, dir_analises, _ = _config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         fatores_path = dir_analises / f"fatores_conversao_{cnpj_limpo}.parquet"
 
         if not fatores_path.exists():
@@ -194,14 +183,9 @@ async def diagnostico_fatores_excel(cnpj: str = Query(...)):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
 
     try:
-        import importlib.util
-
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_PROJETO_DIR / "config.py")
-        )
-        _config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_config)
-        _, dir_analises, _ = _config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         fatores_path = dir_analises / f"fatores_conversao_{cnpj_limpo}.parquet"
 
         resultado = obter_diagnostico_fatores(fatores_path, cnpj_limpo)
@@ -222,16 +206,10 @@ async def get_audit_status(cnpj: str):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ inválido")
 
-    import importlib.util
+    from core.config_loader import get_config_var
 
     try:
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location(
-            "sefin_config", str(_config_path)
-        )
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        obter_diretorios_cnpj = _sefin_config.obter_diretorios_cnpj
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
         dir_parquet, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
 
         return construir_resposta_status(

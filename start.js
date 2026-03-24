@@ -124,9 +124,11 @@ function initializeDatabase() {
 function startServers(pythonCmd) {
   info("Starting servers...");
 
+  const pythonPort = process.env.PYTHON_API_PORT || "8001";
+
   const pythonServer = spawn(
     pythonCmd,
-    ["-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001"],
+    ["-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", pythonPort],
     {
       cwd: PYTHON_DIR,
       stdio: "pipe",

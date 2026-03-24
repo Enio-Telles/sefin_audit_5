@@ -101,8 +101,10 @@ def start_servers(python_cmd: str):
 
     env = os.environ.copy()
 
+    python_port = os.environ.get("PYTHON_API_PORT", "8001")
+
     python_server = subprocess.Popen(
-        [python_cmd, "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001"],
+        [python_cmd, "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", python_port],
         cwd=PYTHON_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
