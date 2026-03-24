@@ -1,7 +1,17 @@
-Melhorador: Optimize file discovery performance by removing unnecessary globs
+🧪 testing: Add tests for normalizeSimilarityTokens
 
-- **What:** Replaced `glob()` directory scans for exact filenames with direct O(1) `Path.is_file()` checks in `encontrar_arquivo`. Also narrowed the fallback glob pattern to `*{cnpj}*.parquet` and lifted `.lower()` out of the loop.
-- **Why:** The previous implementation scanned the entire directory and iterated through all items just to check if a specific, predictable filename existed. This was causing a significant performance bottleneck when the function was called frequently inside loops processing large directories.
-- **Impact:** Benchmark showed finding an exact file went from ~1.03s (1000 iter) to ~0.02s (~50x faster). Fallback searches went from ~0.70s (100 iter) to ~0.12s (~5.8x faster).
-- **Validation:** Wrote a benchmark script to verify logic and performance. Ran existing test suite `pytest tests/test_encontrar_arquivo_cnpj.py`, which passed 100%.
-- **Risk:** Low. The behavior remains identical; only the mechanism of checking file existence and the strictness of the fallback glob pattern were changed.
+🎯 What:
+Added comprehensive unit tests for the `normalizeSimilarityTokens` function in `client/src/lib/productSimilarity.ts` to ensure its string manipulation logic is correct and robust against edge cases.
+
+📊 Coverage:
+The new test suite covers the following scenarios:
+- Empty or whitespace-only strings
+- Diacritics removal (e.g., "Ação" -> "ACAO")
+- Punctuation and special characters replacement
+- Conversion to uppercase
+- Handling of multiple consecutive spaces
+- Filtering out tokens with a length of 1
+- Proper handling of numbers with a length > 1
+
+✨ Result:
+Improved test coverage for a critical string normalization utility, ensuring that future refactoring or logic changes won't introduce silent regressions.
