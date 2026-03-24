@@ -91,3 +91,20 @@ Ao final da implementação, o sistema deverá:
 - reduzir acoplamento entre rotas e lógica de negócio
 - facilitar auditoria técnica e manutenção
 - dar base para evolução do módulo de produtos, unidades e cruzamentos fiscais
+
+## Implementado (Fase 1)
+
+**Arquivos Alterados:**
+- `init_db.ts`: Adicionada a execução do script `drizzle/0002_audit_execution.sql` para criar as tabelas de auditoria de forma idempotente durante o bootstrap.
+- `server/python/core/sqlite_audit_repo.py`: Criado novo repositório isolado e focado na persistência de trace, eventos e artefatos no SQLite.
+- `server/python/routers/filesystem.py`: Substituída a lógica manual e duplicada de leitura de arquivos `.sql` pelas chamadas aos métodos do novo `QueryCatalogService`.
+- `server/python/routers/oracle.py`: Integrado o `ExecutionTraceStore` e os contextos de `ExecutionTimer` para acompanhar e salvar cada etapa de extração. Persistência combinada (arquivo JSON no diretório destino e registro via SQLite).
+
+**Decisões Tomadas:**
+- Manter o schema das respostas JSON inalterado nos roteadores atualizados (`/filesystem/sql-queries`, etc.) garantindo compatibilidade retroativa imediata com o frontend.
+- Utilização de `ExecutionTimer` como Context Manager focado em extrair telemetria (duração, status, mensagens de erro) sem poluir significativamente a lógica principal.
+- Delegação da persistência do trace completo para duas etapas finais síncronas: arquivo na pasta temporária Parquet, e banco `sefin_audit.db`, cobrindo de forma coesa a rastreabilidade via interface gráfica.
+
+**Próximos Passos:**
+- Refatorar a complexidade do próprio arquivo `oracle.py` em serviços menores e focar na modularização proposta na Fase 2.
+- Desenhar a interface web (frontend React) que exibirá a visualização do histórico usando a estrutura das tabelas `audit_executions` recém-populadas.
