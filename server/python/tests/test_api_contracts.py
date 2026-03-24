@@ -253,7 +253,7 @@ def test_produtos_codigo_multidescricao_resumo_contract(mock_exists, mock_spec, 
     assert "opcoes_consenso" in data
     assert "resumo" in data
 
-@patch("routers.filesystem.obter_arquivos_auditoria")
+@patch("core.audit_response_service.obter_arquivos_auditoria")
 @patch("importlib.util.spec_from_file_location")
 def test_auditoria_historico_contract(mock_spec, mock_obter):
     mock_module = MagicMock()

@@ -10,6 +10,7 @@ from core.utils import ler_sql, extrair_parametros_sql, _human_size, validar_cnp
 
 logger = logging.getLogger("sefin_audit_python")
 from core.audit_response_service import construir_resposta_status
+from core.audit_artifacts_service import obter_arquivos_auditoria
 router = APIRouter(prefix="/api/python", tags=["filesystem"])
 
 # Get project root from environment or handle it
@@ -313,34 +314,21 @@ async def listar_historico():
                         d / "analises",
                         d / "relatorios",
                     )
-                    qtd_parquets = (
-                        len(list(dir_parquet.glob("*.parquet")))
-                        if dir_parquet.exists()
-                        else 0
-                    )
-                    qtd_analises = (
-                        len(list(dir_analises.glob("*.parquet")))
-                        if dir_analises.exists()
-                        else 0
-                    )
-                    qtd_relatorios = len(
-                        [
-                            f
-                            for f in (
-                                dir_relatorios.iterdir()
-                                if dir_relatorios.exists()
-                                else []
-                            )
-                            if f.is_file()
-                        ]
-                    )
+                    arquivos = obter_arquivos_auditoria(cnpj, dir_parquet, dir_analises, dir_relatorios)
+                    qtd_parquets = len(arquivos.get("arquivos_extraidos", []))
+                    qtd_analises = len(arquivos.get("arquivos_analises", [])) + len(arquivos.get("arquivos_produtos", []))
+                    qtd_relatorios = len(arquivos.get("arquivos_relatorios", []))
 
                     last_mod = 0
-                    for subdir in [dir_parquet, dir_analises, dir_relatorios]:
-                        if subdir.exists():
-                            for f in subdir.rglob("*"):
-                                if f.is_file():
-                                    last_mod = max(last_mod, f.stat().st_mtime)
+                    for categoria in ["arquivos_extraidos", "arquivos_analises", "arquivos_produtos", "arquivos_relatorios"]:
+                        for f in arquivos.get(categoria, []):
+                            if "modified" in f:
+                                try:
+                                    dt = datetime.fromisoformat(f["modified"])
+                                    ts = dt.timestamp()
+                                    last_mod = max(last_mod, ts)
+                                except Exception:
+                                    pass
 
                     razao_social = None
                     cadastrais_file = dir_parquet / f"dados_cadastrais_{cnpj}.parquet"
