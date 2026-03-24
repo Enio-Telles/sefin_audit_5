@@ -58,7 +58,19 @@ def ensure_env_file():
         info(".env file already exists.")
     else:
         info("Creating default .env file...")
-        default_env = """DATABASE_URL=file:./sefin_audit.db
+        default_env = """# ==============================================================================
+# SEFIN Audit Tool - Configuração de Ambiente
+# ==============================================================================
+# Este é o setup OFICIAL do projeto.
+# O sistema foi desenhado para inicializar de forma autônoma via app.py ou start.js com SQLite local.
+#
+# Copie este arquivo para .env se quiser customizar.
+# O comando `python app.py` ou `node start.js` vai criar um .env básico automaticamente se não existir.
+
+# ------------------------------------------------------------------------------
+# 1. OBRIGATÓRIAS (Gerado automaticamente no primeiro fluxo de inicialização)
+# ------------------------------------------------------------------------------
+DATABASE_URL=file:./sefin_audit.db
 PYTHON_API_PORT=8001
 PORT=3000
 OAUTH_SERVER_URL=http://localhost:3000/mock-oauth
@@ -66,6 +78,9 @@ VITE_OAUTH_PORTAL_URL=http://localhost:3000/mock-oauth
 VITE_APP_ID=sefin-audit-tool
 VITE_ANALYTICS_ENDPOINT=mock-endpoint
 VITE_ANALYTICS_WEBSITE_ID=mock-id
+
+# Autenticação e Criptografia
+JWT_SECRET=local_dev_secret_12345678
 """
         env_path.write_text(default_env, encoding="utf-8")
         info(".env file created with default configurations.")
