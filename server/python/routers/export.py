@@ -73,7 +73,6 @@ async def export_excel_download(file_path: str = Query(...)):
 @router.get("/revisao-manual-excel")
 async def download_revisao_manual_excel(cnpj: str = Query(...)):
     """Gera e envia um Excel formatado com os produtos que requerem revisão manual."""
-    import importlib.util
     import pandas as pd
 
     cnpj_limpo = re.sub(r"[^0-9]", "", cnpj)
@@ -82,11 +81,9 @@ async def download_revisao_manual_excel(cnpj: str = Query(...)):
 
     # Carrega config para obter paths do CNPJ
     try:
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_export", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
     except Exception as e:
         logger.error("[revisao_manual_excel] Erro ao carregar config: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro na configuração: {e}")

@@ -198,11 +198,9 @@ async def gerar_fisconforme(request: FisconformeRequest):
             dados_cadastrais = dict(zip(columns, row)) if row else {}
         conexao.close()
 
-        import importlib.util
-        _spec = importlib.util.spec_from_file_location("sefin_config", str(_PROJETO_DIR / "config.py"))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-        _, _, dir_relatorios = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, dir_relatorios = obter_diretorios_cnpj(cnpj_limpo)
         
         from gerar_relatorio import gerar_relatorio_fisconforme_html
         result = gerar_relatorio_fisconforme_html(cnpj=cnpj_limpo, dir_relatorios=dir_relatorios, dir_modelos=_PROJETO_DIR / "modelos", dados_cadastrais=dados_cadastrais, nome_auditor=request.nome_auditor, matricula_auditor=request.matricula_auditor, email_auditor=request.email_auditor, orgao=request.orgao)

@@ -94,14 +94,9 @@ async def marcar_produto_verificado(req: ProdutoAnaliseStatusRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_verificados_path = dir_analises / f"mapa_verificados_produtos_{cnpj_limpo}.parquet"
 
         df_novo = pl.DataFrame(
@@ -145,14 +140,9 @@ async def desfazer_produto_verificado(req: ProdutoAnaliseStatusRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_verificados_path = dir_analises / f"mapa_verificados_produtos_{cnpj_limpo}.parquet"
 
         removed = 0
@@ -192,14 +182,9 @@ async def auto_separar_residual(req: AutoSepararResidualRequest):
         raise HTTPException(status_code=400, detail="Modo invalido")
 
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         codigos_path = dir_analises / f"codigos_multidescricao_{cnpj_limpo}.parquet"
         mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
 
@@ -308,14 +293,9 @@ async def resolver_manual_unificar(req: ResolverManualUnificarRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
 
         decisoes = []
@@ -362,14 +342,9 @@ async def resolver_manual_desagregar(req: ResolverManualDesagregarRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
 
         decisoes = []
@@ -419,14 +394,9 @@ async def resolver_manual_descricoes(req: ResolverManualDescricoesRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
         history_path = dir_analises / f"mapa_manual_descricoes_historico_{cnpj_limpo}.parquet"
 
@@ -493,14 +463,9 @@ async def desfazer_decisao_codigo(req: DesfazerManualCodigoRequest):
         raise HTTPException(status_code=400, detail="Codigo invalido")
 
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
 
         if not mapa_path.exists():
@@ -549,14 +514,9 @@ async def desfazer_manual_descricoes(req: DesfazerManualDescricoesRequest):
         raise HTTPException(status_code=400, detail="Informe pelo menos duas descricoes.")
 
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
         history_path = dir_analises / f"mapa_manual_descricoes_historico_{cnpj_limpo}.parquet"
 

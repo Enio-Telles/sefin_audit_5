@@ -128,7 +128,25 @@ function initializeDatabase() {
   }
 }
 
+function loadEnv() {
+  const envPath = path.join(ROOT_DIR, ".env");
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf-8");
+    envContent.split("\n").forEach(line => {
+      const match = line.match(/^([^#\s]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        const value = match[2].trim();
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    });
+  }
+}
+
 function startServers(pythonCmd) {
+  loadEnv();
   info("Starting servers...");
 
   const pythonPort = process.env.PYTHON_API_PORT || "8001";

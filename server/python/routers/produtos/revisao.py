@@ -27,14 +27,9 @@ async def get_produtos_revisao_manual(cnpj: str = Query(...)):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
 
         if not agregados_path.exists():
@@ -122,14 +117,9 @@ async def submit_revisao_manual(req: RevisaoManualSubmitRequest):
     if not cnpj_limpo or not validar_cnpj(cnpj_limpo):
         raise HTTPException(status_code=400, detail="CNPJ invalido")
     try:
-        import importlib.util
-
-        _config_path = _PROJETO_DIR / "config.py"
-        _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-        _sefin_config = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_sefin_config)
-
-        _, dir_analises, _ = _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+        from core.config_loader import get_config_var
+        obter_diretorios_cnpj = get_config_var('obter_diretorios_cnpj')
+        _, dir_analises, _ = obter_diretorios_cnpj(cnpj_limpo)
         mapa_path = dir_analises / f"mapa_manual_unificacao_{cnpj_limpo}.parquet"
 
         decisoes = [item.dict() for item in req.decisoes]

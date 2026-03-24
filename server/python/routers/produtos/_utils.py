@@ -136,13 +136,9 @@ def _paginate_frame(df: pl.DataFrame, page: int, page_size: int) -> tuple[pl.Dat
 
 
 def _load_cnpj_dirs(cnpj_limpo: str) -> tuple[Path, Path, Path]:
-    import importlib.util
-
-    _config_path = _PROJETO_DIR / "config.py"
-    _spec = importlib.util.spec_from_file_location("sefin_config_local", str(_config_path))
-    _sefin_config = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_sefin_config)
-    return _sefin_config.obter_diretorios_cnpj(cnpj_limpo)
+    from core.config_loader import get_config_var
+    obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
+    return obter_diretorios_cnpj(cnpj_limpo)
 
 
 def _canon_text(value: Any, vazio: str = "(VAZIO)") -> str:
