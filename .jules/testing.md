@@ -1,0 +1,3 @@
+## 2026-03-25 - Mocking file IO for audit status service tests
+**Learning:** For simple file IO operations on a JSON file (like in `audit_status_service.py`), using pytest's `tmp_path` fixture directly as the directory path allows for fully isolated testing of file creation, updates, and corrupt data without needing to mock `open` entirely. Mocking `builtins.open` is still necessary to test write exception handling explicitly.
+**Action:** When testing JSON file states in Python backend services, default to using `tmp_path` to verify the actual file contents instead of asserting mocked arguments, except for forced exception paths.
