@@ -398,11 +398,7 @@ def _build_component_summaries(
     descricao_candidates = sorted(
         ordered_rows,
         key=lambda row: (
-            -sum(
-                1
-                for field in [row.get("gtin"), row.get("ncm"), row.get("cest")]
-                if field
-            ),
+            -(bool(row.get("gtin")) + bool(row.get("ncm")) + bool(row.get("cest"))),
             -(row.get("qtd_codigos") or 0),
             row.get("descricao") or "",
         ),
