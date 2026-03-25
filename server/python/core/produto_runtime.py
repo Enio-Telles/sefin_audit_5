@@ -1508,13 +1508,19 @@ def _resolve_description_unions(mapa_descricoes_path: Path) -> dict[str, str]:
         return {}
     df = _normalize_mapa_descricoes_manual(pl.read_parquet(str(mapa_descricoes_path)))
     parent: dict[str, str] = {}
-    for row in df.to_dicts():
-        if row.get("tipo_regra") != "UNIR_GRUPOS":
-            continue
-        origem = _canon_text(row.get("descricao_origem"), "")
-        destino = _canon_text(row.get("descricao_destino"), "")
-        if origem and destino:
-            parent[origem] = destino
+    if {"tipo_regra", "descricao_origem", "descricao_destino"}.issubset(df.columns):
+        # ⚡ Bolt Optimization: Replacing slow `df.to_dicts()` iteration with fast `zip()` over column Series lists.
+        for tipo, desc_origem, desc_destino in zip(
+            df.get_column("tipo_regra").to_list(),
+            df.get_column("descricao_origem").to_list(),
+            df.get_column("descricao_destino").to_list()
+        ):
+            if tipo != "UNIR_GRUPOS":
+                continue
+            origem = _canon_text(desc_origem, "")
+            destino = _canon_text(desc_destino, "")
+            if origem and destino:
+                parent[origem] = destino
 
     def resolve(text: str) -> str:
         seen: set[str] = set()
