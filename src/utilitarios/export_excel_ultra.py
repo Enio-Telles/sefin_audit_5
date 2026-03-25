@@ -58,9 +58,13 @@ def _sanitize_sheet_name(nome: str) -> str:
 
 
 def _serializar_valor(v: Any) -> Any:
-    if isinstance(v, (list, tuple, set)):
-        itens = [str(x) for x in v if x is not None and str(x) != ""]
-        return " | ".join(itens)
+    if isinstance(v, (list, tuple, dict)):
+        return str(v)
+    import numpy as np
+    if isinstance(v, np.ndarray):
+        return str(v)
+    if pd.isna(v):
+        return None
     return v
 
 
