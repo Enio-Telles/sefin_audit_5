@@ -974,8 +974,9 @@ export default function Tabelas() {
                           >
                             <div className="flex items-center gap-1.5 justify-between">
                               <button
-                                className="hover:text-foreground flex items-center gap-1.5 truncate"
+                                className="hover:text-foreground flex items-center gap-1.5 truncate rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 onClick={() => handleSort(col)}
+                                aria-label={`Ordenar pela coluna ${col}`}
                               >
                                 {col}{" "}
                                 {sortColumn === col && (
