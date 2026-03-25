@@ -16,7 +16,7 @@ _PROJECT_ROOT = _CURRENT_DIR.parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.append(str(_PROJECT_ROOT))
 
-from routers import oracle, parquet, analysis, reports, filesystem, export, produto_unid, references
+from routers import oracle, parquet, analysis, reports, filesystem, export, produto_unid, references, jobs
 
 # Configuração de Logging
 logging.basicConfig(
@@ -60,6 +60,7 @@ app.include_router(filesystem.router)
 app.include_router(export.router)
 app.include_router(produto_unid.router)
 app.include_router(references.router)
+app.include_router(jobs.router)
 
 @app.get("/health")
 async def health_check():

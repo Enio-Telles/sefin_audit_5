@@ -1,0 +1,15 @@
+refactor: Implement asynchronous Oracle extraction jobs
+
+Transforms the heavy, synchronous `/api/python/oracle/extract` endpoint into an asynchronous, job-based architecture to resolve long HTTP request timeouts and lack of progress tracking.
+
+**Architectural Changes:**
+- Introduces `JobManager` singleton using `ThreadPoolExecutor` for background execution.
+- Integrates `JobState` persistence via SQLite (`audit_jobs` table) to gracefully handle restarts and provide resilient polling.
+- Decouples extraction logic into `run_oracle_extraction_job`, enabling cooperative cancellation checking during query execution and `fetchmany` loops.
+- Adds `GET /api/python/jobs` (with optional `status` and `tipo` filters), `GET /api/python/jobs/{job_id}`, and `POST /api/python/jobs/{job_id}/cancel` endpoints.
+- Updates `ExecutionTraceStore` and `SqliteAuditRepo` to persist incremental execution progress after every query.
+
+**Testing:**
+- Includes API contract test updates (`test_oracle_jobs.py`) using `TestClient` to mock and verify background job routing and status changes.
+
+Fixes user-requested async job transition while preserving original CNPJ validations, network pre-checks, and trace fidelity.
