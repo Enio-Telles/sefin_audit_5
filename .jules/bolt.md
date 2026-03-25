@@ -16,3 +16,7 @@
 ## 2024-05-24 - File System Logic Refactoring
 **Learning:** Refactoring filesystem operations to use centralized artifact fetching methods directly in `listar_historico` allows for a single source of truth across all API endpoints, minimizing discrepancies in file counts and statuses.
 **Action:** Always identify duplicated recursive globbing logic when listing directory contents and map them to unified artifact services whenever possible to centralize file grouping rules.
+
+## 2025-02-20 - Fast Polars Row Iteration
+**Learning:** Using `df.to_dicts()` to iterate over rows in Polars DataFrames causes massive Rust-Python FFI overhead by allocating full Python dictionaries per row. This is particularly problematic in heavy data processing loops, like factor diagnostics.
+**Action:** Always replace `df.to_dicts()` with `zip()` over explicitly extracted native lists (e.g., `keys = df.get_column("chave_produto").to_list()`). Avoid positional unpacking of dynamically fetched columns based on external constants to prevent unsafe execution and silent failures.
