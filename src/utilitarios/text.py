@@ -31,8 +31,9 @@ def normalize_text(text: str | None) -> str:
 
 
 def natural_sort_key(value: str | None) -> list[Any]:
-    text = "" if value is None else str(value)
-    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
+    if not value:
+        return []
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", str(value))]
 
 
 def display_cell(value: Any) -> str:
