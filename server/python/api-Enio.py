@@ -78,9 +78,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("sefin_audit_python")
 
+# CORS configurável por ambiente (se não definido, restringe a localhost por segurança)
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
