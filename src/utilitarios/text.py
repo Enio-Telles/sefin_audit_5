@@ -13,8 +13,11 @@ STOPWORDS = {
 def remove_accents(text: str | None) -> str | None:
     if text is None:
         return None
-    normalized = unicodedata.normalize("NFKD", str(text))
-    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    try:
+        normalized = unicodedata.normalize("NFKD", str(text))
+        return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    except Exception:
+        return text
 
 
 def normalize_text(text: str | None) -> str:
