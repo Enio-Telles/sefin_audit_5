@@ -862,9 +862,25 @@ async def extract_oracle_data(request: ExtractionRequest):
                         })
                          continue
 
-                query_name = query_file.stem if query_file.exists() else query_path
+                if not query_file.exists():
+                    results.append({
+                        "query": query_path,
+                        "status": "error",
+                        "message": "Arquivo de consulta não encontrado",
+                    })
+                    continue
+
+                if not _is_allowed(query_file):
+                    results.append({
+                        "query": query_path,
+                        "status": "error",
+                        "message": "Acesso ao arquivo de consulta não permitido",
+                    })
+                    continue
+
+                query_name = query_file.stem
                 try:
-                    sql = ler_sql(query_file) if query_file.exists() else query_path
+                    sql = ler_sql(query_file)
                     params = extrair_parametros_sql(sql)
                     bind_vars: dict[str, Any] = {p: None for p in params}
                     if cnpj_limpo:
