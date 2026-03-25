@@ -5,3 +5,7 @@
 ## 2024-05-20 - Efficient Count of Truthy Values in Sort Keys
 **Learning:** Using a generator expression with `sum()` (e.g., `sum(1 for x in [a, b, c] if x)`) inside a sorting key function introduces significant overhead due to the creation of temporary list and generator objects for every comparison.
 **Action:** Replace generator-based counts with direct boolean summation (e.g., `bool(a) + bool(b) + bool(c)`). Since booleans are integers in Python, this is logically equivalent and provides a measurable performance improvement (~25-30%) for large-scale sorting operations.
+
+## 2024-05-19 - Fast Sparse Matrix Thresholding in Polars/Scipy
+**Learning:** Extracting coordinate values using `zip(*matrix.nonzero())` and row-wise indexing into a SciPy `csr_matrix` is exceptionally slow for large matrices since it incurs O(N) lookup costs per matched coordinate and object overhead for creating tuples.
+**Action:** When filtering a sparse matrix by value, convert it to a `coo_matrix` to directly access the 1D `.row`, `.col`, and `.data` numpy arrays. Create boolean masks (`np.where(mask)`) directly on these arrays for filtering. This is orders of magnitude faster (e.g., 280s -> 3.5s).

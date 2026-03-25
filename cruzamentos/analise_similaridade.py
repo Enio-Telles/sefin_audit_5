@@ -55,23 +55,26 @@ def encontrar_similares_16gb_ram(
         similaridade_lote = tfidf_matrix[start_row:end_row].dot(tfidf_matrix.T)
         similaridade_lote.setdiag(0) # Não comparar o item com ele mesmo
         
-        # Extrai coordenadas com score acima do threshold
-        tuplas_acima_threshold = zip(*similaridade_lote.nonzero())
+        # Converte para COO para acessar row, col e data diretamente sem indexação lenta
+        coo = similaridade_lote.tocoo()
         
-        for i_lote, j_global in tuplas_acima_threshold:
-            i_global = start_row + i_lote
+        # Filtra os dados de forma vetorizada via numpy
+        i_global_arr = start_row + coo.row
+        mask = (i_global_arr < coo.col) & (coo.data >= threshold)
+        valid_indices = np.where(mask)[0]
+
+        for idx in valid_indices:
+            i_global = i_global_arr[idx]
+            j_global = coo.col[idx]
+            sim_score = coo.data[idx]
             
-            # i_global < j_global evita pares duplicados (A->B e B->A)
-            if i_global < j_global:
-                sim_score = similaridade_lote[i_lote, j_global]
-                if sim_score >= threshold:
-                    resultados_chunk.append({
-                        "id_A": lista_codigos[int(i_global)],
-                        "desc_A": lista_descricoes[int(i_global)],
-                        "id_B": lista_codigos[int(j_global)],
-                        "desc_B": lista_descricoes[int(j_global)],
-                        "score": round(float(sim_score), 4)
-                    })
+            resultados_chunk.append({
+                "id_A": lista_codigos[int(i_global)],
+                "desc_A": lista_descricoes[int(i_global)],
+                "id_B": lista_codigos[int(j_global)],
+                "desc_B": lista_descricoes[int(j_global)],
+                "score": round(float(sim_score), 4)
+            })
         
         # FLUSHING PARA DISCO (A Mágica para 16GB de RAM)
         if resultados_chunk:
