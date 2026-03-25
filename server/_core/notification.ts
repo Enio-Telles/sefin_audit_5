@@ -23,7 +23,7 @@ const buildEndpointUrl = (baseUrl: string): string => {
   ).toString();
 };
 
-const validatePayload = (input: NotificationPayload): NotificationPayload => {
+export const validatePayload = (input: NotificationPayload): NotificationPayload => {
   if (!isNonEmptyString(input.title)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
