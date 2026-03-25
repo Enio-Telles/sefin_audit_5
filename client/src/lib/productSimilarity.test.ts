@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeSimilarityTokens } from "./productSimilarity";
+import { normalizeSimilarityTokens, buildSimilarityCharNgrams } from "./productSimilarity";
 
 describe("normalizeSimilarityTokens", () => {
   it("should handle empty or whitespace-only strings", () => {
@@ -51,5 +51,47 @@ describe("normalizeSimilarityTokens", () => {
       "LAVA",
       "ROUPAS"
     ]);
+  });
+});
+
+describe("buildSimilarityCharNgrams", () => {
+  it("should return an empty set for an empty string or whitespace-only strings", () => {
+    expect(buildSimilarityCharNgrams("")).toEqual(new Set());
+    expect(buildSimilarityCharNgrams("   ")).toEqual(new Set());
+  });
+
+  it("should return the original string if length is less than or equal to size", () => {
+    expect(buildSimilarityCharNgrams("AB", 3)).toEqual(new Set(["AB"]));
+    expect(buildSimilarityCharNgrams("ABC", 3)).toEqual(new Set(["ABC"]));
+  });
+
+  it("should generate correct n-grams for strings longer than size", () => {
+    // "ABCD" -> "ABC", "BCD"
+    expect(buildSimilarityCharNgrams("ABCD", 3)).toEqual(new Set(["ABC", "BCD"]));
+    // "ABCDE" -> "ABC", "BCD", "CDE"
+    expect(buildSimilarityCharNgrams("ABCDE", 3)).toEqual(new Set(["ABC", "BCD", "CDE"]));
+  });
+
+  it("should normalize the string before generating n-grams", () => {
+    // "Ação" -> "ACAO" -> "ACA", "CAO"
+    expect(buildSimilarityCharNgrams("Ação", 3)).toEqual(new Set(["ACA", "CAO"]));
+    // "café" -> "CAFE" -> "CAF", "AFE"
+    expect(buildSimilarityCharNgrams("café", 3)).toEqual(new Set(["CAF", "AFE"]));
+  });
+
+  it("should remove punctuation before generating n-grams and replace with space", () => {
+    expect(buildSimilarityCharNgrams("A-B-C", 3)).toEqual(new Set(["A B", "B", "B C"]));
+  });
+
+  it("should handle custom size parameter", () => {
+    // size 2: "ABCD" -> "AB", "BC", "CD"
+    expect(buildSimilarityCharNgrams("ABCD", 2)).toEqual(new Set(["AB", "BC", "CD"]));
+
+    // size 4: "ABCDEF" -> "ABCD", "BCDE", "CDEF"
+    expect(buildSimilarityCharNgrams("ABCDEF", 4)).toEqual(new Set(["ABCD", "BCDE", "CDEF"]));
+  });
+
+  it("should handle strings with consecutive punctuation replaced by a single space", () => {
+    expect(buildSimilarityCharNgrams("A--B", 3)).toEqual(new Set(["A B"]));
   });
 });
