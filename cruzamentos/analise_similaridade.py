@@ -43,6 +43,10 @@ def encontrar_similares_16gb_ram(
 
     print("Iniciando multiplicação em lotes com flushing para disco...")
     
+    # Extract to Python lists for O(1) loop lookups to avoid slow Polars Series indexing
+    lista_codigos = df["codigo"].to_list()
+    lista_descricoes = df["descricao_limpa"].to_list()
+
     for start_row in range(0, num_rows, batch_size):
         end_row = min(start_row + batch_size, num_rows)
         resultados_chunk = []
@@ -62,10 +66,10 @@ def encontrar_similares_16gb_ram(
                 sim_score = similaridade_lote[i_lote, j_global]
                 if sim_score >= threshold:
                     resultados_chunk.append({
-                        "id_A": df["codigo"][i_global],
-                        "desc_A": df["descricao_limpa"][i_global],
-                        "id_B": df["codigo"][j_global],
-                        "desc_B": df["descricao_limpa"][j_global],
+                        "id_A": lista_codigos[int(i_global)],
+                        "desc_A": lista_descricoes[int(i_global)],
+                        "id_B": lista_codigos[int(j_global)],
+                        "desc_B": lista_descricoes[int(j_global)],
                         "score": round(float(sim_score), 4)
                     })
         
