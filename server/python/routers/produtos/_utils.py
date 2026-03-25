@@ -439,46 +439,54 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
 
     if mapa_descricoes_path.exists():
         df_descricoes = pl.read_parquet(str(mapa_descricoes_path))
-        for row in df_descricoes.to_dicts():
-            tipo_regra = _normalize_status_text(row.get("tipo_regra"))
-            descricao_origem = _normalize_status_text(row.get("descricao_origem"))
-            descricao_destino = _normalize_status_text(row.get("descricao_destino"))
-            descricao_par = _normalize_status_text(row.get("descricao_par"))
-            if tipo_regra == "UNIR_GRUPOS":
-                for descricao in [descricao_origem, descricao_destino]:
-                    grupo = descricao_to_grupo.get(descricao)
-                    if not grupo:
-                        continue
-                    status_rows.append(
-                        {
-                            "tipo_ref": "POR_GRUPO",
-                            "ref_id": grupo[0],
-                            "ref_id_aux": "",
-                            "descricao_ref": grupo[1],
-                            "contexto_tela": "DECISAO_ENTRE_GRUPOS",
-                            "status_analise": "UNIDO_ENTRE_GRUPOS",
-                            "origem_status": "MAPA_MANUAL_DESCRICOES",
-                            "dt_ultima_acao": datetime.now(UTC).isoformat(),
-                        }
-                    )
-            elif tipo_regra == "MANTER_SEPARADO":
-                for descricao, descricao_aux in [(descricao_origem, descricao_par), (descricao_par, descricao_origem)]:
-                    grupo = descricao_to_grupo.get(descricao)
-                    grupo_aux = descricao_to_grupo.get(descricao_aux)
-                    if not grupo:
-                        continue
-                    status_rows.append(
-                        {
-                            "tipo_ref": "POR_GRUPO",
-                            "ref_id": grupo[0],
-                            "ref_id_aux": grupo_aux[0] if grupo_aux else "",
-                            "descricao_ref": grupo[1],
-                            "contexto_tela": "DECISAO_ENTRE_GRUPOS",
-                            "status_analise": "MANTIDO_SEPARADO",
-                            "origem_status": "MAPA_MANUAL_DESCRICOES",
-                            "dt_ultima_acao": datetime.now(UTC).isoformat(),
-                        }
-                    )
+        req_cols = {"tipo_regra", "descricao_origem", "descricao_destino", "descricao_par"}
+        if req_cols.issubset(df_descricoes.columns):
+            # ⚡ Bolt Optimization: Replacing slow `df.to_dicts()` iteration with fast `zip()` over column Series lists.
+            for t_regra, d_orig, d_dest, d_par in zip(
+                df_descricoes.get_column("tipo_regra").to_list(),
+                df_descricoes.get_column("descricao_origem").to_list(),
+                df_descricoes.get_column("descricao_destino").to_list(),
+                df_descricoes.get_column("descricao_par").to_list(),
+            ):
+                tipo_regra = _normalize_status_text(t_regra)
+                descricao_origem = _normalize_status_text(d_orig)
+                descricao_destino = _normalize_status_text(d_dest)
+                descricao_par = _normalize_status_text(d_par)
+                if tipo_regra == "UNIR_GRUPOS":
+                    for descricao in [descricao_origem, descricao_destino]:
+                        grupo = descricao_to_grupo.get(descricao)
+                        if not grupo:
+                            continue
+                        status_rows.append(
+                            {
+                                "tipo_ref": "POR_GRUPO",
+                                "ref_id": grupo[0],
+                                "ref_id_aux": "",
+                                "descricao_ref": grupo[1],
+                                "contexto_tela": "DECISAO_ENTRE_GRUPOS",
+                                "status_analise": "UNIDO_ENTRE_GRUPOS",
+                                "origem_status": "MAPA_MANUAL_DESCRICOES",
+                                "dt_ultima_acao": datetime.now(UTC).isoformat(),
+                            }
+                        )
+                elif tipo_regra == "MANTER_SEPARADO":
+                    for descricao, descricao_aux in [(descricao_origem, descricao_par), (descricao_par, descricao_origem)]:
+                        grupo = descricao_to_grupo.get(descricao)
+                        grupo_aux = descricao_to_grupo.get(descricao_aux)
+                        if not grupo:
+                            continue
+                        status_rows.append(
+                            {
+                                "tipo_ref": "POR_GRUPO",
+                                "ref_id": grupo[0],
+                                "ref_id_aux": grupo_aux[0] if grupo_aux else "",
+                                "descricao_ref": grupo[1],
+                                "contexto_tela": "DECISAO_ENTRE_GRUPOS",
+                                "status_analise": "MANTIDO_SEPARADO",
+                                "origem_status": "MAPA_MANUAL_DESCRICOES",
+                                "dt_ultima_acao": datetime.now(UTC).isoformat(),
+                            }
+                        )
 
     if status_rows:
         df_status = pl.DataFrame(status_rows).with_columns(
