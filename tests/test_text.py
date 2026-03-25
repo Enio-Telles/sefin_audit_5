@@ -8,6 +8,17 @@ def test_remove_accents_normal():
     assert remove_accents("Coração") == "Coracao"
     assert remove_accents("Texto normal") == "Texto normal"
     assert remove_accents(None) is None
+    assert remove_accents("") == ""
+
+def test_remove_accents_varied_accents():
+    # Accented lower case
+    assert remove_accents("áàãâäçñ") == "aaaaacn"
+    # Accented upper case
+    assert remove_accents("ÁÀÃÂÄÇÑ") == "AAAAACN"
+    # Mixed words
+    assert remove_accents("Alemão, Francês, Espanhol") == "Alemao, Frances, Espanhol"
+    assert remove_accents("éèêëíìîïóòôöúùûü") == "eeeeiiiioooouuuu"
+    assert remove_accents("ÉÈÊËÍÌÎÏÓÒÔÖÚÙÛÜ") == "EEEEIIIIOOOOUUUU"
 
 def test_remove_accents_exception_fallback():
     # Mock unicodedata.normalize to raise an Exception
