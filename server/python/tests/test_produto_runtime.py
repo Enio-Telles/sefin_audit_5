@@ -14,7 +14,8 @@ SERVER_PYTHON_DIR = Path(__file__).resolve().parents[1]
 if str(SERVER_PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_PYTHON_DIR))
 
-from core.produto_runtime import (  # noqa: E402
+from core.produto_runtime import (
+    _join_unique,  # noqa: E402
     _DETAIL_COLUMNS,
     _aplicar_desagregacao_codigos,
     _aplicar_mapas_manuais,
@@ -399,6 +400,30 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
 
 
 class TestProdutoRuntimeUtils(unittest.TestCase):
+    def test_join_unique(self):
+        # Base case with empty list
+        self.assertEqual(_join_unique([]), "")
+
+        # Case with normal strings, should return alphabetically sorted, joined with default ', '
+        self.assertEqual(_join_unique(["B", "A", "C"]), "A, B, C")
+
+        # Case with custom separator
+        self.assertEqual(_join_unique(["Z", "X", "Y"], sep="|"), "X|Y|Z")
+
+        # Case with duplicate strings, should be deduplicated
+        self.assertEqual(_join_unique(["A", "B", "A", "B"]), "A, B")
+
+        # Case with mixed case, whitespace padding, should be cleaned before sorting/deduplicating
+        # based on _clean_value's behavior (strips and converts to string)
+        # Note: _clean_value in the codebase (viewed in trace) doesn't upper case, it just strips string
+        self.assertEqual(_join_unique(["  bar  ", "foo", "foo", " bar "]), "bar, foo")
+
+        # Falsy/None values should be ignored by _join_unique since `if _clean_value(value)`
+        self.assertEqual(_join_unique(["A", None, "", "B"]), "A, B")
+
+        # Numeric values should be stringified
+        self.assertEqual(_join_unique([3, 1, 2]), "1, 2, 3")
+
     def test_clean_value(self):
         # Empty and None values should return empty strings
         self.assertEqual(_clean_value(None), "")
