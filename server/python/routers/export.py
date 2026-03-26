@@ -47,6 +47,15 @@ async def export_to_excel(request: ExcelExportRequest):
 async def export_excel_download(file_path: str = Query(...)):
     """Exporta um Parquet para Excel e retorna como download."""
     source = Path(file_path)
+    try:
+        source = source.resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Caminho inválido")
+
+    from routers.filesystem import _is_path_allowed
+    if not _is_path_allowed(source):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
+
     if not source.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
