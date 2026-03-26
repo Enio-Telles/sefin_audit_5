@@ -419,9 +419,9 @@ def _build_component_summaries(
         relation_summary["cest"],
         relation_summary["gtin"],
     )
-    conflict_count = sum(
-        1 for value in relation_summary.values() if value == NULLABLE_CONFLICT
-    )
+    # ⚡ Bolt: Eliminate generator overhead for counting occurrences
+    conflict_count = list(relation_summary.values()).count(NULLABLE_CONFLICT)
+
     if rule_id == RULE_R1:
         score_final_regra = min(
             0.99,
