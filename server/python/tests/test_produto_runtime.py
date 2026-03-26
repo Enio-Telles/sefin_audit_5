@@ -22,6 +22,7 @@ from core.produto_runtime import (  # noqa: E402
     _build_produtos_agregados,
     _build_produtos_indexados,
     _build_variacoes_produtos,
+    _clean_value,
     _classificar_par,
     construir_tabela_pares_descricoes_faiss,
     construir_tabela_pares_descricoes_light,
@@ -395,6 +396,32 @@ class ProdutoRuntimeBuildersTests(unittest.TestCase):
         self.assertEqual(row["metodo_similaridade"], "FAISS_VECTOR")
         self.assertEqual(row["origem_par_hibrido"], "faiss_cosine")
         self.assertGreaterEqual(float(row["score_semantico"]), 0.90)
+
+
+class TestProdutoRuntimeUtils(unittest.TestCase):
+    def test_clean_value(self):
+        # Empty and None values should return empty strings
+        self.assertEqual(_clean_value(None), "")
+        self.assertEqual(_clean_value(""), "")
+        self.assertEqual(_clean_value("   "), "")
+
+        # Falsy types evaluating to False/0 should return empty string since `(False or "")` gives `""`
+        self.assertEqual(_clean_value(False), "")
+        self.assertEqual(_clean_value(0), "")
+        self.assertEqual(_clean_value(0.0), "")
+
+        # Valid strings should be stripped
+        self.assertEqual(_clean_value("  foo  "), "foo")
+        self.assertEqual(_clean_value("bar"), "bar")
+        self.assertEqual(_clean_value(" a b c "), "a b c")
+
+        # Truthy non-string types should be converted to string
+        self.assertEqual(_clean_value(True), "True")
+        self.assertEqual(_clean_value(123), "123")
+        self.assertEqual(_clean_value(3.14), "3.14")
+
+        import math
+        self.assertEqual(_clean_value(math.nan), "")
 
 
 if __name__ == "__main__":

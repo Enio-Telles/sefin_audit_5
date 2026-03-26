@@ -90,6 +90,8 @@ def _canon_text(value: Any, vazio: str = "(VAZIO)") -> str:
 
 
 def _clean_value(value: Any) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
     return str(value or "").strip()
 
 
