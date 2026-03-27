@@ -1,3 +1,3 @@
-## 2024-05-18 - Accessibility for icon-only buttons
-**Learning:** Found multiple instances where `Button` component with `size="icon"` lacked `aria-label` and `title` attributes. Without them, screen readers simply read "button" instead of its function (e.g., "Voltar" or "Enviar mensagem"). This makes the app highly inaccessible.
-**Action:** Always ensure that icon-only buttons have both an `aria-label` (for screen readers) and a `title` (for visual users who need tooltips).
+## 2024-03-27 - LoteAuditoria.tsx Select All/None Toggle
+**Learning:** In bulk action interfaces, providing a single "Select All" button without a corresponding "Deselect All" state or button forces users to manually uncheck multiple items if they change their minds, leading to friction. Toggle behavior matches mental models better.
+**Action:** When implementing "Select All" functionality for a list of checkboxes, always conditionally swap the label/action to "Deselect All" (Desmarcar Todas) when the selection state reflects that all items are already checked, ensuring two-way bulk operations.
