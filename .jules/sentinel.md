@@ -1,0 +1,4 @@
+## 2024-05-30 - Path Traversal & TOCTOU in Export APIs
+**Vulnerability:** The endpoints `/api/python/export/excel` and `/api/python/export/excel-download` in `server/python/routers/export.py` allowed arbitrary file reading and writing by accepting unvalidated `file_path` and `output_dir` parameters directly into `Path()` operations.
+**Learning:** File paths supplied via API parameters must always be strictly validated against a permitted whitelist of directories before being accessed, even for purely internal or export-related APIs, to prevent reading sensitive files like `/etc/passwd` or overwriting critical system files.
+**Prevention:** Always use the centralized `_is_path_allowed` validator from `routers.filesystem` combined with `.resolve()` to check bounds, and ensure paths are securely resolved and validated to prevent Time-of-Check to Time-of-Use (TOCTOU) vulnerabilities.

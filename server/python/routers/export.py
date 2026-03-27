@@ -8,6 +8,7 @@ from io import BytesIO
 import polars as pl
 from core.models import ExcelExportRequest
 from core.utils import _write_excel_with_format
+from routers.filesystem import _is_path_allowed
 
 logger = logging.getLogger("sefin_audit_python")
 router = APIRouter(prefix="/api/python/export", tags=["export"])
@@ -20,11 +21,27 @@ if str(_PROJETO_DIR) not in sys.path:
 @router.post("/excel")
 async def export_to_excel(request: ExcelExportRequest):
     """Exporta arquivos Parquet para Excel com formatação padrão."""
-    output_path = Path(request.output_dir)
+    try:
+        output_path = Path(request.output_dir).resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Diretório de saída inválido")
+
+    if not _is_path_allowed(output_path):
+        raise HTTPException(status_code=403, detail="Acesso ao diretório de saída não permitido")
+
     output_path.mkdir(parents=True, exist_ok=True)
     results = []
     for source in request.source_files:
-        source_path = Path(source)
+        try:
+            source_path = Path(source).resolve()
+        except Exception:
+            results.append({"file": source, "status": "error", "message": "Caminho inválido"})
+            continue
+
+        if not _is_path_allowed(source_path):
+            results.append({"file": source, "status": "error", "message": "Acesso ao caminho não permitido"})
+            continue
+
         if not source_path.exists():
             results.append({"file": source, "status": "error", "message": "Arquivo não encontrado"})
             continue
@@ -46,7 +63,14 @@ async def export_to_excel(request: ExcelExportRequest):
 @router.get("/excel-download")
 async def export_excel_download(file_path: str = Query(...)):
     """Exporta um Parquet para Excel e retorna como download."""
-    source = Path(file_path)
+    try:
+        source = Path(file_path).resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Caminho inválido")
+
+    if not _is_path_allowed(source):
+        raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
+
     if not source.exists():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     try:
