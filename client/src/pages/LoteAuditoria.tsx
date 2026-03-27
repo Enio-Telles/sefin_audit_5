@@ -275,8 +275,21 @@ export default function LoteAuditoria() {
                                 <span className="text-sm font-medium text-slate-500">
                                     {selectedQueries.length} consultas selecionadas
                                 </span>
-                                <Button onClick={() => setSelectedQueries(queriesData?.consultas?.map(q => q.id) || [])} variant="outline" size="sm">
-                                    Selecionar Tudo
+                                <Button
+                                    onClick={() => {
+                                        const allIds = queriesData?.consultas?.map(q => q.id) || [];
+                                        if (allIds.length > 0 && selectedQueries.length === allIds.length) {
+                                            setSelectedQueries([]);
+                                        } else {
+                                            setSelectedQueries(allIds);
+                                        }
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                >
+                                    {queriesData?.consultas && queriesData.consultas.length > 0 && selectedQueries.length === queriesData.consultas.length
+                                        ? "Desmarcar Todas"
+                                        : "Selecionar Todas"}
                                 </Button>
                             </div>
                         </CardFooter>
