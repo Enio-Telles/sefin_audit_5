@@ -118,7 +118,8 @@ def is_conflict_metric(state: str) -> bool:
 
 
 def filled_evidence_count_from_relations(*states: str) -> int:
-    return sum(1 for state in states if state == NULLABLE_EQUAL_FILLED)
+    # ⚡ Bolt Optimization: Replace slow generator expression with fast native tuple count.
+    return states.count(NULLABLE_EQUAL_FILLED)
 
 
 def description_similarity(left: Any, right: Any) -> float:
@@ -207,16 +208,18 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
     gtin_equal = (
         gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
     )
-    fiscal_conflict = sum(
-        1
-        for a, b in [
-            (left.get("ncm"), right.get("ncm")),
-            (left.get("cest"), right.get("cest")),
-            (left.get("gtin"), right.get("gtin")),
-        ]
-        if str(a or "").strip()
-        and str(b or "").strip()
-        and str(a).strip() != str(b).strip()
+    # ⚡ Bolt Optimization: Replacing slow generator expression with fast direct boolean summation.
+    ncm_l = str(left.get("ncm") or "").strip()
+    ncm_r = str(right.get("ncm") or "").strip()
+    cest_l = str(left.get("cest") or "").strip()
+    cest_r = str(right.get("cest") or "").strip()
+    gtin_l = str(left.get("gtin") or "").strip()
+    gtin_r = str(right.get("gtin") or "").strip()
+
+    fiscal_conflict = (
+        bool(ncm_l and ncm_r and ncm_l != ncm_r)
+        + bool(cest_l and cest_r and cest_l != cest_r)
+        + bool(gtin_l and gtin_r and gtin_l != gtin_r)
     )
 
     recommendation = "REVISAR"
