@@ -118,7 +118,7 @@ def is_conflict_metric(state: str) -> bool:
 
 
 def filled_evidence_count_from_relations(*states: str) -> int:
-    return sum(1 for state in states if state == NULLABLE_EQUAL_FILLED)
+    return states.count(NULLABLE_EQUAL_FILLED)
 
 
 def description_similarity(left: Any, right: Any) -> float:
@@ -191,6 +191,12 @@ def choose_standard_code(rows: list[dict[str, Any]]) -> str:
     return sorted(candidates.items(), key=sort_key)[0][0]
 
 
+def _is_fiscal_conflict(a: Any, b: Any) -> bool:
+    val_a = str(a or "").strip()
+    val_b = str(b or "").strip()
+    return bool(val_a) and bool(val_b) and val_a != val_b
+
+
 def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     desc_score = description_similarity(
         left.get("descricao_normalizada"), right.get("descricao_normalizada")
@@ -207,16 +213,10 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
     gtin_equal = (
         gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
     )
-    fiscal_conflict = sum(
-        1
-        for a, b in [
-            (left.get("ncm"), right.get("ncm")),
-            (left.get("cest"), right.get("cest")),
-            (left.get("gtin"), right.get("gtin")),
-        ]
-        if str(a or "").strip()
-        and str(b or "").strip()
-        and str(a).strip() != str(b).strip()
+    fiscal_conflict = (
+        _is_fiscal_conflict(left.get("ncm"), right.get("ncm"))
+        + _is_fiscal_conflict(left.get("cest"), right.get("cest"))
+        + _is_fiscal_conflict(left.get("gtin"), right.get("gtin"))
     )
 
     recommendation = "REVISAR"
