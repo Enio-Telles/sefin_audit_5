@@ -9,3 +9,7 @@
 ## 2024-05-19 - Fast Sparse Matrix Thresholding in Polars/Scipy
 **Learning:** Extracting coordinate values using `zip(*matrix.nonzero())` and row-wise indexing into a SciPy `csr_matrix` is exceptionally slow for large matrices since it incurs O(N) lookup costs per matched coordinate and object overhead for creating tuples.
 **Action:** When filtering a sparse matrix by value, convert it to a `coo_matrix` to directly access the 1D `.row`, `.col`, and `.data` numpy arrays. Create boolean masks (`np.where(mask)`) directly on these arrays for filtering. This is orders of magnitude faster (e.g., 280s -> 3.5s).
+
+## 2024-04-01 - Optimize metric counting to avoid generator overhead
+**Learning:** Using `sum(1 for x in ... if ...)` for simple exact matching or boolean conditions adds noticeable overhead due to generator object creation.
+**Action:** Use native implementations like `tuple.count(value)` or `list.count(value)` for exact matches, or explicit boolean summation (e.g., `bool(a) + bool(b) + bool(c)`) instead of creating a list of tuples to evaluate conditions inside a generator.
