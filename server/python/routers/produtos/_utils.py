@@ -90,7 +90,9 @@ def _normalize_page_size(value: Any, default: int = 50, max_size: int = 200) -> 
     return max(1, min(parsed, max_size))
 
 
-def _paginate_frame(df: pl.DataFrame, page: int, page_size: int) -> tuple[pl.DataFrame, int, int]:
+def _paginate_frame(
+    df: pl.DataFrame, page: int, page_size: int
+) -> tuple[pl.DataFrame, int, int]:
     total = int(df.height)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = min(page, total_pages)
@@ -100,6 +102,7 @@ def _paginate_frame(df: pl.DataFrame, page: int, page_size: int) -> tuple[pl.Dat
 
 def _load_cnpj_dirs(cnpj_limpo: str) -> tuple[Path, Path, Path]:
     from core.config_loader import get_config_var
+
     obter_diretorios_cnpj = get_config_var("obter_diretorios_cnpj")
     return obter_diretorios_cnpj(cnpj_limpo)
 
@@ -110,9 +113,30 @@ def _canon_text(value: Any, vazio: str = "(VAZIO)") -> str:
     return text if text else vazio
 
 
+_STOP_WORDS = {
+    "DE",
+    "DA",
+    "DO",
+    "DAS",
+    "DOS",
+    "E",
+    "COM",
+    "SEM",
+    "PARA",
+    "UN",
+    "PCT",
+    "CX",
+    "KG",
+    "LT",
+    "ML",
+    "GR",
+    "PC",
+    "LATA",
+    "LITRO",
+    "LITROS",
+    "GARRAFA",
+}
 
-
-_STOP_WORDS = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "SEM", "PARA", "UN", "PCT", "CX", "KG", "LT", "ML", "GR", "PC", "LATA", "LITRO", "LITROS", "GARRAFA"}
 
 @lru_cache(maxsize=10000)
 def _normalize_similarity_text(value: str) -> str:
@@ -134,13 +158,16 @@ def _normalize_similarity_text(value: str) -> str:
         .replace("Ç", "C")
     )
 
+
 @lru_cache(maxsize=10000)
 def _normalize_similarity_tokens(value: str) -> tuple[str, ...]:
     clean_text = re.sub(r"[^A-Z0-9 ]+", " ", _normalize_similarity_text(value))
     return tuple(
-        token for token in clean_text.split()
+        token
+        for token in clean_text.split()
         if len(token) > 1 and token not in _STOP_WORDS
     )
+
 
 @lru_cache(maxsize=10000)
 def _normalize_similarity_tokens_set(value: str) -> frozenset[str]:
@@ -155,6 +182,7 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     union = len(a | b)
     return 0.0 if union == 0 else intersection / union
 
+
 @lru_cache(maxsize=10000)
 def _sequence_match(a: str, b: str) -> float:
     str_a = " ".join(_normalize_similarity_tokens(a))
@@ -165,15 +193,20 @@ def _sequence_match(a: str, b: str) -> float:
         return 0.0
     return difflib.SequenceMatcher(None, str_a, str_b).ratio()
 
+
 @lru_cache(maxsize=10000)
 def _similarity_score(a: str, b: str) -> float:
-    if not a and not b: return 1.0
-    if not a or not b: return 0.0
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
 
     a_str = str(a)
     b_str = str(b)
 
-    token_score = _jaccard(_normalize_similarity_tokens_set(a_str), _normalize_similarity_tokens_set(b_str))
+    token_score = _jaccard(
+        _normalize_similarity_tokens_set(a_str), _normalize_similarity_tokens_set(b_str)
+    )
     sequence_score = _sequence_match(a_str, b_str)
 
     return 0.4 * token_score + 0.6 * sequence_score
@@ -183,7 +216,9 @@ def _primary_value(value: Any) -> str:
     return str((str(value or "").split(",")[0])).strip()
 
 
-def _resumir_motivos_ignorados(motivos_ignorados: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _resumir_motivos_ignorados(
+    motivos_ignorados: list[dict[str, str]],
+) -> list[dict[str, Any]]:
     contagem: dict[str, int] = {}
     amostras: dict[str, list[str]] = {}
     for item in motivos_ignorados:
@@ -195,8 +230,14 @@ def _resumir_motivos_ignorados(motivos_ignorados: list[dict[str, str]]) -> list[
             if codigo not in amostras[motivo] and len(amostras[motivo]) < 5:
                 amostras[motivo].append(codigo)
     return [
-        {"motivo": motivo, "qtd_codigos": qtd, "codigos_amostra": amostras.get(motivo, [])}
-        for motivo, qtd in sorted(contagem.items(), key=lambda pair: (-pair[1], pair[0]))
+        {
+            "motivo": motivo,
+            "qtd_codigos": qtd,
+            "codigos_amostra": amostras.get(motivo, []),
+        }
+        for motivo, qtd in sorted(
+            contagem.items(), key=lambda pair: (-pair[1], pair[0])
+        )
     ]
 
 
@@ -237,7 +278,10 @@ def _normalize_manual_decisions(df: pl.DataFrame, default_acao: str) -> pl.DataF
             pl.col("cest_novo").cast(pl.Utf8).fill_null(""),
             pl.col("gtin_novo").cast(pl.Utf8).fill_null(""),
             pl.col("tipo_item_novo").cast(pl.Utf8).fill_null(""),
-            pl.when(pl.col("acao_manual").is_null() | (pl.col("acao_manual").cast(pl.Utf8).str.strip_chars() == ""))
+            pl.when(
+                pl.col("acao_manual").is_null()
+                | (pl.col("acao_manual").cast(pl.Utf8).str.strip_chars() == "")
+            )
             .then(pl.lit(default_acao))
             .otherwise(pl.col("acao_manual").cast(pl.Utf8))
             .alias("acao_manual"),
@@ -277,20 +321,26 @@ def _normalize_manual_decisions(df: pl.DataFrame, default_acao: str) -> pl.DataF
     return normalized.unique(subset=["hash_manual_key"], keep="last")
 
 
-def _merge_manual_map(mapa_path: Path, df_novo: pl.DataFrame, default_acao: str) -> None:
+def _merge_manual_map(
+    mapa_path: Path, df_novo: pl.DataFrame, default_acao: str
+) -> None:
     df_novo_norm = _normalize_manual_decisions(df_novo, default_acao=default_acao)
     if mapa_path.exists():
         df_existente = pl.read_parquet(str(mapa_path))
-        df_existente_norm = _normalize_manual_decisions(df_existente, default_acao=default_acao)
-        df_merge = pl.concat([df_existente_norm, df_novo_norm], how="diagonal_relaxed").unique(
-            subset=["hash_manual_key"], keep="last"
+        df_existente_norm = _normalize_manual_decisions(
+            df_existente, default_acao=default_acao
         )
+        df_merge = pl.concat(
+            [df_existente_norm, df_novo_norm], how="diagonal_relaxed"
+        ).unique(subset=["hash_manual_key"], keep="last")
         df_merge.write_parquet(mapa_path)
     else:
         df_novo_norm.write_parquet(mapa_path)
 
 
-def _snapshot_mapa_descricoes_history(history_path: Path, mapa_df: pl.DataFrame, snapshot_label: str) -> int:
+def _snapshot_mapa_descricoes_history(
+    history_path: Path, mapa_df: pl.DataFrame, snapshot_label: str
+) -> int:
     snapshot_seq = 1
     if history_path.exists():
         try:
@@ -302,13 +352,17 @@ def _snapshot_mapa_descricoes_history(history_path: Path, mapa_df: pl.DataFrame,
 
     snapshot_ts = datetime.now(UTC).isoformat()
     if mapa_df.is_empty():
-        df_snapshot = pl.DataFrame(schema={c: pl.Utf8 for c in _DESCRIPTION_HISTORY_COLUMNS}).with_columns(
-            [
-                pl.lit(snapshot_seq).cast(pl.Int64).alias("snapshot_seq"),
-                pl.lit(snapshot_ts).alias("snapshot_ts_utc"),
-                pl.lit(snapshot_label).alias("snapshot_label"),
-            ]
-        ).select(_DESCRIPTION_HISTORY_COLUMNS)
+        df_snapshot = (
+            pl.DataFrame(schema={c: pl.Utf8 for c in _DESCRIPTION_HISTORY_COLUMNS})
+            .with_columns(
+                [
+                    pl.lit(snapshot_seq).cast(pl.Int64).alias("snapshot_seq"),
+                    pl.lit(snapshot_ts).alias("snapshot_ts_utc"),
+                    pl.lit(snapshot_label).alias("snapshot_label"),
+                ]
+            )
+            .select(_DESCRIPTION_HISTORY_COLUMNS)
+        )
     else:
         df_snapshot = mapa_df.with_columns(
             [
@@ -320,7 +374,9 @@ def _snapshot_mapa_descricoes_history(history_path: Path, mapa_df: pl.DataFrame,
 
     if history_path.exists():
         df_history = pl.read_parquet(str(history_path))
-        pl.concat([df_history, df_snapshot], how="diagonal_relaxed").write_parquet(str(history_path))
+        pl.concat([df_history, df_snapshot], how="diagonal_relaxed").write_parquet(
+            str(history_path)
+        )
     else:
         df_snapshot.write_parquet(str(history_path))
 
@@ -361,17 +417,31 @@ def _normalizar_mapa_verificados(df: pl.DataFrame) -> pl.DataFrame:
                 "ref_id_aux": _normalize_status_text(row.get("ref_id_aux")),
                 "descricao_ref": str(row.get("descricao_ref") or "").strip(),
                 "contexto_tela": _normalize_status_text(row.get("contexto_tela")),
-                "status_analise": _normalize_status_text(row.get("status_analise"), "VERIFICADO_SEM_ACAO"),
-                "dt_evento": str(row.get("dt_evento") or datetime.now(UTC).isoformat()).strip(),
+                "status_analise": _normalize_status_text(
+                    row.get("status_analise"), "VERIFICADO_SEM_ACAO"
+                ),
+                "dt_evento": str(
+                    row.get("dt_evento") or datetime.now(UTC).isoformat()
+                ).strip(),
             }
         )
-    return pl.DataFrame(rows).select(_VERIFICADOS_COLUMNS).unique(subset=["tipo_ref", "ref_id", "ref_id_aux"], keep="last")
+    return (
+        pl.DataFrame(rows)
+        .select(_VERIFICADOS_COLUMNS)
+        .unique(subset=["tipo_ref", "ref_id", "ref_id_aux"], keep="last")
+    )
 
 
 def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
-    mapa_verificados_path = dir_analises / f"mapa_verificados_produtos_{cnpj_limpo}.parquet"
-    mapa_agregados_path = dir_analises / f"mapa_auditoria_agregados_{cnpj_limpo}.parquet"
-    mapa_desagregados_path = dir_analises / f"mapa_auditoria_desagregados_{cnpj_limpo}.parquet"
+    mapa_verificados_path = (
+        dir_analises / f"mapa_verificados_produtos_{cnpj_limpo}.parquet"
+    )
+    mapa_agregados_path = (
+        dir_analises / f"mapa_auditoria_agregados_{cnpj_limpo}.parquet"
+    )
+    mapa_desagregados_path = (
+        dir_analises / f"mapa_auditoria_desagregados_{cnpj_limpo}.parquet"
+    )
     mapa_descricoes_path = dir_analises / f"mapa_manual_descricoes_{cnpj_limpo}.parquet"
     agregados_produtos_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
     status_path = dir_analises / f"status_analise_produtos_{cnpj_limpo}.parquet"
@@ -386,17 +456,24 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
                 descricao = _normalize_status_text(row.get("descricao"))
                 chave = _normalize_status_text(row.get("chave_produto"))
                 if descricao and chave:
-                    descricao_to_grupo[descricao] = (chave, str(row.get("descricao") or "").strip())
+                    descricao_to_grupo[descricao] = (
+                        chave,
+                        str(row.get("descricao") or "").strip(),
+                    )
 
     if mapa_verificados_path.exists():
-        df_verificados = _normalizar_mapa_verificados(pl.read_parquet(str(mapa_verificados_path)))
+        df_verificados = _normalizar_mapa_verificados(
+            pl.read_parquet(str(mapa_verificados_path))
+        )
         status_rows.extend(
             df_verificados.with_columns(
                 [
                     pl.lit("MAPA_VERIFICADOS").alias("origem_status"),
                     pl.col("dt_evento").alias("dt_ultima_acao"),
                 ]
-            ).select(_STATUS_ANALISE_COLUMNS).to_dicts()
+            )
+            .select(_STATUS_ANALISE_COLUMNS)
+            .to_dicts()
         )
 
     if mapa_agregados_path.exists():
@@ -429,7 +506,9 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
                         "tipo_ref": "POR_CODIGO",
                         "ref_id": codigo_original,
                         "ref_id_aux": "",
-                        "descricao_ref": str(row.get("descricao_original") or "").strip(),
+                        "descricao_ref": str(
+                            row.get("descricao_original") or ""
+                        ).strip(),
                         "contexto_tela": "REVISAO_RESIDUAL",
                         "status_analise": "SEPARADO",
                         "origem_status": "MAPA_AUDITORIA_DESAGREGADOS",
@@ -439,7 +518,12 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
 
     if mapa_descricoes_path.exists():
         df_descricoes = pl.read_parquet(str(mapa_descricoes_path))
-        req_cols = {"tipo_regra", "descricao_origem", "descricao_destino", "descricao_par"}
+        req_cols = {
+            "tipo_regra",
+            "descricao_origem",
+            "descricao_destino",
+            "descricao_par",
+        }
         if req_cols.issubset(df_descricoes.columns):
             # ⚡ Bolt Optimization: Replacing slow `df.to_dicts()` iteration with fast `zip()` over column Series lists.
             for t_regra, d_orig, d_dest, d_par in zip(
@@ -470,7 +554,10 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
                             }
                         )
                 elif tipo_regra == "MANTER_SEPARADO":
-                    for descricao, descricao_aux in [(descricao_origem, descricao_par), (descricao_par, descricao_origem)]:
+                    for descricao, descricao_aux in [
+                        (descricao_origem, descricao_par),
+                        (descricao_par, descricao_origem),
+                    ]:
                         grupo = descricao_to_grupo.get(descricao)
                         grupo_aux = descricao_to_grupo.get(descricao_aux)
                         if not grupo:
@@ -489,22 +576,27 @@ def _gravar_status_analise(dir_analises: Path, cnpj_limpo: str) -> Path:
                         )
 
     if status_rows:
-        df_status = pl.DataFrame(status_rows).with_columns(
-            pl.when(pl.col("status_analise") == "MANTIDO_SEPARADO")
-            .then(pl.lit(50))
-            .when(pl.col("status_analise") == "UNIDO_ENTRE_GRUPOS")
-            .then(pl.lit(40))
-            .when(pl.col("status_analise") == "CONSOLIDADO")
-            .then(pl.lit(30))
-            .when(pl.col("status_analise") == "SEPARADO")
-            .then(pl.lit(20))
-            .when(pl.col("status_analise") == "VERIFICADO_SEM_ACAO")
-            .then(pl.lit(10))
-            .otherwise(pl.lit(0))
-            .alias("__prioridade")
-        ).sort(["__prioridade", "dt_ultima_acao"], descending=[True, True]).unique(
-            subset=["tipo_ref", "ref_id", "ref_id_aux"], keep="first"
-        ).drop("__prioridade").select(_STATUS_ANALISE_COLUMNS)
+        df_status = (
+            pl.DataFrame(status_rows)
+            .with_columns(
+                pl.when(pl.col("status_analise") == "MANTIDO_SEPARADO")
+                .then(pl.lit(50))
+                .when(pl.col("status_analise") == "UNIDO_ENTRE_GRUPOS")
+                .then(pl.lit(40))
+                .when(pl.col("status_analise") == "CONSOLIDADO")
+                .then(pl.lit(30))
+                .when(pl.col("status_analise") == "SEPARADO")
+                .then(pl.lit(20))
+                .when(pl.col("status_analise") == "VERIFICADO_SEM_ACAO")
+                .then(pl.lit(10))
+                .otherwise(pl.lit(0))
+                .alias("__prioridade")
+            )
+            .sort(["__prioridade", "dt_ultima_acao"], descending=[True, True])
+            .unique(subset=["tipo_ref", "ref_id", "ref_id_aux"], keep="first")
+            .drop("__prioridade")
+            .select(_STATUS_ANALISE_COLUMNS)
+        )
     else:
         df_status = pl.DataFrame(schema={c: pl.Utf8 for c in _STATUS_ANALISE_COLUMNS})
 
@@ -518,8 +610,12 @@ def _reprocessar_produtos(dir_analises: Path, cnpj_limpo: str) -> pl.DataFrame:
     return df_result
 
 
-def _resumir_status_analise(dir_analises: Path, cnpj_limpo: str, df_status: pl.DataFrame) -> dict[str, int]:
-    codigos_multidescricao_path = dir_analises / f"codigos_multidescricao_{cnpj_limpo}.parquet"
+def _resumir_status_analise(
+    dir_analises: Path, cnpj_limpo: str, df_status: pl.DataFrame
+) -> dict[str, int]:
+    codigos_multidescricao_path = (
+        dir_analises / f"codigos_multidescricao_{cnpj_limpo}.parquet"
+    )
     produtos_agregados_path = dir_analises / f"produtos_agregados_{cnpj_limpo}.parquet"
 
     def _count_distinct(tipo_ref: str, statuses: list[str]) -> int:
@@ -532,23 +628,30 @@ def _resumir_status_analise(dir_analises: Path, cnpj_limpo: str, df_status: pl.D
             return 0
         return int(subset.select(pl.col("ref_id").n_unique()).item())
 
-    verificados = _count_distinct("POR_CODIGO", ["VERIFICADO_SEM_ACAO"]) + _count_distinct(
-        "POR_GRUPO", ["VERIFICADO_SEM_ACAO"]
-    )
+    verificados = _count_distinct(
+        "POR_CODIGO", ["VERIFICADO_SEM_ACAO"]
+    ) + _count_distinct("POR_GRUPO", ["VERIFICADO_SEM_ACAO"])
     consolidados = _count_distinct("POR_GRUPO", ["CONSOLIDADO"])
     separados = _count_distinct("POR_CODIGO", ["SEPARADO"])
-    decididos_entre_grupos = _count_distinct("POR_GRUPO", ["UNIDO_ENTRE_GRUPOS", "MANTIDO_SEPARADO"])
+    decididos_entre_grupos = _count_distinct(
+        "POR_GRUPO", ["UNIDO_ENTRE_GRUPOS", "MANTIDO_SEPARADO"]
+    )
 
     codigos_analisados: set[str] = set()
     grupos_analisados: set[str] = set()
     if not df_status.is_empty():
-        for row in df_status.select(["tipo_ref", "ref_id", "status_analise"]).to_dicts():
+        for row in df_status.select(
+            ["tipo_ref", "ref_id", "status_analise"]
+        ).to_dicts():
             tipo_ref = _normalize_status_text(row.get("tipo_ref"))
             ref_id = _normalize_status_text(row.get("ref_id"))
             status = _normalize_status_text(row.get("status_analise"))
             if not ref_id:
                 continue
-            if tipo_ref == "POR_CODIGO" and status in {"SEPARADO", "VERIFICADO_SEM_ACAO"}:
+            if tipo_ref == "POR_CODIGO" and status in {
+                "SEPARADO",
+                "VERIFICADO_SEM_ACAO",
+            }:
                 codigos_analisados.add(ref_id)
             if tipo_ref == "POR_GRUPO" and status in {
                 "CONSOLIDADO",
@@ -562,22 +665,22 @@ def _resumir_status_analise(dir_analises: Path, cnpj_limpo: str, df_status: pl.D
     if codigos_multidescricao_path.exists():
         df_codigos = pl.read_parquet(str(codigos_multidescricao_path))
         if "codigo" in df_codigos.columns:
-            pendentes_codigos = sum(
-                1
+            pendentes_codigos = [
+                _normalize_status_text(value) not in codigos_analisados
                 for value in df_codigos.get_column("codigo").to_list()
-                if _normalize_status_text(value) not in codigos_analisados
-            )
+            ].count(True)
 
     pendentes_grupos = 0
     if produtos_agregados_path.exists():
         df_grupos = pl.read_parquet(str(produtos_agregados_path))
         if {"chave_produto", "requer_revisao_manual"}.issubset(df_grupos.columns):
-            df_pendentes_grupo = df_grupos.filter(pl.col("requer_revisao_manual") == True)
-            pendentes_grupos = sum(
-                1
-                for value in df_pendentes_grupo.get_column("chave_produto").to_list()
-                if _normalize_status_text(value) not in grupos_analisados
+            df_pendentes_grupo = df_grupos.filter(
+                pl.col("requer_revisao_manual") == True
             )
+            pendentes_grupos = [
+                _normalize_status_text(value) not in grupos_analisados
+                for value in df_pendentes_grupo.get_column("chave_produto").to_list()
+            ].count(True)
 
     return {
         "pendentes": int(pendentes_codigos + pendentes_grupos),
