@@ -118,7 +118,8 @@ def is_conflict_metric(state: str) -> bool:
 
 
 def filled_evidence_count_from_relations(*states: str) -> int:
-    return sum(1 for state in states if state == NULLABLE_EQUAL_FILLED)
+    # ⚡ Bolt: Fast count instead of slow generator expression for tuple elements
+    return states.count(NULLABLE_EQUAL_FILLED)
 
 
 def description_similarity(left: Any, right: Any) -> float:
@@ -207,16 +208,17 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
     gtin_equal = (
         gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
     )
-    fiscal_conflict = sum(
-        1
-        for a, b in [
-            (left.get("ncm"), right.get("ncm")),
-            (left.get("cest"), right.get("cest")),
-            (left.get("gtin"), right.get("gtin")),
-        ]
-        if str(a or "").strip()
-        and str(b or "").strip()
-        and str(a).strip() != str(b).strip()
+
+    def _is_conflict(a: Any, b: Any) -> int:
+        sa = str(a or "").strip()
+        sb = str(b or "").strip()
+        return 1 if sa and sb and sa != sb else 0
+
+    # ⚡ Bolt: Fast boolean addition instead of slow generator and tuple iteration
+    fiscal_conflict = (
+        _is_conflict(left.get("ncm"), right.get("ncm"))
+        + _is_conflict(left.get("cest"), right.get("cest"))
+        + _is_conflict(left.get("gtin"), right.get("gtin"))
     )
 
     recommendation = "REVISAR"
