@@ -1,5 +1,6 @@
 import polars as pl
 from rich import print as rprint
+from src.utilitarios.cache_decorator import cached_transform
 
 
 CAMPOS_CHAVE = ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"]
@@ -35,7 +36,8 @@ MAP_BLOCO_H = {
     "quantidade": "quantidade"
 }
 
-def processar_tabela_itens(cnpj: str, df_c170: pl.DataFrame = None, df_nfe_itens: pl.DataFrame = None, df_bloco_h: pl.DataFrame = None) -> pl.DataFrame:
+@cached_transform(cache_dir="cache/itens")
+def processar_tabela_itens(cnpj: str, df_c170: pl.LazyFrame = None, df_nfe_itens: pl.LazyFrame = None, df_bloco_h: pl.LazyFrame = None) -> pl.LazyFrame:
     """
     Consolida a movimentação linha a linha, agrupando CFOP, CST, Quantidades e Valores.
     """
@@ -56,7 +58,7 @@ def processar_tabela_itens(cnpj: str, df_c170: pl.DataFrame = None, df_nfe_itens
         
     if not fragmentos:
         # Se não houver dados, retorna DF vazio com as colunas corretas
-        return pl.DataFrame({c: [] for c in CAMPOS_CHAVE + ["unidade", "valor_total", "quantidade", "fonte", "chave_item_id"]})
+        return pl.LazyFrame({c: [] for c in CAMPOS_CHAVE + ["unidade", "valor_total", "quantidade", "fonte", "chave_item_id"]})
 
     df_total = pl.concat(fragmentos, how="diagonal_relaxed")
     
@@ -82,7 +84,7 @@ def processar_tabela_itens(cnpj: str, df_c170: pl.DataFrame = None, df_nfe_itens
     
     return df_resultado
 
-def _normalizar_schema(df: pl.DataFrame, mapeamento: dict[str, str]) -> pl.DataFrame:
+def _normalizar_schema(df: pl.LazyFrame, mapeamento: dict[str, str]) -> pl.LazyFrame:
     """Prepara o DF da fonte para o padrão interno."""
     # Renomeia se a coluna existir
     disponiveis = {old: new for old, new in mapeamento.items() if old in df.columns}
@@ -95,7 +97,7 @@ def _normalizar_schema(df: pl.DataFrame, mapeamento: dict[str, str]) -> pl.DataF
             
     return df
 
-def _gerar_chave_item(df: pl.DataFrame) -> pl.DataFrame:
+def _gerar_chave_item(df: pl.LazyFrame) -> pl.LazyFrame:
     """Gera hash para identificação única do item baseado em suas características."""
     exprs_norm = [
         pl.col(c).cast(pl.String).fill_null("").str.strip_chars().str.to_uppercase().alias(f"_key_{c}")

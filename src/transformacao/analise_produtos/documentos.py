@@ -1,7 +1,9 @@
 import polars as pl
 from rich import print as rprint
+from src.utilitarios.cache_decorator import cached_transform
 
-def processar_tabela_documentos(df_notas: pl.DataFrame) -> pl.DataFrame:
+@cached_transform(cache_dir="cache/documentos")
+def processar_tabela_documentos(df_notas: pl.LazyFrame) -> pl.LazyFrame:
     """
     Consolida cabeçalhos de documentos fiscais (NFe, NFCe, C100).
     """

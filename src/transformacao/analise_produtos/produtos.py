@@ -1,7 +1,9 @@
 import polars as pl
 from rich import print as rprint
+from src.utilitarios.cache_decorator import cached_transform
 
-def processar_tabela_produtos(df_itens: pl.DataFrame) -> pl.DataFrame:
+@cached_transform(cache_dir="cache/produtos")
+def processar_tabela_produtos(df_itens: pl.LazyFrame) -> pl.LazyFrame:
     """
     Agrupa itens individuais em produtos baseados na descrição normalizada.
     """

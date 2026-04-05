@@ -3,6 +3,7 @@ import polars as pl
 from pathlib import Path
 from rich import print as rprint
 import sys
+pl.enable_string_cache()
 
 # Adiciona a raiz do projeto (c:/funcoes) ao sys.path para permitir imports absolutos
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,7 @@ def executar_processar(cnpj: str, caminho_dados_raiz: Path) -> bool:
         p = pasta_tabelas / f"{nome}_{cnpj}.parquet"
         if not p.exists(): 
             return None
-        return pl.read_parquet(p)
+        return pl.scan_parquet(p)
 
     df_c100 = _ler_tab("c100")
     df_c170 = _ler_tab("c170")
@@ -59,10 +60,10 @@ def executar_processar(cnpj: str, caminho_dados_raiz: Path) -> bool:
     p_sefin = DIR_REFERENCIAS / "CO_SEFIN" / "sitafe_produto_sefin.parquet"
     p_fatores = DIR_REFERENCIAS / "fatores_conversao_unidades.parquet"
     
-    df_sefin = pl.read_parquet(p_sefin) if p_sefin.exists() else pl.DataFrame()
-    df_fatores = pl.read_parquet(p_fatores) if p_fatores.exists() else pl.DataFrame()
+    df_sefin = pl.scan_parquet(p_sefin) if p_sefin.exists() else pl.LazyFrame()
+    df_fatores = pl.scan_parquet(p_fatores) if p_fatores.exists() else pl.LazyFrame()
     
-    if df_sefin.is_empty():
+    if df_sefin is None or not df_sefin.columns:
         rprint("[yellow]⚠️  Tabela SEFIN não encontrada. Enriquecimento limitado.[/yellow]")
 
     df_itens_enriquecido = enriquecer_itens_com_referencias(df_itens_base, df_sefin, df_fatores)
