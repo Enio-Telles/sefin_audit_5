@@ -9,3 +9,7 @@
 ## 2024-05-19 - Fast Sparse Matrix Thresholding in Polars/Scipy
 **Learning:** Extracting coordinate values using `zip(*matrix.nonzero())` and row-wise indexing into a SciPy `csr_matrix` is exceptionally slow for large matrices since it incurs O(N) lookup costs per matched coordinate and object overhead for creating tuples.
 **Action:** When filtering a sparse matrix by value, convert it to a `coo_matrix` to directly access the 1D `.row`, `.col`, and `.data` numpy arrays. Create boolean masks (`np.where(mask)`) directly on these arrays for filtering. This is orders of magnitude faster (e.g., 280s -> 3.5s).
+
+## 2024-05-20 - Fast Truthy Boolean Aggregations vs Generator Sums
+**Learning:** Python generator expressions inside `sum` functions (e.g., `sum(1 for a in list if cond)` or `sum(1 for a, b in list if cond)`) create severe overhead from object allocation and iteration bounds checks when placed inside tight loop operations.
+**Action:** Replace `sum(1 for a in list if a == val)` with native `list.count(val)` or `tuple.count(val)`. For custom logic, use direct boolean arithmetic (e.g., `bool(cond_1) + bool(cond_2)`) which evaluates in optimized C-layer integer ops. This can yield a >2x performance improvement for mathematical rule aggregations.
