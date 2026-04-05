@@ -1,0 +1,4 @@
+## 2024-04-05 - Path Traversal in Parquet Upload
+**Vulnerability:** The Parquet upload endpoints (`/api/python/parquet/upload`) used `file.filename` directly to construct the destination file path (`dir_path / file.filename`). If `file.filename` is an absolute path like `/etc/passwd`, `pathlib.Path` ignores the left operand and resolves to the absolute path, completely bypassing the directory validation performed on `dir_path`.
+**Learning:** Even if the destination directory (`dir_path`) is validated against an allowlist, appending user-controlled input (`file.filename`) using `pathlib` operator `/` is dangerous without extracting the base name.
+**Prevention:** Always extract the basename (e.g., using `Path(file.filename).name`) before concatenating user-provided filenames with a target directory, even if the target directory itself is validated.
