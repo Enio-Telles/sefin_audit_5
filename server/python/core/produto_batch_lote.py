@@ -18,7 +18,6 @@ from .produto_classification import (
     normalize_description_key,
 )
 
-
 RULE_R1 = "R1_HIGH_CONFIDENCE_FULL_FISCAL"
 RULE_R2 = "R2_NCM_CEST"
 RULE_R3 = "R3_GTIN_NCM"
@@ -419,9 +418,7 @@ def _build_component_summaries(
         relation_summary["cest"],
         relation_summary["gtin"],
     )
-    conflict_count = sum(
-        1 for value in relation_summary.values() if value == NULLABLE_CONFLICT
-    )
+    conflict_count = tuple(relation_summary.values()).count(NULLABLE_CONFLICT)
     if rule_id == RULE_R1:
         score_final_regra = min(
             0.99,

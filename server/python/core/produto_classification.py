@@ -6,7 +6,6 @@ import re
 import unicodedata
 from typing import Any
 
-
 _RE_NON_ALNUM = re.compile(r"[^A-Z0-9 ]+")
 _RE_NON_ALNUM_NO_SPACE = re.compile(r"[^A-Z0-9]+")
 _RE_DIGITS = re.compile(r"[^0-9]")
@@ -118,7 +117,7 @@ def is_conflict_metric(state: str) -> bool:
 
 
 def filled_evidence_count_from_relations(*states: str) -> int:
-    return sum(1 for state in states if state == NULLABLE_EQUAL_FILLED)
+    return states.count(NULLABLE_EQUAL_FILLED)
 
 
 def description_similarity(left: Any, right: Any) -> float:
@@ -207,16 +206,16 @@ def classify_group_pair(left: dict[str, Any], right: dict[str, Any]) -> dict[str
     gtin_equal = (
         gtin_score == 1.0 and bool(left.get("gtin")) and bool(right.get("gtin"))
     )
-    fiscal_conflict = sum(
-        1
-        for a, b in [
-            (left.get("ncm"), right.get("ncm")),
-            (left.get("cest"), right.get("cest")),
-            (left.get("gtin"), right.get("gtin")),
-        ]
-        if str(a or "").strip()
-        and str(b or "").strip()
-        and str(a).strip() != str(b).strip()
+
+    def has_conflict(a: Any, b: Any) -> bool:
+        sa = str(a or "").strip()
+        sb = str(b or "").strip()
+        return bool(sa and sb and sa != sb)
+
+    fiscal_conflict = (
+        int(has_conflict(left.get("ncm"), right.get("ncm")))
+        + int(has_conflict(left.get("cest"), right.get("cest")))
+        + int(has_conflict(left.get("gtin"), right.get("gtin")))
     )
 
     recommendation = "REVISAR"
