@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 type ReadResponse = {
   columns: string[];
@@ -44,6 +45,7 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc"|"desc">("asc");
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
 
   // restore persisted state
@@ -121,6 +123,7 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
 
   const exportExcel = async () => {
     try {
+      setExporting(true);
       const url = `/api/python/export/excel-download?file_path=${encodeURIComponent(filePath)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Falha no download");
@@ -133,6 +136,8 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
       a.remove();
     } catch (e: any) {
       toast.error(e.message || "Erro ao exportar Excel");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -142,9 +147,18 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
         <div className="flex items-center justify-between">
           <CardTitle>{fileName || filePath}</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => load() } disabled={loading}>Recarregar</Button>
-            <Button variant="outline" onClick={clearFilters} disabled={loading}>Limpar</Button>
-            <Button onClick={exportExcel} disabled={loading}>Exportar Excel</Button>
+            <Button variant="outline" onClick={() => load() } disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Recarregar
+            </Button>
+            <Button variant="outline" onClick={clearFilters} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin opacity-0" />}
+              Limpar
+            </Button>
+            <Button onClick={exportExcel} disabled={loading || exporting}>
+              {exporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Exportar Excel
+            </Button>
           </div>
         </div>
         <div className="text-xs text-muted-foreground mt-2">
@@ -168,6 +182,7 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
                   <TableHead key={col}>
                     <Input
                       placeholder="Filtrar..."
+                      aria-label={`Filtrar coluna ${col}`}
                       value={filters[col] || ""}
                       onChange={(e)=>onFilterChange(col, e.target.value)}
                       onKeyDown={(e)=>{ if(e.key==="Enter") applyFilters(); }}
@@ -196,13 +211,14 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
             Página {page} / {totalPages}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" disabled={page<=1 || loading} onClick={()=>{ setPage(p=>Math.max(1,p-1)); load(page-1); }}>Anterior</Button>
-            <Button variant="outline" disabled={page>=totalPages || loading} onClick={()=>{ setPage(p=>Math.min(totalPages,p+1)); load(page+1); }}>Próxima</Button>
+            <Button variant="outline" disabled={page<=1 || loading} onClick={()=>{ setPage(p=>Math.max(1,p-1)); load(page-1); }} aria-label="Página anterior">Anterior</Button>
+            <Button variant="outline" disabled={page>=totalPages || loading} onClick={()=>{ setPage(p=>Math.min(totalPages,p+1)); load(page+1); }} aria-label="Próxima página">Próxima</Button>
           </div>
           <div className="flex items-center gap-2">
-            <span>Tamanho:</span>
+            <span id="pageSizeLabel">Tamanho:</span>
             <Input
               className="w-20"
+              aria-labelledby="pageSizeLabel"
               type="number"
               min={10}
               value={pageSize}
