@@ -1,0 +1,4 @@
+## 2025-02-14 - Fix Path Traversal in Parquet Upload Endpoints
+**Vulnerability:** File upload endpoints (`upload_parquet`) in `server/python/routers/parquet.py` and `server/python/api-Enio.py` blindly trusted the `UploadFile.filename` provided by the user. While the target directory was validated, the filename itself was appended without sanitization (e.g., `dir_path / file.filename`), opening a Path Traversal vulnerability where a malicious filename like `../../../malicious.parquet` could overwrite files outside the intended destination.
+**Learning:** Even when the target destination directory is validated or normalized (e.g. using `_is_allowed(dir_path)`), if the filename being concatenated is user-controlled, the application remains vulnerable.
+**Prevention:** Always extract the basename/filename portion of client-provided file names before concatenation (e.g. `Path(file.filename).name`), and provide a safe fallback if empty.
