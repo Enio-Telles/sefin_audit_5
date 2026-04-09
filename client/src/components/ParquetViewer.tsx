@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { RefreshCw, FilterX, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 type ReadResponse = {
   columns: string[];
@@ -142,9 +143,18 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
         <div className="flex items-center justify-between">
           <CardTitle>{fileName || filePath}</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => load() } disabled={loading}>Recarregar</Button>
-            <Button variant="outline" onClick={clearFilters} disabled={loading}>Limpar</Button>
-            <Button onClick={exportExcel} disabled={loading}>Exportar Excel</Button>
+            <Button variant="outline" onClick={() => load()} disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Recarregar
+            </Button>
+            <Button variant="outline" onClick={clearFilters} disabled={loading}>
+              <FilterX className="w-4 h-4" />
+              Limpar
+            </Button>
+            <Button onClick={exportExcel} disabled={loading}>
+              <Download className="w-4 h-4" />
+              Exportar Excel
+            </Button>
           </div>
         </div>
         <div className="text-xs text-muted-foreground mt-2">
@@ -196,8 +206,14 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
             Página {page} / {totalPages}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" disabled={page<=1 || loading} onClick={()=>{ setPage(p=>Math.max(1,p-1)); load(page-1); }}>Anterior</Button>
-            <Button variant="outline" disabled={page>=totalPages || loading} onClick={()=>{ setPage(p=>Math.min(totalPages,p+1)); load(page+1); }}>Próxima</Button>
+            <Button variant="outline" disabled={page<=1 || loading} onClick={()=>{ setPage(p=>Math.max(1,p-1)); load(page-1); }}>
+              <ChevronLeft className="w-4 h-4" />
+              Anterior
+            </Button>
+            <Button variant="outline" disabled={page>=totalPages || loading} onClick={()=>{ setPage(p=>Math.min(totalPages,p+1)); load(page+1); }}>
+              Próxima
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             <span>Tamanho:</span>
