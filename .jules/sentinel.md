@@ -1,0 +1,4 @@
+## 2024-05-30 - Fix Path Traversal in Excel Export
+**Vulnerability:** Path Traversal (CWE-22) in `server/python/routers/export.py`. The `export_to_excel` and `export_excel_download` endpoints used `request.source_files`, `request.output_dir`, and `file_path` directly to read and write files without validation.
+**Learning:** Even internal toolings or specific download endpoints need strict validation against an allow-list, especially when they take arbitrary file paths from requests. In addition to read paths, output paths must also be validated to prevent arbitrary file writes or directory creation.
+**Prevention:** Always use `.resolve()` and validate both source and destination paths against the centralized whitelist function `_is_path_allowed` before calling `.exists()`, `pl.read_parquet()`, or `.mkdir()`.
