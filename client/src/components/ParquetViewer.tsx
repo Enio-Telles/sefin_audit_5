@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { RefreshCw, X, Download } from "lucide-react";
 
 type ReadResponse = {
   columns: string[];
@@ -44,6 +46,7 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc"|"desc">("asc");
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
 
   // restore persisted state
@@ -121,6 +124,7 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
 
   const exportExcel = async () => {
     try {
+      setDownloading(true);
       const url = `/api/python/export/excel-download?file_path=${encodeURIComponent(filePath)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Falha no download");
@@ -133,6 +137,8 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
       a.remove();
     } catch (e: any) {
       toast.error(e.message || "Erro ao exportar Excel");
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -142,9 +148,18 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
         <div className="flex items-center justify-between">
           <CardTitle>{fileName || filePath}</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => load() } disabled={loading}>Recarregar</Button>
-            <Button variant="outline" onClick={clearFilters} disabled={loading}>Limpar</Button>
-            <Button onClick={exportExcel} disabled={loading}>Exportar Excel</Button>
+            <Button variant="outline" onClick={() => load()} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Recarregar
+            </Button>
+            <Button variant="outline" onClick={clearFilters} disabled={loading}>
+              <X className="h-4 w-4 mr-2" />
+              Limpar
+            </Button>
+            <Button onClick={exportExcel} disabled={loading || downloading}>
+              {downloading ? <Spinner className="h-4 w-4 mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+              Exportar Excel
+            </Button>
           </div>
         </div>
         <div className="text-xs text-muted-foreground mt-2">
