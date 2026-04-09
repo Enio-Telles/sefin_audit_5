@@ -1,0 +1,4 @@
+## 2024-05-20 - Fix Path Traversal in Export API
+**Vulnerability:** The `/excel` and `/excel-download` endpoints in `server/python/routers/export.py` took user-controlled file paths (`request.output_dir`, `request.source_files`, and `file_path`) and directly instantiated `Path` objects, checking for file existence and loading them without validating if the resulting path stayed within permitted bounds. An attacker could potentially use this to probe the filesystem, read arbitrary parquet files on the system, or write files to unpermitted directories.
+**Learning:** File paths passed from the frontend to the backend need to be treated as untrusted, even if they're generated dynamically, as the backend API endpoints can be accessed directly.
+**Prevention:** Always use centralized directory validation routines (like `_is_path_allowed` in `routers.filesystem`) to resolve and validate user-provided paths before proceeding with any file-related `os` or `Path` operation.
