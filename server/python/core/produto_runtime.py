@@ -184,7 +184,8 @@ def _char_ngrams(value: str, size: int = 3) -> tuple[str, ...]:
     padded = f"  {text}  "
     if len(padded) <= size:
         return (padded,)
-    return tuple(padded[idx : idx + size] for idx in range(len(padded) - size + 1))
+    # ⚡ Bolt Optimization: Use list comprehension inside tuple for faster evaluation
+    return tuple([padded[idx : idx + size] for idx in range(len(padded) - size + 1)])
 
 
 @lru_cache(maxsize=10000)
@@ -193,7 +194,8 @@ def _char_ngram_norm(value: str, size: int = 3) -> float:
     if not grams:
         return 0.0
     counts = Counter(grams)
-    return math.sqrt(sum(freq * freq for freq in counts.values()))
+    # ⚡ Bolt Optimization: Use list comprehension inside sum for C-level evaluation speed
+    return math.sqrt(sum([freq * freq for freq in counts.values()]))
 
 
 @lru_cache(maxsize=10000)
@@ -206,7 +208,9 @@ def _char_ngram_cosine(a: str, b: str, size: int = 3) -> float:
         return 0.0
     counts_a = Counter(grams_a)
     counts_b = Counter(grams_b)
-    dot = sum(counts_a[gram] * counts_b.get(gram, 0) for gram in counts_a)
+    # ⚡ Bolt Optimization: Cache .get() and use list comprehension with items()
+    cb_get = counts_b.get
+    dot = sum([count * cb_get(gram, 0) for gram, count in counts_a.items()])
     norm_a = _char_ngram_norm(a, size=size)
     norm_b = _char_ngram_norm(b, size=size)
     if norm_a == 0.0 or norm_b == 0.0:
