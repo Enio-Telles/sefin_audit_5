@@ -199,8 +199,8 @@ export default function CruzamentosUI() {
                     className="h-8 text-xs font-mono"
                     onKeyDown={e => e.key === 'Enter' && handleLoadFiles(leftDir, 'left')}
                   />
-                  <Button size="sm" variant="outline" onClick={() => setShowLeftBrowser(true)}><Search className="h-3 w-3" /></Button>
-                  <Button size="sm" onClick={() => handleLoadFiles(leftDir, 'left')} disabled={isLoadingFiles.left}>
+                  <Button size="sm" variant="outline" onClick={() => setShowLeftBrowser(true)} aria-label="Procurar pasta esquerda" title="Procurar pasta esquerda"><Search className="h-3 w-3" /></Button>
+                  <Button size="sm" onClick={() => handleLoadFiles(leftDir, 'left')} disabled={isLoadingFiles.left} aria-label="Carregar arquivos da esquerda" title="Carregar arquivos da esquerda">
                     {isLoadingFiles.left ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                   </Button>
                 </div>
@@ -242,8 +242,8 @@ export default function CruzamentosUI() {
                     className="h-8 text-xs font-mono"
                     onKeyDown={e => e.key === 'Enter' && handleLoadFiles(rightDir, 'right')}
                   />
-                  <Button size="sm" variant="outline" onClick={() => setShowRightBrowser(true)}><Search className="h-3 w-3" /></Button>
-                  <Button size="sm" onClick={() => handleLoadFiles(rightDir, 'right')} disabled={isLoadingFiles.right}>
+                  <Button size="sm" variant="outline" onClick={() => setShowRightBrowser(true)} aria-label="Procurar pasta direita" title="Procurar pasta direita"><Search className="h-3 w-3" /></Button>
+                  <Button size="sm" onClick={() => handleLoadFiles(rightDir, 'right')} disabled={isLoadingFiles.right} aria-label="Carregar arquivos da direita" title="Carregar arquivos da direita">
                     {isLoadingFiles.right ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                   </Button>
                 </div>
