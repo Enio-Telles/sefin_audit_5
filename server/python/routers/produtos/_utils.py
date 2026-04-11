@@ -572,7 +572,7 @@ def _resumir_status_analise(dir_analises: Path, cnpj_limpo: str, df_status: pl.D
     if produtos_agregados_path.exists():
         df_grupos = pl.read_parquet(str(produtos_agregados_path))
         if {"chave_produto", "requer_revisao_manual"}.issubset(df_grupos.columns):
-            df_pendentes_grupo = df_grupos.filter(pl.col("requer_revisao_manual") == True)
+            df_pendentes_grupo = df_grupos.filter(pl.col("requer_revisao_manual"))
             pendentes_grupos = sum(
                 1
                 for value in df_pendentes_grupo.get_column("chave_produto").to_list()

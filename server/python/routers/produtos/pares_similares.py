@@ -247,15 +247,15 @@ async def get_pares_grupos_similares(
 
         quick_filter_counts = {
             "todos": int(df.height),
-            "unirAutomatico": int(df.filter(pl.col("uniao_automatica_elegivel") == True).height) if "uniao_automatica_elegivel" in df.columns else 0,
-            "bloqueios": int(df.filter(pl.col("bloquear_uniao") == True).height) if "bloquear_uniao" in df.columns else 0,
+            "unirAutomatico": int(df.filter(pl.col("uniao_automatica_elegivel")).height) if "uniao_automatica_elegivel" in df.columns else 0,
+            "bloqueios": int(df.filter(pl.col("bloquear_uniao")).height) if "bloquear_uniao" in df.columns else 0,
             "revisar": int(df.filter(pl.col("recomendacao").cast(pl.Utf8) == "REVISAR").height) if "recomendacao" in df.columns else 0,
         }
 
         if quick_filter_norm == "UNIR_AUTOMATICO" and "uniao_automatica_elegivel" in df.columns:
-            df = df.filter(pl.col("uniao_automatica_elegivel") == True)
+            df = df.filter(pl.col("uniao_automatica_elegivel"))
         elif quick_filter_norm == "BLOQUEIOS" and "bloquear_uniao" in df.columns:
-            df = df.filter(pl.col("bloquear_uniao") == True)
+            df = df.filter(pl.col("bloquear_uniao"))
         elif quick_filter_norm == "REVISAR" and "recomendacao" in df.columns:
             df = df.filter(pl.col("recomendacao").cast(pl.Utf8) == "REVISAR")
 
@@ -297,9 +297,9 @@ async def get_pares_grupos_similares(
             df = df.sort(sort_columns, descending=descending)
         else:
             df = df.with_columns(
-                pl.when(pl.col("bloquear_uniao") == True)
+                pl.when(pl.col("bloquear_uniao"))
                 .then(pl.lit(50))
-                .when(pl.col("uniao_automatica_elegivel") == True)
+                .when(pl.col("uniao_automatica_elegivel"))
                 .then(pl.lit(40))
                 .when(pl.col("recomendacao").cast(pl.Utf8) == "UNIR_SUGERIDO")
                 .then(pl.lit(30))
