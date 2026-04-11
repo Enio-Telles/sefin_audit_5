@@ -1,0 +1,4 @@
+## 2024-04-11 - Path Traversal in File Uploads
+**Vulnerability:** File upload endpoints construct the target path directly using the client-provided `file.filename` string. A malicious client could provide a filename containing directory traversal characters (e.g., `../../../etc/passwd`), which, when appended to the verified target directory, allows writing to arbitrary locations on the filesystem, bypassing directory path validation.
+**Learning:** `UploadFile.filename` in FastAPI is completely controlled by the client and must always be treated as untrusted input. Validating only the target directory path is insufficient if the filename itself can escape it.
+**Prevention:** Always extract the basename from `UploadFile.filename` (e.g., `Path(file.filename).name` or `os.path.basename`) before using it in any filesystem operations, such as creating or moving files.
