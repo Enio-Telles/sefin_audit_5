@@ -99,7 +99,7 @@ async def download_revisao_manual_excel(cnpj: str = Query(...)):
 
         # Filtra apenas os que requerem revisão
         if "requer_revisao_manual" in df.columns:
-            df_revisao = df.filter(pl.col("requer_revisao_manual") == True)
+            df_revisao = df.filter(pl.col("requer_revisao_manual"))
         else:
             df_revisao = df
 

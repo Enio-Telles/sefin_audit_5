@@ -16,3 +16,7 @@
 ## 2025-05-24 - High-performance Text Normalization
 **Learning:** Using Python generator expressions to filter characters in `unicodedata.normalize` (e.g., `"".join(char for char in normalized if not unicodedata.combining(char))`) introduces significant overhead during heavy Polars data transformations.
 **Action:** Always prefer native C extensions for text normalization where possible. Using `.encode("ascii", "ignore").decode("ascii")` yields >3x performance improvement for stripping combining characters.
+
+## 2024-05-24 - Optimizing Polars boolean filtering
+**Learning:** In Polars, filtering by a boolean column using explicit equality checks (e.g., `pl.col("column_name") == True`) introduces unnecessary expression evaluation overhead, slightly slowing down queries on large datasets and causing Ruff E712 linting errors.
+**Action:** When filtering Polars DataFrames by boolean columns, pass the column directly (e.g., `pl.col("column_name")` or `~pl.col("column_name")`) to bypass the unnecessary expression evaluation overhead.
