@@ -629,8 +629,8 @@ export default function Extracao() {
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Switch checked={includeAuxiliary} onCheckedChange={setIncludeAuxiliary} />
-                  <Label className="text-xs">Incluir tabelas auxiliares</Label>
+                  <Switch id="include-auxiliary" checked={includeAuxiliary} onCheckedChange={setIncludeAuxiliary} />
+                  <Label htmlFor="include-auxiliary" className="text-xs">Incluir tabelas auxiliares</Label>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {selectedQueries.length} selecionadas
