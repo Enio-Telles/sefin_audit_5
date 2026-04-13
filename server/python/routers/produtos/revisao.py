@@ -27,7 +27,7 @@ async def get_produtos_revisao_manual(cnpj: str = Query(...)):
         if not agregados_path.exists():
             return {"success": True, "data": []}
 
-        df = pl.scan_parquet(str(agregados_path)).filter(pl.col("requer_revisao_manual") == True).collect()
+        df = pl.scan_parquet(str(agregados_path)).filter(pl.col("requer_revisao_manual")).collect()
 
         return {"success": True, "data": df.to_dicts()}
     except Exception as e:
@@ -80,7 +80,7 @@ async def get_produtos_revisao_final(cnpj: str = Query(...)):
             "file_path": str(agregados_path),
             "summary": {
                 "total_grupos": int(df.height),
-                "grupos_revisao_manual": int(df.filter(pl.col("requer_revisao_manual") == True).height)
+                "grupos_revisao_manual": int(df.filter(pl.col("requer_revisao_manual")).height)
                 if "requer_revisao_manual" in df.columns
                 else 0,
                 "grupos_com_gtin": int(df.filter(pl.col("gtin_consenso").cast(pl.Utf8) != "").height)

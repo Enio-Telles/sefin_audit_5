@@ -585,7 +585,7 @@ async def get_produtos_revisao_manual(cnpj: str = Query(...)):
         if not agregados_path.exists():
             return {"success": True, "data": []}
             
-        df = pl.scan_parquet(str(agregados_path)).filter(pl.col("requer_revisao_manual") == True).collect()
+        df = pl.scan_parquet(str(agregados_path)).filter(pl.col("requer_revisao_manual")).collect()
         
         return {"success": True, "data": df.to_dicts()}
     except Exception as e:
