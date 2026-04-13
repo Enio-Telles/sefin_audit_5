@@ -158,8 +158,20 @@ export default function ParquetViewer({ filePath, defaultPageSize = 50 }: Parque
             <TableHeader>
               <TableRow>
                 {columns.map(col => (
-                  <TableHead key={col} className="whitespace-nowrap cursor-pointer" onClick={() => onHeaderClick(col)}>
-                    {col}{sortColumn===col ? (sortDirection==="asc"?" ▲":" ▼") : ""}
+                  <TableHead key={col} className="whitespace-nowrap p-0 h-10">
+                    <button
+                      type="button"
+                      className="flex h-full w-full items-center px-4 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      onClick={() => onHeaderClick(col)}
+                      aria-label={`Ordenar por ${col}${sortColumn === col ? (sortDirection === "asc" ? " (crescente)" : " (decrescente)") : ""}`}
+                    >
+                      {col}
+                      {sortColumn === col && (
+                        <span aria-hidden="true" className="ml-1 text-[10px]">
+                          {sortDirection === "asc" ? " ▲" : " ▼"}
+                        </span>
+                      )}
+                    </button>
                   </TableHead>
                 ))}
               </TableRow>
