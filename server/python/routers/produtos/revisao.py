@@ -80,7 +80,7 @@ async def get_produtos_revisao_final(cnpj: str = Query(...)):
             "file_path": str(agregados_path),
             "summary": {
                 "total_grupos": int(df.height),
-                "grupos_revisao_manual": int(df.filter(pl.col("requer_revisao_manual")).height)
+                "grupos_revisao_manual": int(df["requer_revisao_manual"].sum())
                 if "requer_revisao_manual" in df.columns
                 else 0,
                 "grupos_com_gtin": int(df.filter(pl.col("gtin_consenso").cast(pl.Utf8) != "").height)
