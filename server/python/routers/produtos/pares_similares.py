@@ -247,8 +247,8 @@ async def get_pares_grupos_similares(
 
         quick_filter_counts = {
             "todos": int(df.height),
-            "unirAutomatico": int(df.filter(pl.col("uniao_automatica_elegivel")).height) if "uniao_automatica_elegivel" in df.columns else 0,
-            "bloqueios": int(df.filter(pl.col("bloquear_uniao")).height) if "bloquear_uniao" in df.columns else 0,
+            "unirAutomatico": int(df["uniao_automatica_elegivel"].sum()) if "uniao_automatica_elegivel" in df.columns else 0,
+            "bloqueios": int(df["bloquear_uniao"].sum()) if "bloquear_uniao" in df.columns else 0,
             "revisar": int(df.filter(pl.col("recomendacao").cast(pl.Utf8) == "REVISAR").height) if "recomendacao" in df.columns else 0,
         }
 
