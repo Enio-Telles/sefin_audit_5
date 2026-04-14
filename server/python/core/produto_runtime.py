@@ -193,7 +193,7 @@ def _char_ngram_norm(value: str, size: int = 3) -> float:
     if not grams:
         return 0.0
     counts = Counter(grams)
-    return math.sqrt(sum(freq * freq for freq in counts.values()))
+    return math.hypot(*counts.values())
 
 
 @lru_cache(maxsize=10000)
@@ -206,7 +206,7 @@ def _char_ngram_cosine(a: str, b: str, size: int = 3) -> float:
         return 0.0
     counts_a = Counter(grams_a)
     counts_b = Counter(grams_b)
-    dot = sum(counts_a[gram] * counts_b.get(gram, 0) for gram in counts_a)
+    dot = sum([v * counts_b.get(k, 0) for k, v in counts_a.items()])
     norm_a = _char_ngram_norm(a, size=size)
     norm_b = _char_ngram_norm(b, size=size)
     if norm_a == 0.0 or norm_b == 0.0:
@@ -385,9 +385,9 @@ def _prepare_group_rows(df_agregados: pl.DataFrame) -> list[dict[str, Any]]:
                 "ncm": str(c_ncm or "").strip() if ncm_col else "",
                 "cest": str(c_cest or "").strip() if cest_col else "",
                 "gtin": str(c_gtin or "").strip() if gtin_col else "",
-                "lista_descr_compl": str(c_compl or "").strip()
-                if lista_descr_compl_col
-                else "",
+                "lista_descr_compl": (
+                    str(c_compl or "").strip() if lista_descr_compl_col else ""
+                ),
                 "codigos": codes,
                 "qtd_codigos": len(codes),
                 "conflitos": str(c_conf or "").strip() if conflitos_col else "",
@@ -1515,7 +1515,7 @@ def _resolve_description_unions(mapa_descricoes_path: Path) -> dict[str, str]:
         for tipo, desc_origem, desc_destino in zip(
             df.get_column("tipo_regra").to_list(),
             df.get_column("descricao_origem").to_list(),
-            df.get_column("descricao_destino").to_list()
+            df.get_column("descricao_destino").to_list(),
         ):
             if tipo != "UNIR_GRUPOS":
                 continue

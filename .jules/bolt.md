@@ -16,3 +16,6 @@
 ## 2025-05-24 - High-performance Text Normalization
 **Learning:** Using Python generator expressions to filter characters in `unicodedata.normalize` (e.g., `"".join(char for char in normalized if not unicodedata.combining(char))`) introduces significant overhead during heavy Polars data transformations.
 **Action:** Always prefer native C extensions for text normalization where possible. Using `.encode("ascii", "ignore").decode("ascii")` yields >3x performance improvement for stripping combining characters.
+## 2026-04-14 - Avoiding generator overhead in tight Math loops
+**Learning:** Generator expressions inside standard library Math functions (e.g. `sum(freq * freq for freq in counts.values())` or `sum(counts_a[k] * counts_b.get(k, 0) for k in counts_a)`) incur significant iteration and frame allocation overhead compared to their native C equivalents or fully materialized lists.
+**Action:** When executing mathematical formulas millions of times (like vector cosine similarities), use native extensions like `math.hypot(*vals)` for calculating magnitudes. For inner products, use list comprehensions (`sum([v * dict.get(k) for k, v in ...])`) as the initial array allocation in C is faster than the generator's state-machine overhead.
