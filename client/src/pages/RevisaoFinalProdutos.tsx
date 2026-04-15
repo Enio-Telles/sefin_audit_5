@@ -1372,7 +1372,7 @@ export function RevisaoFinalProdutosView({
                           { key: "descricoes_conflitantes", label: "Conflitos" },
                         ].map((column) => (
                           <th key={column.key} className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em] text-slate-300">
-                            <button type="button" className="flex items-center gap-1 hover:text-blue-300" onClick={() => handleSort(column.key)}>
+                            <button type="button" className="flex items-center gap-1 hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm" onClick={() => handleSort(column.key)}>
                               {column.label}
                               <ArrowUpDown className={`h-3 w-3 ${sortColumn === column.key ? "text-blue-300" : "text-slate-500"}`} />
                             </button>
