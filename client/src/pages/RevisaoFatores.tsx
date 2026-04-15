@@ -163,8 +163,8 @@ function SeverityShortcut({
       onClick={onClick}
       className={
         active
-          ? `${tone} rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm`
-          : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+          ? `${tone} rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+          : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       }
     >
       {label} ({formatCount(count)})
@@ -545,8 +545,8 @@ export default function RevisaoFatores() {
                         onClick={() => setTypeFilter("TODOS")}
                         className={
                           typeFilter === "TODOS"
-                            ? "rounded-full border border-slate-300 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                            : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                            ? "rounded-full border border-slate-300 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         }
                       >
                         Todos ({formatCount(issues.length)})
@@ -558,8 +558,8 @@ export default function RevisaoFatores() {
                           onClick={() => setTypeFilter(tipo)}
                           className={
                             typeFilter === tipo
-                              ? "rounded-full border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                              ? "rounded-full border border-blue-300 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           }
                         >
                           {formatIssueType(tipo)} ({formatCount(count)})
@@ -680,8 +680,8 @@ export default function RevisaoFatores() {
                           }}
                           className={
                             typeFilter === tipo
-                              ? "rounded-2xl border border-blue-300 bg-blue-50 px-4 py-4 text-left shadow-sm"
-                              : "rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+                              ? "rounded-2xl border border-blue-300 bg-blue-50 px-4 py-4 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              : "rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           }
                         >
                           <div className="flex items-center justify-between gap-3">
