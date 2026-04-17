@@ -27,3 +27,29 @@ def test_sanitize_sheet_name_long_and_forbidden():
     # Expected: "Relatorio_ Vendas de _Janeiro_2" (len=31)
     # Len original: 54
     assert _sanitize_sheet_name(name) == "Relatorio_ Vendas de _Janeiro_2"
+
+import numpy as np
+import pandas as pd
+from src.utilitarios.export_excel_ultra import _serializar_valor
+
+def test_serializar_valor_list_tuple_dict():
+    assert _serializar_valor([1, 2, 3]) == str([1, 2, 3])
+    assert _serializar_valor(("a", "b", "c")) == str(("a", "b", "c"))
+    d = {"x": 1, "y": 2}
+    assert _serializar_valor(d) == str(d)
+
+def test_serializar_valor_none_and_na():
+    assert _serializar_valor(None) is None
+    assert _serializar_valor(pd.NA) is None
+    assert _serializar_valor(pd.NaT) is None
+    assert _serializar_valor(np.nan) is None
+
+def test_serializar_valor_numpy_array():
+    arr = np.array([1, 2, 3])
+    res = _serializar_valor(arr)
+    assert res == str(arr)
+
+def test_serializar_valor_primitive():
+    assert _serializar_valor("test") == "test"
+    assert _serializar_valor(123) == 123
+    assert _serializar_valor(45.6) == 45.6
