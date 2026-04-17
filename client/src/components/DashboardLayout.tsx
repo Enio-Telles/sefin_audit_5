@@ -246,7 +246,7 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="group-data-[collapsible=icon]:justify-center flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <button className="group-data-[collapsible=icon]:justify-center flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Menu do usuário">
                   <Avatar className="h-9 w-9 shrink-0 border">
                     <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
                       {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
