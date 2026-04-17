@@ -1930,7 +1930,11 @@ async def upload_parquet(file: UploadFile = File(...), directory: str = Query(..
     if not _is_allowed(dir_path):
         raise HTTPException(status_code=403, detail="Acesso ao caminho não permitido")
     dir_path.mkdir(parents=True, exist_ok=True)
-    file_path = dir_path / file.filename
+
+    # Sentinel: Sanitize filename to prevent path traversal
+    filename = Path(file.filename).name if file.filename else "upload.parquet"
+    file_path = dir_path / filename
+
     content = await file.read()
     with open(file_path, "wb") as f:
         f.write(content)
