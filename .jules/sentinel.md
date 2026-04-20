@@ -1,0 +1,4 @@
+## 2024-05-24 - Fix Path Traversal in Excel Export Endpoint
+**Vulnerability:** The `/api/python/export/excel-download` endpoint accepted a raw `file_path` from the user and directly opened it without validating if it was within the allowed project boundaries. This could allow an attacker to read arbitrary files from the server.
+**Learning:** The application had an existing `_is_path_allowed` utility in `routers.filesystem`, but it wasn't being used consistently across all endpoints that interacted with the filesystem, such as the export routers.
+**Prevention:** Always validate user-provided file paths using a centralized authorization function (`_is_path_allowed`) that resolves the path and checks it against a whitelist of allowed directories before performing any `Path.exists()` or `open()` operations.
